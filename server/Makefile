@@ -6,7 +6,7 @@ VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
 
-.PHONY: install build dist dist-test run test lint fmt clean precommit
+.PHONY: install build dist dist-test preview run test lint fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
