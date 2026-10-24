@@ -25,4 +25,11 @@ printf "<?php return ['base_url' => 'lr.example'];\n" >"$root/app_data/config.ph
 out="$("$root/app/install.sh" 2>&1)"
 grep -q "base_url must be an http(s) URL" <<<"$out" || { echo "invalid config not reported:" >&2; echo "$out" >&2; exit 1; }
 
+chmod 750 "$root/app_data/files"
+out="$("$root/app/install.sh" 2>&1)"
+grep -q "not searchable by others" <<<"$out" || { echo "closed files directory not reported:" >&2; echo "$out" >&2; exit 1; }
+chmod 755 "$root/app_data/files"
+out="$("$root/app/install.sh" 2>&1)"
+! grep -q "not searchable" <<<"$out" || { echo "false alarm for an open files directory" >&2; exit 1; }
+
 echo "dist-test: ok"

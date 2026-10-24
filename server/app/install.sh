@@ -16,6 +16,13 @@ composer install --no-dev --no-interaction --no-progress --prefer-dist --optimiz
 data_dir="${LINKROT_DATA:-$(cd .. && pwd)/app_data}"
 config="$data_dir/config.php"
 
+if [ ! -d "$data_dir/files" ]; then
+	echo "install.sh: note: $data_dir/files does not exist yet, create it (writable by the php-fpm user)." >&2
+elif ! find "$data_dir/files" -maxdepth 0 -perm -001 | grep -q .; then
+	# nginx opens the files itself (X-Accel-Redirect). If it runs as another user than php-fpm it needs search permission.
+	echo "install.sh: note: $data_dir/files is not searchable by others. If nginx runs as another user than php-fpm, downloads fail with 403: chmod o+x $data_dir/files" >&2
+fi
+
 if [ ! -f "$config" ]; then
 	cat >&2 <<MSG
 
@@ -55,4 +62,3 @@ MSG
 fi
 
 echo "install.sh: $config is valid."
-[ -d "$data_dir/files" ] || echo "install.sh: note: $data_dir/files does not exist yet, create it (writable by the php-fpm user)." >&2

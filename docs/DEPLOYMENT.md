@@ -27,8 +27,8 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    (until then every request is answered with "server misconfigured"), and if it exists it is loaded the way the server
    does, so mistakes show up at deploy time. The script's exit code is 0 either way.
 
-4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; all three
-   folders must belong to the user php-fpm and nginx run as. See [SERVER.md](SERVER.md#configuration) for all options.
+4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; `app_data/`
+   and everything in it must belong to the user php-fpm runs as. See [SERVER.md](SERVER.md#configuration) for all options.
 
    ```php
    <?php
@@ -38,6 +38,12 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    ];
    ```
 
+   **nginx and php-fpm as different users:** php-fpm writes the files, but nginx opens them itself (`X-Accel-Redirect`). Every
+   directory down to `app_data/files/` must be searchable for nginx's user (mode `x` for others, e.g. `chmod o+x`, or an ACL
+   such as `setfacl -m u:www-data:x`), and the files must be readable. The server creates `files/` as `0711` and the data
+   files as `0644` regardless of the umask. The symptom of a missing permission is a `403` on `/dl/...` and
+   `open() ".../app_data/files/<id>" failed (13: Permission denied)` in nginx's error log; `namei -l <path to a file>` shows
+   which directory is the problem.
 5. Add the server block from [nginx.conf.example](nginx.conf.example) (`root` is `{deployroot}/htdocs`, the internal
    `/_files/` location points at `{deployroot}/app_data/files/`).
 6. Create a token for every device, as the web user. The token is shown once:
