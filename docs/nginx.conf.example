@@ -32,6 +32,10 @@ server {
     # reachable only through X-Accel-Redirect from PHP
     location /_files/ {
         internal;
+        # nginx drops most headers PHP sent next to X-Accel-Redirect (only Content-Type, Content-Disposition,
+        # Cache-Control and a few more survive), so security headers must be set here.
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
         alias {deployroot}/app_data/files/;
     }
 }
