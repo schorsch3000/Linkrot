@@ -16,7 +16,7 @@ install:
 build:
 	rm -rf $(DIST)
 	mkdir -p $(DIST)/app $(DIST)/htdocs
-	cp -r app/src app/bin app/composer.json app/composer.lock $(DIST)/app/
+	cp -r app/src app/bin app/composer.json app/composer.lock app/install.sh $(DIST)/app/
 	cp -r htdocs/. $(DIST)/htdocs/
 
 # Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner and mtime).
@@ -38,6 +38,7 @@ test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
 
 lint:
+	shellcheck app/install.sh
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff

@@ -9,6 +9,7 @@ server/
   Makefile
   app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/lr-auth,
                          composer.json + composer.lock (all used PHP extensions are listed under `require`),
+                         install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
   htdocs/index.php   front controller
   app_data/              local dev data (gitignored)
@@ -70,7 +71,7 @@ APCu), the CLI's `precommit` plus a cross-compile of every release platform, and
 it a pre-release). It runs CI first, then builds and attaches:
 
 - `linkrot-server-<version>.tar.gz`: exactly two top-level folders, `htdocs/` and `app/`; no `vendor/`, tests or tool
-  configs. `app/` contains `composer.json` and `composer.lock`, because `composer install --no-dev` is part of the
+  configs. `app/` contains `composer.json` and `composer.lock`, because `composer install --no-dev` (wrapped by `app/install.sh`) is part of the
   deployment ([DEPLOYMENT.md](DEPLOYMENT.md)). `make -C server dist` fails if the layout is not as expected.
 - `linkrot_<version>_<os>_<arch>.tar.gz` / `.zip`: the CLI for linux (amd64, arm64, armv7, 386), macOS (amd64, arm64),
   windows (amd64, arm64, 386, as zip) and freebsd (amd64, arm64). Static binaries, built with `-trimpath`; the version is

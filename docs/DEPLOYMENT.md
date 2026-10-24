@@ -18,8 +18,11 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 3. Install the dependencies. The release has no `vendor/` folder, this step is part of the deployment:
 
    ```
-   cd {deployroot}/app && composer install --no-dev --optimize-autoloader
+   {deployroot}/app/install.sh
    ```
+
+   It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+   --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
 
 4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; all three
    folders must belong to the user php-fpm and nginx run as. See [SERVER.md](SERVER.md#configuration) for all options.
@@ -42,7 +45,7 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
 ### Upgrading
 
-Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `composer install --no-dev` again) and leave
+Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `app/install.sh` again) and leave
 `app_data/` alone. The database schema is migrated automatically on the first request. Restart php-fpm (or reload opcache)
 afterwards; this also resets the failed-login counters in APCu.
 
