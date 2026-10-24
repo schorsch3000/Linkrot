@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Installs the production dependencies. Run after unpacking a release, and again after every upgrade.
-set -eu
+set -euo pipefail
 
 cd "$(dirname "$0")"
 
