@@ -10,6 +10,7 @@ use Linkrot\Config;
 use Linkrot\Duration;
 use Linkrot\FileId;
 use Linkrot\FileName;
+use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRecord;
 use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStatus;
@@ -30,6 +31,7 @@ final readonly class UploadController
         private Config $config,
         private FileRepository $files,
         private FileStore $store,
+        private FileCatalog $catalog,
         private Closure $clock,
     ) {}
 
@@ -68,8 +70,7 @@ final readonly class UploadController
         $now = ($this->clock)();
         $existing = $this->files->findBySha256($sha256);
         if ($existing instanceof \Linkrot\Files\FileRecord && !$existing->isLive($now)) {
-            $this->files->delete($existing->id);
-            $this->store->delete($existing->id);
+            $this->catalog->remove($existing->id);
             $existing = null;
         }
         if ($existing instanceof \Linkrot\Files\FileRecord) {
@@ -186,8 +187,7 @@ final readonly class UploadController
         rewind($handle);
         hash_update_stream($context, $handle, $file->size);
         if (!hash_equals($file->sha256, hash_final($context))) {
-            $this->files->delete($file->id);
-            $this->store->delete($file->id);
+            $this->catalog->remove($file->id);
 
             return Response::error(422, 'file_hash_mismatch', 'file does not match the declared sha256, start over');
         }
@@ -261,22 +261,7 @@ final readonly class UploadController
 
     private function live(string $id): ?FileRecord
     {
-        if (!FileId::isValid($id)) {
-            return null;
-        }
-        $file = $this->files->find($id);
-        if (!$file instanceof \Linkrot\Files\FileRecord) {
-            return null;
-        }
-        if (!$file->isLive(($this->clock)())) {
-            // Over its time counts as not found, and is removed right away.
-            $this->files->delete($id);
-            $this->store->delete($id);
-
-            return null;
-        }
-
-        return $file;
+        return $this->catalog->findLive($id);
     }
 
     /** @param array<string, mixed> $body */

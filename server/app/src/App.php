@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Linkrot;
 
 use Closure;
+use Linkrot\Api\FileController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
 use Linkrot\Auth\Authenticator;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
 use Linkrot\Auth\TokenStore;
+use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
@@ -40,18 +42,26 @@ final class App
 
     private function registerRoutes(): void
     {
-        $upload = fn(): UploadController => new UploadController(
-            $this->config,
-            new FileRepository($this->db()),
-            new FileStore($this->dataDir . '/files'),
-            $this->clock,
-        );
+        $repository = fn(): FileRepository => new FileRepository($this->db());
+        $store = new FileStore($this->dataDir . '/files');
+        $catalog = fn(): FileCatalog => new FileCatalog($repository(), $store, $this->clock);
+        $upload = fn(): UploadController => new UploadController($this->config, $repository(), $store, $catalog(), $this->clock);
+        $files = fn(): FileController => new FileController($this->config, $repository(), $catalog(), $this->clock);
 
         $this->router->add('POST', '/api/v1/files', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->create($request),
         ));
+        $this->router->add('GET', '/api/v1/files', $this->authed(
+            static fn(Request $request, array $params): Response => $files()->list(),
+        ));
         $this->router->add('GET', '/api/v1/files/{id}', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->show($request, $params['id']),
+        ));
+        $this->router->add('PATCH', '/api/v1/files/{id}', $this->authed(
+            static fn(Request $request, array $params): Response => $files()->update($request, $params['id']),
+        ));
+        $this->router->add('DELETE', '/api/v1/files/{id}', $this->authed(
+            static fn(Request $request, array $params): Response => $files()->delete($params['id']),
         ));
         $this->router->add('PATCH', '/api/v1/files/{id}/content', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->chunk($request, $params['id']),

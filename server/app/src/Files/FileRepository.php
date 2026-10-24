@@ -52,6 +52,12 @@ final readonly class FileRepository
             ->execute([$name, $rmAfter, $usesLeft, $now, $id]);
     }
 
+    public function updateMetadata(string $id, string $name, int $rmAfter, ?int $expiresAt, ?int $usesLeft, int $now): void
+    {
+        $this->pdo->prepare('UPDATE files SET name = ?, rm_after = ?, expires_at = ?, uses_left = ?, updated_at = ? WHERE id = ?')
+            ->execute([$name, $rmAfter, $expiresAt, $usesLeft, $now, $id]);
+    }
+
     public function setOffset(string $id, int $offset, int $now): void
     {
         $this->pdo->prepare('UPDATE files SET upload_offset = ?, updated_at = ? WHERE id = ?')->execute([$offset, $now, $id]);
