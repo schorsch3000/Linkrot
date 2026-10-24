@@ -96,7 +96,7 @@ func (a *App) NewRoot() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return withCode(ExitUsage, err) })
 	root.CompletionOptions.DisableDefaultCmd = false
 
-	root.AddCommand(a.configCommand(), a.upCommand(), a.lsCommand(), a.infoCommand(), a.setCommand(), a.rmCommand(), a.cleanupCommand())
+	root.AddCommand(a.configCommand(), a.upCommand(), a.lsCommand(), a.infoCommand(), a.setCommand(), a.rmCommand(), a.cleanupCommand(), a.downCommand())
 	return root
 }
 

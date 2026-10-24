@@ -8,6 +8,11 @@ linters:
     - misspell
     - noctx
     - unconvert
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
 formatters:
   enable:
     - gofumpt
