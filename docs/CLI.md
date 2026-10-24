@@ -1,7 +1,7 @@
 # CLI
 
 Go application. It is called `linkrot`; `lr` is the short form (symlink or alias). The program derives its name from
-`os.Args[0]` (basename), and uses that name in help texts, the config path and the generated shell completion,
+`os.Args[0]` (basename), and uses that name in help texts and the generated shell completion,
 so it works under any name.
 
 Conventions:
@@ -81,7 +81,7 @@ config --token <token>    set the token
 config                    show the current configuration (token masked)
 ```
 
-The config file is `$XDG_CONFIG_HOME/<name>/config.toml` (default `~/.config/<name>/config.toml`) with mode `0600`.
+The config file is `$XDG_CONFIG_HOME/linkrot/config.toml` (default `~/.config/linkrot/config.toml`) with mode `0600`; `$LINKROT_CONFIG` overrides the path. The directory is fixed and does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
 
 ### `completion bash|zsh|fish`
 
