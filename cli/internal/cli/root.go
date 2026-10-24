@@ -20,6 +20,9 @@ import (
 	"github.com/schorsch3000/Linkrot/internal/progress"
 )
 
+// Version is set at build time with -ldflags "-X .../internal/cli.Version=1.2.3".
+var Version = "dev"
+
 // App holds what commands need from the environment, so tests can replace it.
 type App struct {
 	Name       string // program name, derived from argv[0]
@@ -86,11 +89,13 @@ func (a *App) NewRoot() *cobra.Command {
 		Use:           a.Name,
 		Short:         "Share files with links that rot",
 		Long:          fmt.Sprintf("%s uploads files to a Linkrot server and prints a link that stops working after a while.", a.Name),
+		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
 		RunE:          func(cmd *cobra.Command, args []string) error { return noArgs(cmd, args) },
 	}
+	root.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	root.SetOut(a.Out)
 	root.SetErr(a.Err)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return withCode(ExitUsage, err) })

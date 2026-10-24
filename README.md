@@ -34,6 +34,7 @@ and not worry about cleaning up later.
 | [docs/SERVER.md](docs/SERVER.md) | server architecture, layout, data model, cleanup, locking, rate limiting, security, configuration, `lr-auth` |
 | [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, public download URLs, errors |
 | [docs/CLI.md](docs/CLI.md) | CLI commands, flags, config file, exit codes, completion |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |
 

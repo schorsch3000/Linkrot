@@ -1,0 +1,88 @@
+name: Release
+
+# Push a tag like v1.2.3 (or v1.2.3-rc1 for a pre-release) to publish:
+#   linkrot-server-<version>.tar.gz   server: htdocs/ + app/ (no vendor/, run composer install on deployment)
+#   linkrot_<version>_<os>_<arch>     CLI archives for linux, macOS, windows and freebsd
+#   SHA256SUMS
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "tag '$tag' is not of the form vMAJOR.MINOR.PATCH[-suffix]" >&2
+            exit 1
+          fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+  server-dist:
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make -C server dist VERSION=${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-dist
+          path: server/build/linkrot-server-*.tar.gz
+          if-no-files-found: error
+
+  cli-dist:
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - run: make -C cli dist VERSION=${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-dist
+          path: |
+            cli/dist/*.tar.gz
+            cli/dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: [version, server-dist, cli-dist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: release
+        run: |
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flags=()
+          [[ "$GITHUB_REF_NAME" == *-* ]] && flags+=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "${flags[@]}"

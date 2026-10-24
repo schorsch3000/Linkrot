@@ -6,10 +6,12 @@
     "require": {
         "php": ">=8.4",
         "ext-apcu": "*",
+        "ext-ctype": "*",
         "ext-hash": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*",
-        "ext-json": "*",
         "ext-random": "*"
     },
     "require-dev": {
@@ -20,20 +22,16 @@
     },
     "autoload": {
         "psr-4": {
-            "Linkrot\\": "app/src/"
+            "Linkrot\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Linkrot\\Tests\\": "tests/"
+            "Linkrot\\Tests\\": "../tests/"
         }
     },
     "config": {
-        "vendor-dir": "app/vendor",
         "sort-packages": true,
         "optimize-autoloader": true
-    },
-    "scripts": {
-        "test": "phpunit"
     }
 }

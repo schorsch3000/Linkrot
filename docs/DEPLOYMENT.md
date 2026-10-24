@@ -1,0 +1,68 @@
+# Deployment
+
+Releases are published on GitHub (see [DEVELOPMENT.md](DEVELOPMENT.md#continuous-integration-and-releases)). Every release
+has the server tarball, CLI archives for all usual platforms and a `SHA256SUMS` file.
+
+## Server
+
+Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `apcu`, `pdo_sqlite`,
+`mbstring`, `ctype` (`composer install` checks this).
+
+1. Download `linkrot-server-<version>.tar.gz` and verify it against `SHA256SUMS`.
+2. Unpack it into the deploy root. It contains exactly `app/` and `htdocs/`:
+
+   ```
+   tar -xzf linkrot-server-<version>.tar.gz -C {deployroot}
+   ```
+
+3. Install the dependencies. The release has no `vendor/` folder, this step is part of the deployment:
+
+   ```
+   cd {deployroot}/app && composer install --no-dev --optimize-autoloader
+   ```
+
+4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; all three
+   folders must belong to the user php-fpm and nginx run as. See [SERVER.md](SERVER.md#configuration) for all options.
+
+   ```php
+   <?php
+   return [
+       'base_url' => 'https://linkrot.example',
+       'max_rm_after' => '1y',
+   ];
+   ```
+
+5. Add the server block from [nginx.conf.example](nginx.conf.example) (`root` is `{deployroot}/htdocs`, the internal
+   `/_files/` location points at `{deployroot}/app_data/files/`).
+6. Create a token for every device, as the web user. The token is shown once:
+
+   ```
+   sudo -u www-data {deployroot}/app/bin/lr-auth get my-laptop
+   ```
+
+### Upgrading
+
+Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `composer install --no-dev` again) and leave
+`app_data/` alone. The database schema is migrated automatically on the first request. Restart php-fpm (or reload opcache)
+afterwards; this also resets the failed-login counters in APCu.
+
+## CLI
+
+Download the archive for your platform, verify it against `SHA256SUMS`, unpack it and put the binary into your `PATH`:
+
+```
+tar -xzf linkrot_<version>_linux_amd64.tar.gz
+install -m 0755 linkrot ~/.local/bin/linkrot
+ln -s linkrot ~/.local/bin/lr          # optional short name, help and completion use the name it is called as
+
+linkrot config --server https://linkrot.example
+linkrot config --token <token from lr-auth>
+```
+
+Shell completion (replace `linkrot` with `lr` if that is what you call it):
+
+```
+linkrot completion bash > ~/.local/share/bash-completion/completions/linkrot
+linkrot completion zsh  > "${fpath[1]}/_linkrot"
+linkrot completion fish > ~/.config/fish/completions/linkrot.fish
+```

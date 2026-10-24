@@ -104,3 +104,15 @@ func TestCompletionScriptsUseProgramName(t *testing.T) {
 		}
 	}
 }
+
+func TestVersionFlag(t *testing.T) {
+	old := Version
+	Version = "1.2.3"
+	t.Cleanup(func() { Version = old })
+
+	code, out, _ := run(t, "lr", "--version")
+
+	if code != 0 || out != "lr 1.2.3\n" {
+		t.Fatalf("code %d, out %q", code, out)
+	}
+}

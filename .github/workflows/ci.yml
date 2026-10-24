@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # also run by the release workflow before anything is published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Server (phpstan, rector, php-cs-fixer, phpunit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: apcu, pdo_sqlite, sqlite3, mbstring, ctype
+          ini-values: apc.enable_cli=1
+          tools: composer:v2
+          coverage: none
+
+      - name: Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer --working-dir=server/app config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('server/app/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - run: make -C server install
+      - run: make -C server precommit
+
+      - name: Release tarball has the expected layout
+        run: make -C server dist VERSION=ci
+
+  cli:
+    name: CLI (vet, golangci-lint, gofumpt, tests, cross-compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: Cache lint tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: go-tools-${{ runner.os }}-${{ hashFiles('cli/Makefile') }}
+
+      - run: make -C cli install
+      - run: make -C cli precommit
+
+      - name: All release platforms build
+        run: make -C cli dist VERSION=ci
+
+  e2e:
+    name: End-to-end (CLI against the real server, behind nginx)
+    runs-on: ubuntu-latest
+    env:
+      LINKROT_E2E_REQUIRED: "1" # a missing prerequisite fails instead of skipping
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: apcu, pdo_sqlite, sqlite3, mbstring, ctype
+          ini-values: apc.enable_cli=1
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: nginx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx
+          sudo systemctl stop nginx # the tests start their own instance on free ports
+
+      - run: composer --working-dir=server/app install --no-interaction
+      - run: go test ./e2e/ -count=1 -v
+        working-directory: cli

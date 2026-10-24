@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Builds release archives for all supported platforms into dist/.
+# usage: scripts/dist.sh <version>      (version without the leading v)
+set -euo pipefail
+
+version="${1:?usage: dist.sh <version>}"
+cd "$(dirname "$0")/.."
+
+# os/arch[/goarm]; the arch label in the archive name is the last part
+targets=(
+	linux/amd64
+	linux/arm64
+	linux/arm/7
+	linux/386
+	darwin/amd64
+	darwin/arm64
+	windows/amd64
+	windows/arm64
+	windows/386
+	freebsd/amd64
+	freebsd/arm64
+)
+
+mtime="@$(git log -1 --format=%ct 2>/dev/null || echo 0)"
+rm -rf dist
+mkdir -p dist
+
+for target in "${targets[@]}"; do
+	IFS=/ read -r goos goarch goarm <<<"$target"
+	label="$goarch"
+	[ -n "${goarm:-}" ] && label="armv${goarm}"
+	name="linkrot_${version}_${goos}_${label}"
+	exe="linkrot"
+	[ "$goos" = windows ] && exe="linkrot.exe"
+
+	stage="$(mktemp -d)"
+	echo "building $name"
+	CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="${goarm:-}" \
+		go build -trimpath \
+		-ldflags "-s -w -X github.com/schorsch3000/Linkrot/internal/cli.Version=${version}" \
+		-o "$stage/$exe" ./cmd/linkrot
+
+	if [ "$goos" = windows ]; then
+		(cd "$stage" && TZ=UTC touch -d "$mtime" "$exe" && zip -q -X "$OLDPWD/dist/$name.zip" "$exe")
+	else
+		tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="$mtime" \
+			-C "$stage" -czf "dist/$name.tar.gz" "$exe"
+	fi
+	rm -rf "$stage"
+done
+
+(cd dist && sha256sum -- * >SHA256SUMS)
+ls -l dist

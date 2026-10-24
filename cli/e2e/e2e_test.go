@@ -37,6 +37,15 @@ type stack struct {
 	nginx   bool
 }
 
+// skip skips the test, unless LINKROT_E2E_REQUIRED is set (CI): then a missing prerequisite is a failure.
+func skip(t *testing.T, reason string) {
+	t.Helper()
+	if os.Getenv("LINKROT_E2E_REQUIRED") != "" {
+		t.Fatalf("end-to-end prerequisite missing: %s", reason)
+	}
+	t.Skip(reason)
+}
+
 func serverDir(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("..", "..", "server"))
@@ -44,10 +53,10 @@ func serverDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "app", "vendor", "autoload.php")); err != nil {
-		t.Skip("server dependencies are not installed (make -C server install)")
+		skip(t, "server dependencies are not installed (make -C server install)")
 	}
 	if _, err := exec.LookPath("php"); err != nil {
-		t.Skip("php not available")
+		skip(t, "php not available")
 	}
 	return dir
 }
@@ -99,7 +108,7 @@ func newStack(t *testing.T, withNginx bool) *stack {
 	server := serverDir(t)
 	if withNginx {
 		if _, err := exec.LookPath("nginx"); err != nil {
-			t.Skip("nginx not available")
+			skip(t, "nginx not available")
 		}
 	}
 	tmp := t.TempDir()

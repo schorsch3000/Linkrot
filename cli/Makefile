@@ -2,10 +2,12 @@
 export PATH := $(PATH):/usr/local/go/bin:$(HOME)/go/bin
 
 BIN      := bin/linkrot
-GOFUMPT  := mvdan.cc/gofumpt@latest
-GOLANGCI := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+VERSION  ?= dev
+LDFLAGS  := -X github.com/schorsch3000/Linkrot/internal/cli.Version=$(VERSION)
+GOFUMPT  := mvdan.cc/gofumpt@v0.12.0
+GOLANGCI := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 
-.PHONY: install build run test lint fmt clean precommit
+.PHONY: install build dist run test lint fmt clean precommit
 
 install:
 	go mod download
@@ -13,7 +15,11 @@ install:
 	@command -v golangci-lint >/dev/null || go install $(GOLANGCI)
 
 build:
-	go build -trimpath -o $(BIN) ./cmd/linkrot
+	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/linkrot
+
+# Release archives for all platforms (dist/), see scripts/dist.sh
+dist:
+	scripts/dist.sh $(VERSION)
 
 run:
 	go run ./cmd/linkrot $(ARGS)
@@ -30,6 +36,6 @@ fmt:
 	gofumpt -w .
 
 clean:
-	rm -rf bin
+	rm -rf bin dist
 
 precommit: lint test
