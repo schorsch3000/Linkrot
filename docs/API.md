@@ -58,8 +58,8 @@ Request:
 
 | status | meaning | body |
 | --- | --- | --- |
-| `201` | new upload created | `{ "id", "chunk_size", "offset": 0, "status": "uploading" }` |
-| `200` | resume of an incomplete upload with the same sha256; metadata is replaced by the values of this request | `{ "id", "chunk_size", "offset", "status": "uploading" }` |
+| `201` | new upload created (a zero byte file is already `ready`) | file object plus `chunk_size` |
+| `200` | resume of an incomplete upload with the same sha256; metadata is replaced by the values of this request | file object (with the current `offset`) plus `chunk_size` |
 | `409 duplicate` | a live, completed file with the same sha256 exists | error with `id` and `url` of the existing file |
 | `400` | invalid name/size/hash/duration, or same sha256 with a different size, or `rm_after` over the cap | error |
 | `413 too_large` | over `max_file_size` | error |

@@ -10,6 +10,7 @@ final readonly class Request
      * @param array<string, string> $headers lower-case header names
      * @param array<string, string> $query
      * @param array<string, string> $server relevant $_SERVER entries (REMOTE_ADDR, ...)
+     * @param resource|null $bodyStream request body; php://input if null
      */
     public function __construct(
         public string $method,
@@ -17,7 +18,30 @@ final readonly class Request
         public array $headers = [],
         public array $query = [],
         public array $server = [],
+        private mixed $bodyStream = null,
     ) {}
+
+    /** @return resource */
+    public function body(): mixed
+    {
+        return $this->bodyStream ?? fopen('php://input', 'rb') ?: throw new \RuntimeException('cannot open request body');
+    }
+
+    /**
+     * Decodes a small JSON object body.
+     *
+     * @return array<string, mixed>|null null if the body is not a JSON object
+     */
+    public function jsonBody(int $limit = 65536): ?array
+    {
+        $raw = stream_get_contents($this->body(), $limit + 1);
+        if ($raw === false || strlen($raw) > $limit) {
+            return null;
+        }
+        $data = json_decode($raw, true);
+
+        return is_array($data) && !array_is_list($data) ? $data : null;
+    }
 
     public static function fromGlobals(): self
     {

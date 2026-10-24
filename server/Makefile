@@ -11,16 +11,16 @@ install:
 # PHP needs no compilation; assemble a deployable tree (without app_data) into build/.
 build: install
 	rm -rf build
-	mkdir -p build/app build/app_htdocs
+	mkdir -p build/app build/htdocs
 	composer install --no-interaction --no-dev --optimize-autoloader
 	cp -r app/src app/bin app/vendor build/app/
-	cp -r app_htdocs/. build/app_htdocs/
+	cp -r htdocs/. build/htdocs/
 	composer install --no-interaction
 
 run: install
 	@mkdir -p $(DATA_DIR)/files
 	@test -f $(DATA_DIR)/config.php || printf "<?php\nreturn [\n    'base_url' => 'http://localhost:$(PORT)',\n    'download_mode' => 'php',\n];\n" > $(DATA_DIR)/config.php
-	LINKROT_DATA=$(DATA_DIR) php -S localhost:$(PORT) -t app_htdocs app_htdocs/index.php
+	LINKROT_DATA=$(DATA_DIR) php -S localhost:$(PORT) -t htdocs htdocs/index.php
 
 test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit

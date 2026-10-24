@@ -33,8 +33,8 @@ final readonly class Config
         if (!preg_match('~^https?://[^/\s]+(/\S*)?$~', $baseUrl)) {
             throw new InvalidArgumentException('config: base_url must be an http(s) URL');
         }
-        if ($chunkSize < self::MIN_CHUNK_SIZE || $chunkSize > self::MAX_CHUNK_SIZE) {
-            throw new InvalidArgumentException('config: chunk_size must be within 10-100 MB');
+        if ($chunkSize < 1) {
+            throw new InvalidArgumentException('config: chunk_size must be positive');
         }
         if ($maxFileSize < 0 || $rateLimitAttempts < 1 || $rateLimitWindow < 1) {
             throw new InvalidArgumentException('config: max_file_size, rate_limit_* out of range');
@@ -60,6 +60,11 @@ final readonly class Config
         }
         if (!array_key_exists('base_url', $values)) {
             throw new InvalidArgumentException('config: base_url is required');
+        }
+
+        $chunkSize = $values['chunk_size'] ?? null;
+        if (is_int($chunkSize) && ($chunkSize < self::MIN_CHUNK_SIZE || $chunkSize > self::MAX_CHUNK_SIZE)) {
+            throw new InvalidArgumentException('config: chunk_size must be within 10-100 MB');
         }
 
         $defaults = new self('http://localhost');

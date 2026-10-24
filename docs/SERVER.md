@@ -13,7 +13,7 @@ There is no user management. The server consists of
 ## Deployment layout
 
 ```
-{deployroot}/app_htdocs   public folder served by nginx; `try_files` sends everything that is not there to /index.php
+{deployroot}/htdocs   public folder served by nginx; `try_files` sends everything that is not there to /index.php
 {deployroot}/app          all code
 {deployroot}/app_data     application data, never touched by deployments
 ```
@@ -30,7 +30,7 @@ app_data/cleanup.lock     lock file for the cleanup
 All three folders are owned by the user nginx and php-fpm run as. `lr-auth` is run as that same user, so
 no special permission handling is needed.
 
-Uploaded files are never in `app_htdocs`. nginx has an `internal` location mapped to `app_data/files/`; PHP
+Uploaded files are never in `htdocs`. nginx has an `internal` location mapped to `app_data/files/`; PHP
 authorises the request and answers with `X-Accel-Redirect`. See [nginx.conf.example](nginx.conf.example).
 
 ## Identifiers

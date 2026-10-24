@@ -1,5 +1,5 @@
 # Example server block for Linkrot. Adjust paths, server_name, TLS and the php-fpm socket.
-# {deployroot}/app_htdocs  public folder
+# {deployroot}/htdocs  public folder
 # {deployroot}/app_data    data, uploaded files live in app_data/files
 
 limit_req_zone $binary_remote_addr zone=linkrot:10m rate=20r/s;   # http{} context, DoS protection only
@@ -8,7 +8,7 @@ server {
     listen 443 ssl;
     server_name linkrot.example;
 
-    root {deployroot}/app_htdocs;
+    root {deployroot}/htdocs;
     index index.php;
 
     # chunk_size (default 32 MiB) + 32 bytes digest + margin

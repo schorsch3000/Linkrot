@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 namespace Linkrot;
 
+use Closure;
+use Linkrot\Api\UploadController;
+use Linkrot\Auth\ApcuRateLimiter;
+use Linkrot\Auth\Authenticator;
+use Linkrot\Auth\Guard;
+use Linkrot\Auth\RateLimiter;
+use Linkrot\Auth\TokenStore;
+use Linkrot\Files\FileRepository;
+use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
 use Linkrot\Http\Router;
@@ -15,12 +24,55 @@ final class App
 {
     private ?PDO $pdo = null;
     private readonly Router $router;
+    private readonly Closure $clock;
 
+    /** @param (Closure(): int)|null $clock */
     public function __construct(
         public readonly Config $config,
         public readonly string $dataDir,
+        private ?RateLimiter $limiter = null,
+        ?Closure $clock = null,
     ) {
+        $this->clock = $clock ?? time(...);
         $this->router = new Router();
+        $this->registerRoutes();
+    }
+
+    private function registerRoutes(): void
+    {
+        $upload = fn(): UploadController => new UploadController(
+            $this->config,
+            new FileRepository($this->db()),
+            new FileStore($this->dataDir . '/files'),
+            $this->clock,
+        );
+
+        $this->router->add('POST', '/api/v1/files', $this->authed(
+            static fn(Request $request, array $params): Response => $upload()->create($request),
+        ));
+        $this->router->add('GET', '/api/v1/files/{id}', $this->authed(
+            static fn(Request $request, array $params): Response => $upload()->show($request, $params['id']),
+        ));
+        $this->router->add('PATCH', '/api/v1/files/{id}/content', $this->authed(
+            static fn(Request $request, array $params): Response => $upload()->chunk($request, $params['id']),
+        ));
+    }
+
+    /**
+     * @param callable(Request, array<string, string>): Response $handler
+     *
+     * @return Closure(Request, array<string, string>): Response
+     */
+    private function authed(callable $handler): Closure
+    {
+        return function (Request $request, array $params) use ($handler): Response {
+            $guard = new Guard(
+                new Authenticator(new TokenStore($this->db())),
+                $this->limiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow),
+            );
+
+            return $guard->check($request) ?? $handler($request, $params);
+        };
     }
 
     public function router(): Router

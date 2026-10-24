@@ -3,7 +3,7 @@ parameters:
     paths:
         - app/src
         - app/bin
-        - app_htdocs
+        - htdocs
         - tests
     excludePaths:
         - app/vendor
