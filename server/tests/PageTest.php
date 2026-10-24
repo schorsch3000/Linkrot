@@ -66,9 +66,9 @@ final class PageTest extends TestCase
         self::assertStringContainsString('<span class="badge">.pdf</span>', $html);
         self::assertStringContainsString('href="/dl/abcd7KfRtm4pWxnZ/report.pdf"', $html);
         self::assertStringContainsString('--hue: ' . FileKind::Document->hue(), $html);
-        self::assertStringContainsString('<code>linkrot down abcd7KfRtm4pWxnZ</code>', $html);
-        self::assertStringContainsString("<code>curl -OJ &#039;https://lr.example/dl/abcd7KfRtm4pWxnZ/report.pdf&#039;</code>", $html);
-        self::assertStringContainsString('<code>' . str_repeat('ab', 32) . '</code>', $html);
+        self::assertStringContainsString('<code id="c-cli">linkrot down abcd7KfRtm4pWxnZ</code>', $html);
+        self::assertStringContainsString("<code id=\"c-curl\">curl -OJ &#039;https://lr.example/dl/abcd7KfRtm4pWxnZ/report.pdf&#039;</code>", $html);
+        self::assertStringContainsString('<code id="c-sha">' . str_repeat('ab', 32) . '</code>', $html);
         self::assertStringContainsString('1 234 567 bytes', $html);
     }
 
@@ -84,18 +84,47 @@ final class PageTest extends TestCase
     public function testNothingIsLoadedFromAnywhereAndThereIsNoScriptOrAnimation(): void
     {
         foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound()] as $html) {
-            foreach (['<script', '<link', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick'] as $forbidden) {
+            foreach (['<link', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick'] as $forbidden) {
                 self::assertStringNotContainsString($forbidden, $html, $forbidden);
             }
             self::assertDoesNotMatchRegularExpression('~(src|href)="https?://~', $html);
         }
     }
 
+    public function testTheOnlyScriptIsPinnedByTheContentSecurityPolicy(): void
+    {
+        $html = Page::file($this->file(), 'https://lr.example');
+
+        self::assertSame(1, substr_count($html, '<script'));
+        self::assertSame(0, substr_count(Page::notFound(), '<script'), 'no script on the not-found page');
+        if (preg_match('~<script>(.*?)</script>~s', $html, $m) !== 1) {
+            self::fail('no inline script');
+        }
+        $hash = base64_encode(hash('sha256', $m[1], true));
+        self::assertSame("default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::fileContentSecurityPolicy());
+        self::assertStringNotContainsString('unsafe-eval', Page::fileContentSecurityPolicy());
+        self::assertDoesNotMatchRegularExpression('~\bsrc=|<script[^>]+src~', $html, 'no external script');
+    }
+
+    public function testEveryTerminalBoxHasACopyButtonThatStaysHiddenWithoutScript(): void
+    {
+        $html = Page::file($this->file(), 'https://lr.example');
+
+        self::assertSame(3, substr_count($html, 'class="copy"'));
+        self::assertSame(3, preg_match_all('~<button type="button" class="copy" data-copy="(c-[a-z]+)"[^>]* hidden>~', $html, $buttons));
+        foreach ($buttons[1] as $id) {
+            self::assertSame(1, substr_count($html, "<code id=\"$id\">"), "no code element for $id");
+        }
+        self::assertStringContainsString('.copy[hidden] { display: none; }', $html);
+        self::assertStringContainsString('class="copy"', $html);
+    }
+
     public function testEverythingFromTheOutsideIsEscaped(): void
     {
         $html = Page::file($this->file('<script>alert(1)</script>"\'&.txt'), "https://lr.example/x'y");
 
-        self::assertStringNotContainsString('<script>', $html);
+        self::assertSame(1, substr_count($html, '<script>'), 'only our own script');
+        self::assertStringNotContainsString('alert(1)</script>', $html);
         self::assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;&quot;&#039;&amp;.txt', $html);
         self::assertStringNotContainsString("x'y/dl", $html);
     }

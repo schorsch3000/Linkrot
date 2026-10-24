@@ -28,6 +28,10 @@ final class DownloadTest extends AppTestCase
         self::assertStringContainsString("href=\"/dl/$id/%3Cb%3E%22x%22.txt\"", $response->body);
         self::assertStringStartsWith('text/html', $response->headers['Content-Type']);
         self::assertStringContainsString("default-src 'none'", $response->headers['Content-Security-Policy']);
+        if (preg_match('~<script>(.*?)</script>~s', $response->body, $script) !== 1) {
+            self::fail('no inline script');
+        }
+        self::assertStringContainsString("script-src 'sha256-" . base64_encode(hash('sha256', $script[1], true)) . "'", $response->headers['Content-Security-Policy']);
         self::assertSame('nosniff', $response->headers['X-Content-Type-Options']);
         self::assertStringNotContainsString('expire', strtolower($response->body));
     }

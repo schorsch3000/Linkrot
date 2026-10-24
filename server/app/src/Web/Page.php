@@ -41,6 +41,9 @@ final class Page
         $sha = self::e($file->sha256);
         $hue = $kind->hue();
         $glyph = $kind->glyph();
+        // A copy button per box; hidden until the script runs, so that nobody gets a dead button.
+        $box = static fn(string $id, string $text): string => '<div class="box"><code id="c-' . $id . '">' . $text . '</code>'
+            . '<button type="button" class="copy" data-copy="c-' . $id . '" aria-label="Copy" title="Copy" hidden>' . self::COPY_ICONS . '</button></div>';
 
         $body = <<<HTML
             <article class="card">
@@ -52,14 +55,17 @@ final class Page
             <a class="button" href="$href">Download</a>
             <section class="terminal" aria-label="Download from the terminal">
             <h2>From a terminal</h2>
-            <p class="label">linkrot</p><code>$cli</code>
-            <p class="label">curl</p><code>$curl</code>
-            <p class="label">SHA-256 <span class="muted">($exact)</span></p><code>$sha</code>
+            <p class="label">linkrot</p>
+            {$box('cli', $cli)}
+            <p class="label">curl</p>
+            {$box('curl', $curl)}
+            <p class="label">SHA-256 <span class="muted">($exact)</span></p>
+            {$box('sha', $sha)}
             </section>
             </article>
             HTML;
 
-        return self::document($file->name, $body, self::tagline($file->id));
+        return self::document($file->name, $body, self::tagline($file->id), true);
     }
 
     public static function notFound(): string
@@ -77,13 +83,23 @@ final class Page
         return self::document('Not found', $body, 'Told you it was rotting.');
     }
 
+    /**
+     * Content-Security-Policy of the file page: no script except the one inline script, pinned by its hash.
+     * Everything else stays forbidden: no external resources, no inline event handlers.
+     */
+    public static function fileContentSecurityPolicy(): string
+    {
+        return "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
+    }
+
     public static function tagline(string $seed): string
     {
         return self::TAGLINES[crc32($seed) % count(self::TAGLINES)];
     }
 
-    private static function document(string $title, string $body, string $tagline): string
+    private static function document(string $title, string $body, string $tagline, bool $withScript = false): string
     {
+        $script = $withScript ? '<script>' . self::SCRIPT . '</script>' : '';
         $title = self::e($title . ' · linkrot');
         $tagline = self::e($tagline);
         $css = self::CSS;
@@ -108,6 +124,7 @@ final class Page
             $body
             <footer>$tagline</footer>
             </main>
+            $script
             </body>
             </html>
 
@@ -135,6 +152,45 @@ final class Page
     {
         return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
+
+    /** The copy button shows the first icon, and the second one for a moment after a successful copy. */
+    private const string COPY_ICONS = '<svg class="i-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><svg class="i-done" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+    /** The only script of the site (copy buttons). Changing it changes its hash, which the CSP header derives from it. */
+    private const string SCRIPT = <<<'JS'
+        (function () {
+          function legacyCopy(el) {
+            var range = document.createRange();
+            range.selectNodeContents(el);
+            var selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) {}
+            selection.removeAllRanges();
+            return ok;
+          }
+          function copy(el) {
+            if (navigator.clipboard && window.isSecureContext) {
+              return navigator.clipboard.writeText(el.textContent).then(function () { return true; }, function () { return legacyCopy(el); });
+            }
+            return Promise.resolve(legacyCopy(el));
+          }
+          document.querySelectorAll('button[data-copy]').forEach(function (button) {
+            button.hidden = false;
+            button.addEventListener('click', function () {
+              copy(document.getElementById(button.getAttribute('data-copy'))).then(function (ok) {
+                button.classList.add(ok ? 'done' : 'failed');
+                button.setAttribute('aria-label', ok ? 'Copied' : 'Copy failed');
+                setTimeout(function () {
+                  button.classList.remove('done', 'failed');
+                  button.setAttribute('aria-label', 'Copy');
+                }, 1500);
+              });
+            });
+          });
+        })();
+        JS;
 
     /** Two chain links with a gap, and a few spores. */
     private const string CHAIN = '<svg class="chain" viewBox="0 0 28 24" width="28" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 7H6a5 5 0 0 0 0 10h4"/><path d="M18 7h4a5 5 0 0 1 0 10h-4"/><circle cx="14" cy="4" r="1" class="spore" stroke="none" fill="currentColor"/><circle cx="12.5" cy="20" r=".8" class="spore" stroke="none" fill="currentColor"/><circle cx="15.5" cy="21" r="1.1" class="spore" stroke="none" fill="currentColor"/></svg>';
@@ -196,8 +252,21 @@ final class Page
         .terminal h2 { margin: 0 0 .5rem; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
         .label { margin: .8rem 0 .2rem; font-size: .85rem; color: var(--muted); }
         .muted { opacity: .8; }
+        .box { position: relative; }
+        .copy {
+          position: absolute; top: 50%; right: .35rem; transform: translateY(-50%); display: grid; place-items: center;
+          width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .45rem; background: var(--code-bg);
+          color: var(--muted); cursor: pointer;
+        }
+        .copy[hidden] { display: none; }
+        .copy:hover { color: var(--fg); }
+        .copy:focus-visible { outline: 2px solid var(--rot-b); outline-offset: 1px; }
+        .copy .i-done, .copy.done .i-copy { display: none; }
+        .copy.done .i-done { display: block; }
+        .copy.done { color: var(--accent); }
+        .copy.failed { color: #c0504d; }
         code {
-          display: block; padding: .5rem .7rem; border-radius: .5rem; background: var(--code-bg); border: 1px solid var(--line);
+          display: block; padding: .5rem 2.8rem .5rem .7rem; border-radius: .5rem; background: var(--code-bg); border: 1px solid var(--line);
           font: .85rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-x: auto; white-space: nowrap; user-select: all;
         }
         .gone .meta { margin-bottom: 0; }
