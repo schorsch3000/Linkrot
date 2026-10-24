@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Auth\TokenStore;
+use Linkrot\Cli\AuthCommand;
+use Linkrot\Database;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+if (!is_dir($dataDir)) {
+    fwrite(STDERR, "lr-auth: data directory not found: $dataDir\n");
+    exit(AuthCommand::FAILED);
+}
+
+$command = new AuthCommand(new TokenStore(Database::open($dataDir . '/linkrot.sqlite')), STDOUT, STDERR);
+exit($command->run(array_slice($argv, 1)));
