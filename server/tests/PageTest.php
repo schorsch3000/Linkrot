@@ -84,7 +84,7 @@ final class PageTest extends TestCase
     public function testNothingIsLoadedFromAnywhereAndThereIsNoScriptOrAnimation(): void
     {
         foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound()] as $html) {
-            foreach (['<link', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick'] as $forbidden) {
+            foreach (['rel="stylesheet"', 'rel="preload"', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick'] as $forbidden) {
                 self::assertStringNotContainsString($forbidden, $html, $forbidden);
             }
             self::assertDoesNotMatchRegularExpression('~(src|href)="https?://~', $html);
@@ -101,7 +101,7 @@ final class PageTest extends TestCase
             self::fail('no inline script');
         }
         $hash = base64_encode(hash('sha256', $m[1], true));
-        self::assertSame("default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::fileContentSecurityPolicy());
+        self::assertSame("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::fileContentSecurityPolicy());
         self::assertStringNotContainsString('unsafe-eval', Page::fileContentSecurityPolicy());
         self::assertDoesNotMatchRegularExpression('~\bsrc=|<script[^>]+src~', $html, 'no external script');
     }
@@ -117,6 +117,19 @@ final class PageTest extends TestCase
         }
         self::assertStringContainsString('.copy[hidden] { display: none; }', $html);
         self::assertStringContainsString('class="copy"', $html);
+    }
+
+    public function testFaviconIsLinkedAndAllowedByTheContentSecurityPolicy(): void
+    {
+        foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound()] as $html) {
+            self::assertStringContainsString('<link rel="icon" href="/favicon.svg" type="image/svg+xml">', $html);
+            self::assertStringContainsString('<link rel="icon" href="/favicon.ico" sizes="any">', $html);
+            self::assertStringContainsString('<link rel="apple-touch-icon" href="/apple-touch-icon.png">', $html);
+        }
+        foreach ([Page::fileContentSecurityPolicy(), Page::staticContentSecurityPolicy()] as $csp) {
+            self::assertStringContainsString("default-src 'none'", $csp);
+            self::assertStringContainsString("img-src 'self'", $csp, 'same-origin images only');
+        }
     }
 
     public function testEverythingFromTheOutsideIsEscaped(): void

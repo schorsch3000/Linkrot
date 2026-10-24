@@ -150,13 +150,19 @@ final class Page
      */
     public static function fileContentSecurityPolicy(): string
     {
-        return "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
+        return "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
     }
 
     /** @return list<string> */
     public static function taglines(): array
     {
         return self::TAGLINES;
+    }
+
+    /** Content-Security-Policy of pages without a script (not found): only the favicon may be loaded. */
+    public static function staticContentSecurityPolicy(): string
+    {
+        return "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'";
     }
 
     public static function tagline(string $seed): string
@@ -180,6 +186,9 @@ final class Page
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <meta name="color-scheme" content="light dark">
             <meta name="robots" content="noindex, nofollow">
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+            <link rel="icon" href="/favicon.ico" sizes="any">
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
             <title>$title</title>
             <style>
             $css

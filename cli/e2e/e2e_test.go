@@ -292,6 +292,11 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("redirect: %d %q", redirect.StatusCode, redirect.Header.Get("Location"))
 	}
 
+	// the favicon is a static file; nginx serves it in production, php -S does it here
+	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
+		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))
+	}
+
 	// down: byte identical, never overwrites
 	dir := t.TempDir()
 	path := strings.TrimSpace(s.must(t, "down", file.ID[:6], dir))

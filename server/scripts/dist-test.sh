@@ -11,6 +11,10 @@ trap 'rm -rf "$root"' EXIT
 tar -xzf "$tarball" -C "$root"
 mkdir -p "$root/app_data/files"
 
+for icon in favicon.svg favicon.ico apple-touch-icon.png; do
+	[ -f "$root/htdocs/$icon" ] || { echo "$icon is missing from the release" >&2; exit 1; }
+done
+
 out="$("$root/app/install.sh" 2>&1)"
 grep -q "ACTION REQUIRED" <<<"$out" || { echo "no instructions without config:" >&2; echo "$out" >&2; exit 1; }
 grep -q "$root/app_data/config.php" <<<"$out" || { echo "instructions do not name the file" >&2; exit 1; }

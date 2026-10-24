@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <title>linkrot</title>
+  <rect width="32" height="32" rx="7" fill="#1b2a20"/>
+  <g fill="none" stroke="#8fd19e" stroke-width="3.2" stroke-linecap="round">
+    <path d="M12.5 11H9.5a5 5 0 0 0 0 10h3"/>
+    <path d="M19.5 11h3a5 5 0 0 1 0 10h-3"/>
+  </g>
+  <circle cx="16" cy="6.6" r="1.4" fill="#d0a84a"/>
+  <circle cx="14.6" cy="25.6" r="1.1" fill="#8fbf4f"/>
+  <circle cx="17.6" cy="26.4" r="1.5" fill="#d0a84a"/>
+</svg>

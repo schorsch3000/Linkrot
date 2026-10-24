@@ -96,7 +96,7 @@ final readonly class DownloadController
     {
         return new Response(404, [
             'Content-Type' => 'text/html; charset=utf-8',
-            'Content-Security-Policy' => "default-src 'none'",
+            'Content-Security-Policy' => Page::staticContentSecurityPolicy(),
         ] + self::SECURITY_HEADERS, Page::notFound());
     }
 }
