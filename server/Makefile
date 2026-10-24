@@ -6,7 +6,7 @@ VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
 
-.PHONY: install build dist run test lint fmt clean precommit
+.PHONY: install build dist dist-test run test lint fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
@@ -29,6 +29,10 @@ dist: build
 		echo "tarball contains files that do not belong into a release"; exit 1; fi
 	@echo $(TARBALL)
 
+# Unpacks the tarball like a deployment and runs app/install.sh (needs composer).
+dist-test: dist
+	scripts/dist-test.sh $(TARBALL)
+
 run: install
 	@mkdir -p $(DATA_DIR)/files
 	@test -f $(DATA_DIR)/config.php || printf "<?php\nreturn [\n    'base_url' => 'http://localhost:$(PORT)',\n    'download_mode' => 'php',\n];\n" > $(DATA_DIR)/config.php
@@ -38,7 +42,7 @@ test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
 
 lint:
-	shellcheck app/install.sh
+	shellcheck app/install.sh scripts/dist-test.sh
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff

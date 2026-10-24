@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Config;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * Loads the configuration the way the server does and reports the first problem.
+ * usage: check-config [path/to/config.php]   (default: $LINKROT_DATA or ../../app_data, then config.php)
+ */
+$file = $argv[1] ?? ((getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data') . '/config.php');
+
+try {
+    Config::load($file);
+} catch (Throwable $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    exit(1);
+}
+echo "$file is valid\n";

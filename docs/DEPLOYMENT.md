@@ -23,6 +23,9 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
    It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
    --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
+   Afterwards it checks `app_data/config.php`: if the file is missing it prints a prominent notice with what to create
+   (until then every request is answered with "server misconfigured"), and if it exists it is loaded the way the server
+   does, so mistakes show up at deploy time. The script's exit code is 0 either way.
 
 4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; all three
    folders must belong to the user php-fpm and nginx run as. See [SERVER.md](SERVER.md#configuration) for all options.
