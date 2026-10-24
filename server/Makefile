@@ -29,6 +29,10 @@ dist: build
 		echo "tarball contains files that do not belong into a release"; exit 1; fi
 	@echo $(TARBALL)
 
+# Sample pages of the download site for every icon type, to open in a browser (build/preview/index.html).
+preview:
+	php scripts/preview.php
+
 run: install
 	@mkdir -p $(DATA_DIR)/files
 	@test -f $(DATA_DIR)/config.php || printf "<?php\nreturn [\n    'base_url' => 'http://localhost:$(PORT)',\n    'download_mode' => 'php',\n];\n" > $(DATA_DIR)/config.php
