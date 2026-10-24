@@ -58,6 +58,15 @@ final readonly class FileRepository
             ->execute([$name, $rmAfter, $expiresAt, $usesLeft, $now, $id]);
     }
 
+    /** Takes one use, atomically. False if none is left (or the file is unknown). */
+    public function consumeUse(string $id): bool
+    {
+        $update = $this->pdo->prepare('UPDATE files SET uses_left = uses_left - 1 WHERE id = ? AND uses_left > 0');
+        $update->execute([$id]);
+
+        return $update->rowCount() === 1;
+    }
+
     public function setOffset(string $id, int $offset, int $now): void
     {
         $this->pdo->prepare('UPDATE files SET upload_offset = ?, updated_at = ? WHERE id = ?')->execute([$offset, $now, $id]);

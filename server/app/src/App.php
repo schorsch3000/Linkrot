@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Linkrot;
 
 use Closure;
+use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
@@ -63,6 +64,13 @@ final class App
         $this->router->add('DELETE', '/api/v1/files/{id}', $this->authed(
             static fn(Request $request, array $params): Response => $files()->delete($params['id']),
         ));
+        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store);
+        $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
+        $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
+        foreach (['GET', 'HEAD'] as $method) {
+            $this->router->add($method, '/dl/{id}/{name}', static fn(Request $request, array $params): Response => $download()->download($request, $params['id']));
+            $this->router->add($method, '/dl/{id}', static fn(Request $request, array $params): Response => $download()->download($request, $params['id']));
+        }
         $this->router->add('PATCH', '/api/v1/files/{id}/content', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->chunk($request, $params['id']),
         ));

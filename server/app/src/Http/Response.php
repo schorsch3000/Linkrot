@@ -11,6 +11,7 @@ final readonly class Response
         public int $status = 200,
         public array $headers = [],
         public string $body = '',
+        public ?string $streamPath = null,
     ) {}
 
     /** @param array<array-key, mixed> $data */
@@ -41,6 +42,11 @@ final readonly class Response
         http_response_code($this->status);
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
+        }
+        if ($this->streamPath !== null) {
+            readfile($this->streamPath);
+
+            return;
         }
         echo $this->body;
     }
