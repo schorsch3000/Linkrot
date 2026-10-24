@@ -62,3 +62,53 @@ func TestCompleteFlagValues(t *testing.T) {
 		t.Errorf("rm-after: %q", got)
 	}
 }
+
+func flagNamesOf(completions []string) []string {
+	var names []string
+	for _, c := range completions {
+		names = append(names, strings.SplitN(c, "\t", 2)[0])
+	}
+	return names
+}
+
+func TestConfigCompletesItsFlags(t *testing.T) {
+	e := newEnv(t)
+
+	got := flagNamesOf(e.completions("config", ""))
+	if strings.Join(got, " ") != "--server --token" {
+		t.Fatalf("config: %v", got)
+	}
+	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--token" {
+		t.Fatalf("flags that are already given are not offered again: %v", got)
+	}
+	if got := flagNamesOf(e.completions("config", "--t")); strings.Join(got, " ") != "--token" {
+		t.Fatalf("prefix: %v", got)
+	}
+}
+
+func TestFlagsAreOfferedWhereNoArgumentsAreLeft(t *testing.T) {
+	e := newEnv(t)
+	id := e.server.Add("a.txt", []byte("a"))
+
+	cases := map[string][]string{
+		"ls":   {"ls", ""},
+		"set":  {"set", id, ""},
+		"info": {"info", id, ""},
+		"up":   {"up", "file.bin", ""},
+	}
+	for name, args := range cases {
+		if got := e.completions(args...); len(got) == 0 {
+			t.Errorf("%s: no flags offered", name)
+		}
+	}
+	if got := strings.Join(flagNamesOf(e.completions("set", id, "")), " "); got != "--mv --rm-after --uses --json" && got != "--json --mv --rm-after --uses" {
+		t.Errorf("set flags: %q", got)
+	}
+	// the file to upload and the download target stay with the shell's file completion
+	if got := e.completions("up", ""); len(got) != 0 {
+		t.Errorf("up file: %v", got)
+	}
+	if got := e.completions("down", id, ""); len(got) != 0 {
+		t.Errorf("down target: %v", got)
+	}
+}
