@@ -1,0 +1,37 @@
+# Example server block for Linkrot. Adjust paths, server_name, TLS and the php-fpm socket.
+# {deployroot}/app_htdocs  public folder
+# {deployroot}/app_data    data, uploaded files live in app_data/files
+
+limit_req_zone $binary_remote_addr zone=linkrot:10m rate=20r/s;   # http{} context, DoS protection only
+
+server {
+    listen 443 ssl;
+    server_name linkrot.example;
+
+    root {deployroot}/app_htdocs;
+    index index.php;
+
+    # chunk_size (default 32 MiB) + 32 bytes digest + margin
+    client_max_body_size 40m;
+
+    # PHP must see the finished body, so that no PHP runs while bytes are on the wire
+    fastcgi_request_buffering on;
+
+    limit_req zone=linkrot burst=40 nodelay;
+
+    location / {
+        try_files $uri /index.php$is_args$args;
+    }
+
+    location ~ ^/index\.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    }
+
+    # reachable only through X-Accel-Redirect from PHP
+    location /_files/ {
+        internal;
+        alias {deployroot}/app_data/files/;
+    }
+}
