@@ -68,6 +68,23 @@ func (s *FakeServer) Add(name string, content []byte) string {
 	return s.add(name, content).ID
 }
 
+// AddUploading stores an incomplete upload with the first offset bytes received and returns its id.
+func (s *FakeServer) AddUploading(name string, size, offset int64) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f := s.newFile(name, size, fmt.Sprintf("%064d", s.seq))
+	f.Offset = offset
+	f.data = make([]byte, offset)
+	return f.ID
+}
+
+// Has reports whether a file exists.
+func (s *FakeServer) Has(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.files[id] != nil
+}
+
 func (s *FakeServer) add(name string, content []byte) *fakeFile {
 	sum := sha256.Sum256(content)
 	f := s.newFile(name, int64(len(content)), hex.EncodeToString(sum[:]))

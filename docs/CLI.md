@@ -54,7 +54,7 @@ Changes metadata of an uploaded file. Takes the same flags as `up` that make sen
 
 ### `rm <id>...`
 
-Deletes one or more files.
+Deletes one or more files. Silent on success. A failure for one id is reported on stderr and does not stop the others; the exit code is then 1.
 
 ### `down <id> [target]`
 

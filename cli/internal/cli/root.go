@@ -31,6 +31,8 @@ type App struct {
 	Copy  func(selection, text string) error
 	Sleep func(ctx context.Context, d time.Duration) error
 
+	Now func() time.Time // default time.Now
+
 	uploading bool
 }
 
@@ -94,7 +96,7 @@ func (a *App) NewRoot() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return withCode(ExitUsage, err) })
 	root.CompletionOptions.DisableDefaultCmd = false
 
-	root.AddCommand(a.configCommand(), a.upCommand())
+	root.AddCommand(a.configCommand(), a.upCommand(), a.lsCommand(), a.infoCommand(), a.setCommand(), a.rmCommand(), a.cleanupCommand())
 	return root
 }
 
