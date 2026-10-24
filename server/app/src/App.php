@@ -13,6 +13,7 @@ use Linkrot\Auth\Authenticator;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
 use Linkrot\Auth\TokenStore;
+use Linkrot\Files\Cleanup;
 use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
@@ -71,6 +72,13 @@ final class App
             $this->router->add($method, '/dl/{id}/{name}', static fn(Request $request, array $params): Response => $download()->download($request, $params['id']));
             $this->router->add($method, '/dl/{id}', static fn(Request $request, array $params): Response => $download()->download($request, $params['id']));
         }
+        $this->router->add('POST', '/api/v1/cleanup', $this->authed(function (): Response {
+            $result = $this->cleanup()->runNow();
+
+            return Response::json($result instanceof \Linkrot\Files\CleanupResult
+                ? ['ran' => true, 'rows_deleted' => $result->rowsDeleted, 'files_deleted' => $result->filesDeleted]
+                : ['ran' => false]);
+        }));
         $this->router->add('PATCH', '/api/v1/files/{id}/content', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->chunk($request, $params['id']),
         ));
@@ -101,6 +109,21 @@ final class App
     public function db(): PDO
     {
         return $this->pdo ??= Database::open($this->dataDir . '/linkrot.sqlite');
+    }
+
+    public function cleanup(): Cleanup
+    {
+        return new Cleanup($this->db(), $this->config, $this->dataDir . '/files', $this->dataDir . '/cleanup.lock', $this->clock);
+    }
+
+    /** Called after the response was sent: runs the lazy cleanup if it is due. Never throws. */
+    public function cleanupIfDue(): void
+    {
+        try {
+            $this->cleanup()->runIfDue();
+        } catch (Throwable $e) {
+            error_log('linkrot: cleanup failed: ' . $e);
+        }
     }
 
     public function handle(Request $request): Response

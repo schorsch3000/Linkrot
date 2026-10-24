@@ -6,6 +6,9 @@
          failOnWarning="true"
          failOnRisky="true"
          cacheDirectory=".phpunit.cache">
+    <php>
+        <ini name="error_log" value="/dev/null"/>
+    </php>
     <testsuites>
         <testsuite name="unit">
             <directory>tests</directory>

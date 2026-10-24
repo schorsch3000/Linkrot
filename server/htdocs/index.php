@@ -22,3 +22,9 @@ try {
 }
 
 $app->handle(Request::fromGlobals())->send();
+
+// The response is out; the lazy cleanup must not delay the client.
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+$app->cleanupIfDue();
