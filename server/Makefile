@@ -23,7 +23,7 @@ run: install
 	LINKROT_DATA=$(DATA_DIR) php -S localhost:$(PORT) -t app_htdocs app_htdocs/index.php
 
 test:
-	$(BIN)/phpunit
+	php -d apc.enable_cli=1 $(BIN)/phpunit
 
 lint:
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
