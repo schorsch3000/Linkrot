@@ -319,23 +319,26 @@ final class Page
         .terminal h2 { margin: 0 0 .5rem; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
         .label { margin: .8rem 0 .2rem; font-size: .85rem; color: var(--muted); }
         .muted { opacity: .8; }
-        .box { position: relative; }
+        /* A row: the text scrolls on its own on the left, the copy button has its own cell on the right. */
+        .box { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: .5rem; background: var(--code-bg); overflow: hidden; }
+        code {
+          flex: 1 1 auto; min-width: 0; display: block; padding: .5rem .7rem; background: transparent;
+          font: .85rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-x: auto; white-space: nowrap; user-select: all;
+          scrollbar-width: thin; scrollbar-color: var(--line) transparent;
+        }
+        code::-webkit-scrollbar { height: 6px; }
+        code::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
         .copy {
-          position: absolute; top: 50%; right: .35rem; transform: translateY(-50%); display: grid; place-items: center;
-          width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .45rem; background: var(--code-bg);
-          color: var(--muted); cursor: pointer;
+          flex: none; display: grid; place-items: start center; width: 2.6rem; padding: .62rem 0 0; border: 0;
+          border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--muted); cursor: pointer;
         }
         .copy[hidden] { display: none; }
-        .copy:hover { color: var(--fg); }
-        .copy:focus-visible { outline: 2px solid var(--rot-b); outline-offset: 1px; }
+        .copy:hover { color: var(--fg); background: var(--card); }
+        .copy:focus-visible { outline: 2px solid var(--rot-b); outline-offset: -3px; }
         .copy .i-done, .copy.done .i-copy { display: none; }
         .copy.done .i-done { display: block; }
         .copy.done { color: var(--accent); }
         .copy.failed { color: #c0504d; }
-        code {
-          display: block; padding: .5rem 2.8rem .5rem .7rem; border-radius: .5rem; background: var(--code-bg); border: 1px solid var(--line);
-          font: .85rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-x: auto; white-space: nowrap; user-select: all;
-        }
         .gone .meta { margin-bottom: 0; }
         footer { margin-top: 1.5rem; text-align: center; font-size: .9rem; font-style: italic; color: var(--muted); }
         CSS;

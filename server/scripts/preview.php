@@ -28,6 +28,7 @@ $samples = [
     'document' => ['quarterly-report.pdf', 1_234_567],
     'disk' => ['debian-13-netinst.iso', 780_000_000],
     'generic' => ['Makefile', 2_048],
+    'long' => ['a-rather-long-file-name-so-that-the-curl-command-and-the-checksum-must-scroll-sideways-2026.tar.gz', 52_428_800],
 ];
 
 $links = [];
