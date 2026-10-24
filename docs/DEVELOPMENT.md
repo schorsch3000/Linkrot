@@ -7,7 +7,7 @@ Makefile                 runs the same target in server/ and cli/
 .githooks/pre-commit     runs `make precommit`
 server/
   Makefile
-  composer.json          all used PHP extensions are listed under `require` (ext-pdo_sqlite, ext-apcu, ...)
+  composer.json          all used PHP extensions are listed under `require` (ext-pdo_sqlite, ext-apcu, ...); vendor-dir is app/vendor
   app/                   code (PSR-4), app/bin/lr-auth
   app_htdocs/index.php   front controller
   app_data/              local dev data (gitignored)

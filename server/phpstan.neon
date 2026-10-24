@@ -1,0 +1,9 @@
+parameters:
+    level: 7
+    paths:
+        - app/src
+        - app/bin
+        - app_htdocs
+        - tests
+    excludePaths:
+        - app/vendor

@@ -1,0 +1,39 @@
+{
+    "name": "schorsch3000/linkrot-server",
+    "description": "Linkrot server: expiring file sharing links",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.4",
+        "ext-apcu": "*",
+        "ext-hash": "*",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*",
+        "ext-json": "*",
+        "ext-random": "*"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^12.0",
+        "rector/rector": "^2.0",
+        "friendsofphp/php-cs-fixer": "^3.64"
+    },
+    "autoload": {
+        "psr-4": {
+            "Linkrot\\": "app/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Linkrot\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "vendor-dir": "app/vendor",
+        "sort-packages": true,
+        "optimize-autoloader": true
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}

@@ -60,7 +60,7 @@ All times are UTC unix seconds.
 | `size` | declared size in bytes |
 | `sha256` | declared sha256 (hex), unique index |
 | `status` | `uploading` or `ready` |
-| `offset` | number of verified bytes received (authoritative) |
+| `upload_offset` | number of verified bytes received (authoritative; the API calls it `offset`) |
 | `created_at` | row created |
 | `updated_at` | last chunk or metadata activity |
 | `completed_at` | upload completed, null while uploading |
