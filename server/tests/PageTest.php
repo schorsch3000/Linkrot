@@ -135,10 +135,24 @@ final class PageTest extends TestCase
         foreach (['expire', 'uses', 'downloads left', 'remaining'] as $word) {
             self::assertStringNotContainsString($word, $lower, $word);
         }
-        foreach (range(1, 200) as $i) {
-            $tagline = strtolower(Page::tagline("id-$i"));
-            self::assertStringNotContainsString('expire', $tagline);
-            self::assertDoesNotMatchRegularExpression('~\d~', $tagline, 'no numbers or dates in taglines');
+    }
+
+    public function testEveryTaglineIsSafeToShow(): void
+    {
+        $taglines = Page::taglines();
+
+        self::assertGreaterThanOrEqual(60, count($taglines));
+        self::assertSame($taglines, array_values(array_unique($taglines)), 'duplicate tagline');
+        foreach ($taglines as $tagline) {
+            $lower = strtolower($tagline);
+            foreach (['expire', 'uses', 'remaining', 'downloads left', 'days', 'hours', 'weeks'] as $word) {
+                self::assertStringNotContainsString($word, $lower, $tagline);
+            }
+            self::assertDoesNotMatchRegularExpression('~\d~', $tagline, "no numbers or dates: $tagline");
+            self::assertLessThanOrEqual(80, strlen($tagline), "too long: $tagline");
+            self::assertMatchesRegularExpression('~[.!?]$~', $tagline, "no final punctuation: $tagline");
+            self::assertSame(trim($tagline), $tagline);
+            self::assertStringNotContainsString('<', $tagline);
         }
     }
 
@@ -146,10 +160,10 @@ final class PageTest extends TestCase
     {
         self::assertSame(Page::tagline('abcd7KfRtm4pWxnZ'), Page::tagline('abcd7KfRtm4pWxnZ'));
         $seen = [];
-        foreach (range(1, 100) as $i) {
+        foreach (range(1, 300) as $i) {
             $seen[Page::tagline("file-$i")] = true;
         }
-        self::assertGreaterThan(3, count($seen));
+        self::assertGreaterThan(30, count($seen), 'taglines should be spread out over many files');
     }
 
     public function testNotFoundPageGivesNothingAway(): void

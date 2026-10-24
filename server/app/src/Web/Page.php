@@ -22,6 +22,67 @@ final class Page
         'Shared fresh. Rotting already.',
         'Mold is just patience with spores.',
         'Download it before the mold does.',
+        'Keep refrigerated. Or don\'t, it rots either way.',
+        'Link rot: not a bug, a lifestyle.',
+        'Contains traces of mold.',
+        'Good things come to those who download early.',
+        'Nothing gold can stay. This link, even less.',
+        'Decomposing gracefully since the first click.',
+        'Some links age like wine. This one ages like bananas.',
+        'Brought to you by entropy.',
+        'Entropy always wins.',
+        'Slightly fermented.',
+        'Do not leave in a warm browser tab.',
+        'Fresh from the terminal, going stale at the speed of the internet.',
+        'The mold is patient. You should not be.',
+        'Organic, free-range, short-lived.',
+        'Made from freshly recycled bytes.',
+        'Tick, tock, mold.',
+        'It was a good link. It lived a short, full life.',
+        'Please do not bookmark me. I won\'t last.',
+        'Bookmarking this is a bold move.',
+        'Please do not feed the mold.',
+        'Compost in progress.',
+        'Spores included at no extra charge.',
+        'Your friendly neighbourhood decaying link.',
+        'Rot happens.',
+        'A link with a short shelf life.',
+        'Shelf life: unclear. Mold: certain.',
+        'Handle gently. It bruises easily.',
+        'Freshness not guaranteed.',
+        'Download now, regret less later.',
+        'Not every link is meant to be forever.',
+        'Everything is temporary, including this link.',
+        'Dust to dust, link to not-found.',
+        'Born fresh, raised on bandwidth, destined for the compost heap.',
+        'Gone before you know it, like a good sandwich.',
+        'No preservatives added.',
+        'Preservative-free since forever.',
+        'Mind the mold.',
+        'It\'s not rotten yet. Probably.',
+        'Slowly turning into fertilizer.',
+        'Smells a bit funky. Still fine.',
+        'Fungi are already moving in.',
+        'A fine specimen of impermanence.',
+        'Rotting with dignity.',
+        'Grab it while it\'s fresh.',
+        'Please enjoy before the mold arrives.',
+        'Link rot, but make it intentional.',
+        'The mold got here first. Barely.',
+        'Served fresh, rotting on schedule.',
+        'We keep the mold, you keep the file.',
+        'This link is in its ripe phase.',
+        'Ripe now, overripe soon.',
+        'Peak freshness. It\'s all downhill from here.',
+        'Fermenting quietly in a corner of the internet.',
+        'Slightly moist, entirely temporary.',
+        'Warm, soft and slowly dissolving.',
+        'Some assembly required. Some decay guaranteed.',
+        'Please keep away from damp servers.',
+        'Handle with tongs, it\'s getting fuzzy.',
+        'Marinating in bits and bytes.',
+        'Left out on the counter overnight.',
+        'Its best moment is right now.',
     ];
 
     public static function file(FileRecord $file, string $baseUrl): string
@@ -90,6 +151,12 @@ final class Page
     public static function fileContentSecurityPolicy(): string
     {
         return "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
+    }
+
+    /** @return list<string> */
+    public static function taglines(): array
+    {
+        return self::TAGLINES;
     }
 
     public static function tagline(string $seed): string
