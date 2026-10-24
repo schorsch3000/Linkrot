@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the precommit target of every part. A failure aborts the commit.
+# Do not bypass with `git commit --no-verify` / `-n`.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+exec make precommit

@@ -1,5 +1,5 @@
 .idea/
 .az/
 server/app_data/
-server/vendor/
+server/app/vendor/
 cli/bin/
