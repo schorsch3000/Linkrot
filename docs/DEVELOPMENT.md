@@ -51,6 +51,12 @@ Go:
 - `go vet`, `golangci-lint`, `gofumpt` (formatter), `go test ./...`
 - cobra for the command line, no other heavy dependencies
 
+## End-to-end tests
+
+`cli/e2e` runs the real CLI code against the real server: once on `php -S` directly and once behind nginx, which
+covers the `X-Accel-Redirect` path (ranges, security headers, the internal location). They are part of `make -C cli test`
+and are skipped if php, the server dependencies (`make -C server install`), APCu or nginx are missing.
+
 ## Pre-commit hook
 
 `.githooks/pre-commit` runs `make precommit` in both parts and aborts the commit when it fails. `make install-hooks`
