@@ -41,8 +41,8 @@ jobs:
       - run: make -C server install
       - run: make -C server precommit
 
-      - name: Release tarball has the expected layout
-        run: make -C server dist VERSION=ci
+      - name: Release tarball has the expected layout and installs
+        run: make -C server dist-test VERSION=ci
 
   cli:
     name: CLI (vet, golangci-lint, gofumpt, tests, cross-compile)
