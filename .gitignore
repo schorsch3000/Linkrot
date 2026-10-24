@@ -3,3 +3,6 @@
 server/app_data/
 server/app/vendor/
 cli/bin/
+server/.php-cs-fixer.cache
+server/.phpunit.cache/
+server/build/
