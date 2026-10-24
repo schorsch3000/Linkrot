@@ -13,6 +13,7 @@ use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
+use Linkrot\Web\Page;
 
 /** The public part: /file/{id}/{name} (page) and /dl/{id}/{name} (download). No authentication. */
 final readonly class DownloadController
@@ -41,38 +42,11 @@ final readonly class DownloadController
             return new Response(302, ['Location' => '/file/' . $file->id . '/' . FileName::urlSegment($file->name)] + self::SECURITY_HEADERS);
         }
 
-        $title = htmlspecialchars($file->name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $href = htmlspecialchars('/dl/' . $file->id . '/' . FileName::urlSegment($file->name), ENT_QUOTES, 'UTF-8');
-        $size = htmlspecialchars($this->humanSize($file->size), ENT_QUOTES, 'UTF-8');
-        $html = <<<HTML
-            <!doctype html>
-            <html lang="en">
-            <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <meta name="robots" content="noindex, nofollow">
-            <title>$title</title>
-            <style>
-            body { font-family: sans-serif; margin: 0; display: flex; min-height: 100vh; align-items: center; justify-content: center; }
-            main { text-align: center; padding: 1rem; }
-            h1 { font-size: 1.3rem; word-break: break-all; }
-            a { display: inline-block; padding: .6rem 1.4rem; border: 1px solid currentColor; border-radius: .3rem; text-decoration: none; color: inherit; }
-            </style>
-            </head>
-            <body>
-            <main>
-            <h1>$title</h1>
-            <p>$size</p>
-            <a href="$href">Download</a>
-            </main>
-            </body>
-            </html>
-
-            HTML;
+        $html = Page::file($file, $this->config->baseUrl);
 
         return new Response(200, [
             'Content-Type' => 'text/html; charset=utf-8',
-            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'",
+            'Content-Security-Policy' => Page::fileContentSecurityPolicy(),
         ] + self::SECURITY_HEADERS, $html);
     }
 
@@ -123,24 +97,6 @@ final readonly class DownloadController
         return new Response(404, [
             'Content-Type' => 'text/html; charset=utf-8',
             'Content-Security-Policy' => "default-src 'none'",
-        ] + self::SECURITY_HEADERS, "<!doctype html><title>Not found</title><p>Not found.</p>\n");
-    }
-
-    private function humanSize(int $bytes): string
-    {
-        if ($bytes < 1024) {
-            return $bytes . ' bytes';
-        }
-        $units = ['KiB', 'MiB', 'GiB', 'TiB'];
-        $value = (float) $bytes;
-        $unit = '';
-        foreach ($units as $unit) {
-            $value /= 1024;
-            if ($value < 1024) {
-                break;
-            }
-        }
-
-        return sprintf('%.1f %s (%s bytes)', $value, $unit, number_format($bytes, 0, '.', ' '));
+        ] + self::SECURITY_HEADERS, Page::notFound());
     }
 }
