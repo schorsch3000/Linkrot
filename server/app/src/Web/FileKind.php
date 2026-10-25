@@ -92,10 +92,10 @@ enum FileKind: string
             self::Video => 'mp4 mkv mov webm avi m4v wmv flv mpg mpeg ogv 3gp ts',
             self::Audio => 'mp3 flac wav ogg oga m4a opus aac wma aiff mid midi',
             self::Archive => 'zip tar gz tgz bz2 xz zst 7z rar lz lz4 cab',
-            self::Code => 'php go js mjs ts tsx jsx py rb rs c h cc cpp hpp java kt swift cs sh bash zsh fish pl lua sql json yaml yml toml xml html htm css scss vue dart ex exs hs clj scala',
+            self::Code => 'php go js mjs ts tsx jsx py rb rs c h cc cpp hpp java kt swift cs sh bash bas a asm zsh fish pl lua sql json yaml yml toml xml html htm css scss vue dart ex exs hs clj scala',
             self::Document => 'txt md rst pdf doc docx odt rtf log csv tsv xls xlsx ods ppt pptx odp epub tex',
             self::Disk => 'iso img bin exe msi dmg pkg deb rpm apk appimage vmdk qcow2 vdi',
-            self::C64 => 'd64 g64 d81 g81 t64 crt',
+            self::C64 => 'd64 g64 d81 g81 t64 crt prg p00 tap d71 g71 p64 dnp dhp seq usr sid',
             self::Generic => '',
         };
     }
