@@ -219,7 +219,7 @@ final class Page
             </head>
             <body>
             <main>
-            <header class="brand">$chain<span class="word">link<span class="rot">rot</span></span></header>
+            <header class="brand"><a href="/">$chain<span class="word">link<span class="rot">rot</span></span></a></header>
             $body
             <footer>$tagline</footer>
             </main>
@@ -328,7 +328,9 @@ final class Page
           font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
         main { max-width: 34rem; margin: 0 auto; padding: 2.5rem 1rem 2rem; }
-        .brand { display: flex; align-items: center; justify-content: center; gap: .6rem; margin-bottom: 1.5rem; }
+        .brand { display: flex; justify-content: center; margin-bottom: 1.5rem; }
+        .brand a { display: flex; align-items: center; gap: .6rem; color: inherit; text-decoration: none; border-radius: .4rem; }
+        .brand a:focus-visible { outline: 3px solid var(--rot-b); outline-offset: 4px; }
         .chain { color: var(--muted); }
         .spore { color: var(--rot-a); }
         .word { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }

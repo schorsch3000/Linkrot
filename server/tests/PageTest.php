@@ -74,6 +74,13 @@ final class PageTest extends TestCase
         self::assertStringContainsString('1 234 567 bytes', $html);
     }
 
+    public function testTheHeaderLinksToTheAboutPage(): void
+    {
+        foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound(), Page::home()] as $html) {
+            self::assertStringContainsString('<header class="brand"><a href="/">', $html);
+        }
+    }
+
     public function testFollowsTheBrowsersColourScheme(): void
     {
         $html = Page::file($this->file(), 'https://lr.example');
