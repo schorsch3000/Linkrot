@@ -31,7 +31,7 @@ final class HeaderTaglinesTest extends TestCase
     public function testDifferentFilesSpreadOverTheLines(): void
     {
         $seen = [];
-        for ($i = 0; $i < 400; ++$i) {
+        for ($i = 0; $i < 2000; ++$i) {
             $seen[HeaderTaglines::pick('file' . $i)] = true;
         }
         self::assertCount(count(HeaderTaglines::all()), $seen);
