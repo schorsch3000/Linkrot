@@ -37,7 +37,7 @@ foreach ($samples as $kind => [$name, $size]) {
     file_put_contents("$dir/file-$kind.html", Page::file($file, 'https://linkrot.example'));
     $links[] = "<li><a href=\"file-$kind.html\">$kind: " . htmlspecialchars($name) . '</a></li>';
 }
-file_put_contents("$dir/home.html", Page::home('https://linkrot.example'));
+file_put_contents("$dir/home.html", Page::home());
 $links[] = '<li><a href="home.html">about page (/)</a></li>';
 file_put_contents("$dir/notfound.html", Page::notFound());
 $links[] = '<li><a href="notfound.html">not found</a></li>';

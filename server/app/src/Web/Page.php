@@ -127,13 +127,10 @@ final class Page
         return self::document($file->name, $body, self::tagline($file->id), true);
     }
 
-    /** The about page at `/`. */
-    public static function home(string $baseUrl): string
+    /** The about page at `/`. No script, no copy buttons: only static text and one link to the project. */
+    public static function home(): string
     {
-        $server = self::e(rtrim($baseUrl, '/'));
-        $box = self::copyBox(...);
         $chain = self::CHAIN_LARGE;
-        $releases = self::e(self::PROJECT_URL . '/releases');
         $project = self::e(self::PROJECT_URL);
 
         $body = <<<HTML
@@ -147,23 +144,12 @@ final class Page
             <li><strong>Share</strong> the link it prints.</li>
             <li><strong>Rot.</strong> The link and the file disappear on their own, nothing to clean up.</li>
             </ol>
-            <section class="terminal" aria-label="Try it from a terminal">
-            <h2>Try it</h2>
-            <p class="label">Point the client at this server</p>
-            {$box('config', "linkrot config --server $server")}
-            <p class="label">Upload a file and get its link</p>
-            {$box('up', 'linkrot up report.pdf')}
-            <p class="label">Let it rot sooner: after two days, or after one download</p>
-            {$box('rot', 'linkrot up report.pdf --rm-after 2d --uses 1')}
-            </section>
-            <p class="small">This is a private instance: there are no accounts and no uploads from the browser, the client needs a
-            token from whoever runs this server.</p>
-            <a class="button" href="$releases">Get the command line client</a>
-            <p class="small"><a href="$project">Source code and documentation</a></p>
+            <a class="button" href="$project">linkrot on GitHub</a>
+            <p class="small">This is a private instance: there are no accounts and no uploads from the browser.</p>
             </article>
             HTML;
 
-        return self::document('Links that rot', $body, self::TAGLINES[0], true);
+        return self::document('Links that rot', $body, self::TAGLINES[0]);
     }
 
     public static function notFound(): string
@@ -408,10 +394,8 @@ final class Page
           display: grid; place-items: center; border-radius: 50%; background: var(--code-bg); border: 1px solid var(--line);
           font-size: .8rem; font-weight: 700; color: var(--accent);
         }
-        .about .terminal { margin-bottom: 1.25rem; }
         .small { margin: 1rem 0 0; font-size: .85rem; color: var(--muted); }
-        .small a { color: inherit; }
-        .about .button + .small { margin-top: 1.2rem; }
+        .about .button { margin-top: 1.25rem; }
         footer { margin-top: 1.5rem; text-align: center; font-size: .9rem; font-style: italic; color: var(--muted); }
         CSS;
 }

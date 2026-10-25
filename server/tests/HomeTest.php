@@ -25,53 +25,49 @@ final class HomeTest extends AppTestCase
         self::assertSame(200, $this->request('HEAD', '/', auth: false)->status);
     }
 
-    public function testExamplesNameThisServerAndHaveCopyButtons(): void
-    {
-        $html = $this->request('GET', '/', auth: false)->body;
-
-        self::assertStringContainsString('<code id="c-config">linkrot config --server https://lr.example</code>', $html);
-        self::assertStringContainsString('<code id="c-up">linkrot up report.pdf</code>', $html);
-        self::assertStringContainsString('<code id="c-rot">linkrot up report.pdf --rm-after 2d --uses 1</code>', $html);
-        self::assertSame(3, substr_count($html, 'class="copy"'));
-    }
-
-    public function testSameStyleAndSameSecurityAsTheDownloadPage(): void
+    public function testNeedsNoScriptAndHasNoCopyBoxesOrCommands(): void
     {
         $response = $this->request('GET', '/', auth: false);
         $html = $response->body;
 
-        self::assertSame(Page::scriptContentSecurityPolicy(), $response->headers['Content-Security-Policy']);
-        self::assertStringContainsString('@media (prefers-color-scheme: dark)', $html);
-        self::assertStringContainsString('<link rel="icon" href="/favicon.svg" type="image/svg+xml">', $html);
-        self::assertSame(1, substr_count($html, '<script'));
-        if (preg_match('~<script>(.*?)</script>~s', $html, $m) !== 1) {
-            self::fail('no inline script');
+        self::assertSame(Page::staticContentSecurityPolicy(), $response->headers['Content-Security-Policy']);
+        self::assertStringNotContainsString('script-src', $response->headers['Content-Security-Policy']);
+        foreach (['<script', 'class="copy"', '<code', 'class="terminal"', 'token', 'Try it'] as $absent) {
+            self::assertStringNotContainsString($absent, $html, $absent);
         }
-        self::assertStringContainsString("script-src 'sha256-" . base64_encode(hash('sha256', $m[1], true)) . "'", $response->headers['Content-Security-Policy']);
+    }
+
+    public function testSameStyleAsTheDownloadPages(): void
+    {
+        $html = $this->request('GET', '/', auth: false)->body;
+
+        self::assertStringContainsString('@media (prefers-color-scheme: dark)', $html);
+        self::assertStringContainsString('<meta name="color-scheme" content="light dark">', $html);
+        self::assertStringContainsString('<link rel="icon" href="/favicon.svg" type="image/svg+xml">', $html);
+        self::assertStringContainsString('class="card about"', $html);
         foreach (['<img', '<iframe', 'url(', '@import', 'animation', 'transition', 'onclick', 'rel="stylesheet"'] as $forbidden) {
             self::assertStringNotContainsString($forbidden, $html, $forbidden);
         }
     }
 
-    public function testOnlyLinksToTheProjectAreExternal(): void
+    public function testTheButtonIsTheOnlyExternalLinkAndGoesToGithub(): void
     {
-        preg_match_all('~(?:src|href)="(https?://[^"]*)"~', $this->request('GET', '/', auth: false)->body, $m);
+        $html = $this->request('GET', '/', auth: false)->body;
 
-        self::assertSame(
-            ['https://github.com/schorsch3000/Linkrot/releases', 'https://github.com/schorsch3000/Linkrot'],
-            $m[1],
-        );
+        preg_match_all('~(?:src|href)="(https?://[^"]*)"~', $html, $m);
+        self::assertSame(['https://github.com/schorsch3000/Linkrot'], $m[1]);
+        self::assertStringContainsString('<a class="button" href="https://github.com/schorsch3000/Linkrot">linkrot on GitHub</a>', $html);
     }
 
-    public function testRevealsNothingAboutThisInstancesFiles(): void
+    public function testRevealsNothingAboutThisInstance(): void
     {
         $this->upload('secret', 'secret-name.txt');
 
         $html = strtolower($this->request('GET', '/', auth: false)->body);
 
-        self::assertStringNotContainsString('secret', $html);
-        self::assertStringNotContainsString('/dl/', $html);
-        self::assertStringNotContainsString('/file/', $html);
+        foreach (['secret', '/dl/', '/file/', 'lr.example'] as $leak) {
+            self::assertStringNotContainsString($leak, $html, $leak);
+        }
     }
 
     public function testOtherUnknownPathsStayJson404(): void

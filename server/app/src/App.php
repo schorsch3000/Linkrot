@@ -67,7 +67,7 @@ final class App
             static fn(Request $request, array $params): Response => $files()->delete($params['id']),
         ));
         foreach (['GET', 'HEAD'] as $method) {
-            $this->router->add($method, '/', fn(): Response => new HomeController($this->config)->index());
+            $this->router->add($method, '/', fn(): Response => new HomeController()->index());
         }
         $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store);
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));

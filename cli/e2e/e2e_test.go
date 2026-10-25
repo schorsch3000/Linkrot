@@ -293,7 +293,7 @@ func lifecycle(t *testing.T, s *stack) {
 	}
 
 	// the root answers with the about page, without a token
-	if r, body := get(t, s.baseURL+"/", nil); r.StatusCode != 200 || !strings.Contains(string(body), "Links that rot.") || !strings.Contains(string(body), "linkrot config --server "+s.baseURL) {
+	if r, body := get(t, s.baseURL+"/", nil); r.StatusCode != 200 || !strings.Contains(string(body), "Links that rot.") {
 		t.Fatalf("about page: %d %q", r.StatusCode, body)
 	}
 
