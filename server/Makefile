@@ -12,11 +12,13 @@ install:
 	composer --working-dir=app install --no-interaction
 
 # PHP needs no compilation. `build` assembles exactly what is deployed (htdocs + app, without vendor/):
-# the target runs `composer install --no-dev` itself as part of the deployment.
+# the target runs `composer install --no-dev` itself as part of the deployment. A release version (1.2.3) is written
+# into the composer.json of the build; the default dev and the ci of the CI leave it alone.
 build:
 	rm -rf $(DIST)
 	mkdir -p $(DIST)/app $(DIST)/htdocs
-	cp -r app/src app/bin app/composer.json app/composer.lock app/install.sh $(DIST)/app/
+	cp -r app/src app/bin app/composer.lock app/install.sh $(DIST)/app/
+	scripts/stamp-version.sh app/composer.json $(DIST)/app/composer.json $(VERSION)
 	cp -r htdocs/. $(DIST)/htdocs/
 
 # Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner and mtime).
@@ -46,7 +48,7 @@ test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
 
 lint:
-	shellcheck app/install.sh scripts/dist-test.sh
+	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff

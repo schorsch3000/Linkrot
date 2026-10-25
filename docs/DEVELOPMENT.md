@@ -68,11 +68,15 @@ APCu), the CLI's `precommit` plus a cross-compile of every release platform, and
 `cli/Makefile`.
 
 `.github/workflows/release.yml` publishes a GitHub release when a tag `vMAJOR.MINOR.PATCH[-suffix]` is pushed (a suffix makes
-it a pre-release). It runs CI first, then builds and attaches:
+it a pre-release). It does not repeat the CI checks: the job `ci-passed` requires a successful CI run for the tagged
+commit (waiting for one that is still running, failing if there is none, so tag after CI on `main` or the pull request
+is green). The builds run next to it, the CLI platforms in parallel, and the release job attaches:
 
 - `linkrot-server-<version>.tar.gz`: exactly two top-level folders, `htdocs/` and `app/`; no `vendor/`, tests or tool
   configs. `app/` contains `composer.json` and `composer.lock`, because `composer install --no-dev` (wrapped by `app/install.sh`) is part of the
-  deployment ([DEPLOYMENT.md](DEPLOYMENT.md)). `make -C server dist` fails if the layout is not as expected.
+  deployment ([DEPLOYMENT.md](DEPLOYMENT.md)). The release version is written into that `composer.json` as `version`
+  (and the hash in the lock file refreshed, `server/scripts/stamp-version.sh`); `make dist` without a release version
+  leaves it out. `make -C server dist` fails if the layout is not as expected.
 - `linkrot_<version>_<os>_<arch>.tar.gz` / `.zip`: the CLI for linux (amd64, arm64, armv7, 386), macOS (amd64, arm64),
   windows (amd64, arm64, 386, as zip) and freebsd (amd64, arm64). Static binaries, built with `-trimpath`; the version is
   shown by `--version`.

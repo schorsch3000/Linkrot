@@ -25,8 +25,10 @@ mtime="@$(git log -1 --format=%ct 2>/dev/null || echo 0)"
 rm -rf dist
 mkdir -p dist
 
-for target in "${targets[@]}"; do
-	IFS=/ read -r goos goarch goarm <<<"$target"
+# builds one target (os/arch[/goarm]); runs in parallel, so output goes to its own stage directory
+build() {
+	local goos goarch goarm label name exe stage
+	IFS=/ read -r goos goarch goarm <<<"$1"
 	label="$goarch"
 	[ -n "${goarm:-}" ] && label="armv${goarm}"
 	name="linkrot_${version}_${goos}_${label}"
@@ -47,7 +49,13 @@ for target in "${targets[@]}"; do
 			-C "$stage" -czf "dist/$name.tar.gz" "$exe"
 	fi
 	rm -rf "$stage"
-done
+}
+export -f build
+export version mtime
+
+# xargs exits non-zero if any build failed
+# shellcheck disable=SC2016 # $1 is meant to expand in the child shell
+printf '%s\n' "${targets[@]}" | xargs -P "$(nproc)" -I{} bash -c 'set -euo pipefail; build "$1"' _ {}
 
 (cd dist && sha256sum -- * >SHA256SUMS)
 ls -l dist

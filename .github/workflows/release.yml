@@ -13,29 +13,29 @@ permissions:
   contents: read
 
 jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
-
-  version:
+  # The checks of the CI workflow are not repeated here: ci-passed only requires that they passed for this commit,
+  # while the builds run next to it.
+  ci-passed:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.v.outputs.version }}
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - id: v
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "tag '$tag' is not of the form vMAJOR.MINOR.PATCH[-suffix]" >&2
-            exit 1
-          fi
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: .github/scripts/require-ci.sh
 
   server-dist:
-    needs: [version, ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: make -C server dist VERSION=${{ needs.version.outputs.version }}
+      - id: v
+        run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
+      - run: make -C server dist VERSION=${{ steps.v.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: server-dist
@@ -43,15 +43,17 @@ jobs:
           if-no-files-found: error
 
   cli-dist:
-    needs: [version, ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
+      # caches modules and the build cache (restored from main, where CI builds all platforms)
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make -C cli dist VERSION=${{ needs.version.outputs.version }}
+      - run: make -C cli dist VERSION=${{ steps.v.outputs.version }}
       - uses: actions/upload-artifact@v4
         with:
           name: cli-dist
@@ -61,7 +63,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [version, server-dist, cli-dist]
+    needs: [ci-passed, server-dist, cli-dist]
     runs-on: ubuntu-latest
     permissions:
       contents: write
