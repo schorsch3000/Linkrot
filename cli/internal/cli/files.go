@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/schorsch3000/Linkrot/internal/api"
+	"github.com/schorsch3000/Linkrot/internal/color"
 )
 
 func (a *App) now() time.Time {
@@ -54,15 +54,28 @@ func (a *App) lsCommand() *cobra.Command {
 					return a.printJSON(files)
 				}
 				now := a.now()
-				tw := tabwriter.NewWriter(a.Out, 0, 4, 2, ' ', 0)
+				pt := a.outPaint()
+				var rows [][]cell
 				if len(files) > 0 {
-					_, _ = fmt.Fprintln(tw, "ID\tNAME\tSIZE\tEXPIRES\tUSES\tSTATUS\tURL")
+					h := []string{"ID", "NAME", "SIZE", "EXPIRES", "USES", "STATUS", "URL"}
+					row := make([]cell, len(h))
+					for i, t := range h {
+						row[i] = cell{t, color.Bold}
+					}
+					rows = append(rows, row)
 				}
 				for _, f := range files {
-					_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", f.ID, f.Name, sizeText(f.Size),
-						expiryText(f, now), usesText(f), statusText(f), f.URL)
+					rows = append(rows, []cell{
+						{f.ID, color.Yellow},
+						{f.Name, ""},
+						{sizeText(f.Size), ""},
+						{expiryText(f, now), expiryStyle(f, now)},
+						{usesText(f), ""},
+						{statusText(f), statusStyle(f)},
+						{f.URL, color.Cyan},
+					})
 				}
-				return tw.Flush()
+				return writeTable(a.Out, pt, rows)
 			})
 		},
 	}
@@ -115,11 +128,15 @@ func (a *App) printInfo(f *api.File) {
 	if f.URL != "" {
 		rows = append(rows, [2]string{"url", f.URL})
 	}
-	tw := tabwriter.NewWriter(a.Out, 0, 4, 2, ' ', 0)
-	for _, r := range rows {
-		_, _ = fmt.Fprintf(tw, "%s:\t%s\n", r[0], r[1])
+	table := make([][]cell, len(rows))
+	for i, r := range rows {
+		value := cell{r[1], ""}
+		if r[0] == "url" {
+			value.style = color.Cyan
+		}
+		table[i] = []cell{{r[0] + ":", color.Bold}, value}
 	}
-	_ = tw.Flush()
+	_ = writeTable(a.Out, a.outPaint(), table)
 }
 
 func usesLabel(f api.File) string {

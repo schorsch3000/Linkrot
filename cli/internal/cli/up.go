@@ -12,6 +12,7 @@ import (
 
 	"github.com/schorsch3000/Linkrot/internal/api"
 	"github.com/schorsch3000/Linkrot/internal/clip"
+	"github.com/schorsch3000/Linkrot/internal/color"
 	"github.com/schorsch3000/Linkrot/internal/progress"
 	"github.com/schorsch3000/Linkrot/internal/upload"
 )
@@ -100,7 +101,7 @@ func (a *App) runUp(ctx context.Context, client *api.Client, path string, opts u
 	}
 	opts.OnRetry = func(err error, wait time.Duration) {
 		finish()
-		_, _ = fmt.Fprintf(a.Err, "%s: %v; retrying in %s\n", a.Name, err, wait)
+		_, _ = fmt.Fprintf(a.Err, "%s %v; retrying in %s\n", a.errPaint().Paint(color.Yellow, a.Name+":"), err, wait)
 	}
 	opts.Sleep = a.Sleep
 
@@ -146,6 +147,6 @@ func (a *App) copyURL(doCopy bool, selection, url string) {
 		return
 	}
 	if err := a.Copy(selection, url); err != nil {
-		_, _ = fmt.Fprintf(a.Err, "%s: warning: could not copy the URL: %v\n", a.Name, err)
+		_, _ = fmt.Fprintf(a.Err, "%s %v\n", a.errPaint().Paint(color.Yellow, a.Name+": warning:"), fmt.Sprintf("could not copy the URL: %v", err))
 	}
 }

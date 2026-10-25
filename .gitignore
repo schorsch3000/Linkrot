@@ -7,3 +7,4 @@ server/.php-cs-fixer.cache
 server/.phpunit.cache/
 server/build/
 cli/dist/
+.tools/

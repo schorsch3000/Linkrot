@@ -16,6 +16,7 @@ import (
 
 	"github.com/schorsch3000/Linkrot/internal/api"
 	"github.com/schorsch3000/Linkrot/internal/clip"
+	"github.com/schorsch3000/Linkrot/internal/color"
 	"github.com/schorsch3000/Linkrot/internal/config"
 	"github.com/schorsch3000/Linkrot/internal/progress"
 )
@@ -36,6 +37,8 @@ type App struct {
 
 	Now func() time.Time // default time.Now
 
+	Paint *color.Painter // overrides the color detection; nil detects per stream
+
 	uploading bool
 }
 
@@ -53,10 +56,21 @@ func (a *App) Run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := root.ExecuteContext(ctx); err != nil {
-		_, _ = fmt.Fprintf(a.Err, "%s: %v\n", a.Name, err)
+		_, _ = fmt.Fprintf(a.Err, "%s %v\n", a.errPaint().Paint(color.Red, a.Name+":"), err)
 		return exitCode(err)
 	}
 	return ExitOK
+}
+
+// errPaint and outPaint decide colors per stream, so a redirected stdout stays plain while stderr is colored.
+func (a *App) errPaint() *color.Painter { return a.painter(a.Err) }
+func (a *App) outPaint() *color.Painter { return a.painter(a.Out) }
+
+func (a *App) painter(w io.Writer) *color.Painter {
+	if a.Paint != nil {
+		return a.Paint
+	}
+	return color.For(w)
 }
 
 // terminalOrNil returns w if it is a terminal; the OSC 52 sequence must reach the terminal, not a pipe.

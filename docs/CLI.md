@@ -7,6 +7,9 @@ so it works under any name.
 Conventions:
 
 - the **result** (URL, ids, JSON) goes to **stdout**; progress, hints and errors go to **stderr**, so output can be piped
+- colors (`ls`, `info`, errors, progress bar) are used per stream only if it is a terminal. `NO_COLOR` (any
+  non-empty value) or `TERM=dumb` turns them off, `CLICOLOR_FORCE=1` turns them on even when piped. JSON output and
+  bare URLs are never colored
 - `<id>` is the 16 character file id. Wherever an id is expected a **unique prefix of at least 4 characters** is
   accepted. The CLI resolves it against `GET /files`. Ambiguous or unknown prefixes are an error. Public URLs always
   need the full id

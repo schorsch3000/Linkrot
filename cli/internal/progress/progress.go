@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/schorsch3000/Linkrot/internal/color"
 )
 
 const barWidth = 24
@@ -15,6 +17,7 @@ const barWidth = 24
 type Bar struct {
 	out     io.Writer
 	enabled bool
+	paint   *color.Painter
 	label   string
 	total   int64
 	now     func() time.Time
@@ -29,7 +32,7 @@ type Bar struct {
 
 // New creates a bar for total bytes. It only draws if out is a terminal.
 func New(out io.Writer, label string, total int64) *Bar {
-	return &Bar{out: out, enabled: IsTerminal(out), label: label, total: total, now: time.Now}
+	return &Bar{out: out, enabled: IsTerminal(out), paint: color.For(out), label: label, total: total, now: time.Now}
 }
 
 // IsTerminal reports whether w is a character device (a terminal).
@@ -65,7 +68,7 @@ func (b *Bar) Set(done int64) {
 	}
 	b.lastDraw = now
 	b.drawn = true
-	_, _ = fmt.Fprintf(b.out, "\r\x1b[K%s", Render(b.label, done, b.total, b.rate))
+	_, _ = fmt.Fprintf(b.out, "\r\x1b[K%s", b.paint.Paint(color.Cyan, Render(b.label, done, b.total, b.rate)))
 }
 
 // Finish clears the bar.

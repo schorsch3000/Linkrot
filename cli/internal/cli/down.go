@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/schorsch3000/Linkrot/internal/api"
+	"github.com/schorsch3000/Linkrot/internal/color"
 	"github.com/schorsch3000/Linkrot/internal/download"
 	"github.com/schorsch3000/Linkrot/internal/progress"
 )
@@ -49,7 +50,7 @@ func (a *App) downCommand() *cobra.Command {
 					},
 					OnRetry: func(err error, wait time.Duration) {
 						finish()
-						_, _ = fmt.Fprintf(a.Err, "%s: %v; retrying in %s\n", a.Name, err, wait)
+						_, _ = fmt.Fprintf(a.Err, "%s %v; retrying in %s\n", a.errPaint().Paint(color.Yellow, a.Name+":"), err, wait)
 					},
 					Sleep: a.Sleep,
 				})
