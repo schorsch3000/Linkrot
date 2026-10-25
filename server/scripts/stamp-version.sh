@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Copies composer.json and, for a release version like 1.2.3 or 1.2.3-rc1, adds it as "version". The lock file keeps
 # a hash of composer.json, which includes the version, so it is refreshed (hash only, no package changes).
+# Platform requirements are ignored: the release runner has no PHP 8.4, and only the hash is wanted.
 # usage: scripts/stamp-version.sh <composer.json> <target composer.json> <version>
 set -euo pipefail
 
@@ -14,4 +15,4 @@ if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
 fi
 
 jq --arg v "$version" '{name, description, version: $v} + del(.name, .description)' "$src" >"$dst"
-composer --working-dir="$(dirname "$dst")" update --lock --no-install --no-autoloader --no-scripts --no-interaction --no-progress --quiet
+composer --working-dir="$(dirname "$dst")" update --lock --no-install --ignore-platform-reqs --no-autoloader --no-scripts --no-interaction --no-progress --quiet
