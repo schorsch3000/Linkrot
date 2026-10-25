@@ -89,7 +89,7 @@ enum FileKind: string
     {
         return match ($this) {
             self::Image => 'png jpg jpeg gif webp svg avif heic heif bmp tif tiff ico raw cr2 nef dng psd xcf',
-            self::Video => 'mp4 mkv mov webm avi m4v wmv flv mpg mpeg ogv 3gp ts',
+            self::Video => 'mp4 mkv mov webm avi m4v wmv flv mpg mpeg ogv 3gp',
             self::Audio => 'mp3 flac wav ogg oga m4a opus aac wma aiff mid midi',
             self::Archive => 'zip tar gz tgz bz2 xz zst 7z rar lz lz4 cab',
             self::Code => 'php go js mjs ts tsx jsx py rb rs c h cc cpp hpp java kt swift cs sh bash bas a asm zsh fish pl lua sql json yaml yml toml xml html htm css scss vue dart ex exs hs clj scala',

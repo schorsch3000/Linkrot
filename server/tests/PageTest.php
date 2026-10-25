@@ -31,6 +31,7 @@ final class PageTest extends TestCase
         yield 'config' => ['config.yaml', FileKind::Code, 'yaml'];
         yield 'document' => ['report.pdf', FileKind::Document, 'pdf'];
         yield 'disk image' => ['debian.iso', FileKind::Disk, 'iso'];
+        yield 'typescript' => ['main.ts', FileKind::Code, 'ts'];
         yield 'c64 disk' => ['game.D64', FileKind::C64, 'd64'];
         yield 'c64 cartridge' => ['game.crt', FileKind::C64, 'crt'];
         yield 'unknown extension' => ['data.xyz', FileKind::Generic, 'xyz'];
@@ -46,6 +47,20 @@ final class PageTest extends TestCase
     {
         self::assertSame($kind, FileKind::fromName($name));
         self::assertSame($extension, FileKind::extension($name));
+    }
+
+    public function testNoExtensionBelongsToTwoKinds(): void
+    {
+        $extensions = new \ReflectionMethod(FileKind::class, 'extensions');
+        $owners = [];
+        foreach (FileKind::cases() as $kind) {
+            foreach (array_filter(explode(' ', (string) $extensions->invoke($kind))) as $extension) {
+                $owners[$extension][] = $kind->value;
+            }
+        }
+
+        $duplicates = array_filter($owners, static fn(array $kinds): bool => count($kinds) > 1);
+        self::assertSame([], $duplicates, 'extensions listed in more than one kind');
     }
 
     public function testEveryKindHasAnIconHueAndGlyph(): void
