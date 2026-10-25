@@ -14,4 +14,9 @@
             <directory>tests</directory>
         </testsuite>
     </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">app/src</directory>
+        </include>
+    </source>
 </phpunit>

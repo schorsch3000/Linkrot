@@ -6,7 +6,7 @@ VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
 
-.PHONY: install build dist dist-test preview run test lint audit repro fmt clean precommit
+.PHONY: install build dist dist-test preview run test coverage lint audit repro fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
@@ -51,6 +51,10 @@ run: install
 
 test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
+
+# Needs Xdebug (or PCOV). The line coverage of app/src as text.
+coverage:
+	XDEBUG_MODE=coverage php -d apc.enable_cli=1 $(BIN)/phpunit --coverage-text
 
 lint:
 	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh scripts/build-assets.sh

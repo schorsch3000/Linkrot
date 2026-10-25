@@ -78,4 +78,54 @@ final class ConfigTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         Config::fromArray($values);
     }
+
+    public function testLoadReadsAPhpFile(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'linkrot-config-') ?: self::fail('tempnam');
+        file_put_contents($file, "<?php return ['base_url' => 'https://lr.example', 'default_uses' => 2];\n");
+        try {
+            $config = Config::load($file);
+
+            self::assertSame('https://lr.example', $config->baseUrl);
+            self::assertSame(2, $config->defaultUses);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    public function testLoadReportsAMissingFileAndAFileThatReturnsNoArray(): void
+    {
+        try {
+            Config::load('/nonexistent/linkrot/config.php');
+            self::fail('a missing file must be reported');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('file not found', $e->getMessage());
+        }
+
+        $file = tempnam(sys_get_temp_dir(), 'linkrot-config-') ?: self::fail('tempnam');
+        file_put_contents($file, "<?php return 'oops';\n");
+        try {
+            $this->expectException(InvalidArgumentException::class);
+            $this->expectExceptionMessage('must return an array');
+            Config::load($file);
+        } finally {
+            unlink($file);
+        }
+    }
+
+    /** @return iterable<string, array{array<string, mixed>}> */
+    public static function outOfRange(): iterable
+    {
+        yield 'negative max file size' => [['base_url' => 'https://x', 'max_file_size' => -1]];
+        yield 'rate limit attempts zero' => [['base_url' => 'https://x', 'rate_limit_attempts' => 0]];
+        yield 'rate limit window zero' => [['base_url' => 'https://x', 'rate_limit_window' => 0]];
+    }
+
+    /** @param array<string, mixed> $values */
+    #[\PHPUnit\Framework\Attributes\DataProvider('outOfRange')]
+    public function testOutOfRangeValues(array $values): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        Config::fromArray($values);
+    }
 }
