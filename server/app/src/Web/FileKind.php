@@ -14,6 +14,7 @@ enum FileKind: string
     case Code = 'code';
     case Document = 'document';
     case Disk = 'disk';
+    case C64 = 'c64';
     case Generic = 'generic';
 
     private const array COMPOUND_EXTENSIONS = ['tar.gz', 'tar.xz', 'tar.bz2', 'tar.zst', 'tar.lz4'];
@@ -63,6 +64,7 @@ enum FileKind: string
             self::Code => 145,
             self::Document => 215,
             self::Disk => 255,
+            self::C64 => 60,
             self::Generic => 150,
         };
     }
@@ -78,6 +80,7 @@ enum FileKind: string
             self::Code => '<path d="M11 12.5l-2.5 3 2.5 3M15 12.5l2.5 3-2.5 3"/>',
             self::Document => '<path d="M9 13h8M9 16h8M9 19h5"/>',
             self::Disk => '<circle cx="13" cy="16" r="3.8"/><circle cx="13" cy="16" r=".9" fill="currentColor"/>',
+            self::C64 => '<rect x="9" y="12.5" width="8" height="7.5" rx="1"/><path d="M11 12.5v2.5h4v-2.5M10.5 18h5"/>',
             self::Generic => '',
         };
     }
@@ -92,6 +95,7 @@ enum FileKind: string
             self::Code => 'php go js mjs ts tsx jsx py rb rs c h cc cpp hpp java kt swift cs sh bash zsh fish pl lua sql json yaml yml toml xml html htm css scss vue dart ex exs hs clj scala',
             self::Document => 'txt md rst pdf doc docx odt rtf log csv tsv xls xlsx ods ppt pptx odp epub tex',
             self::Disk => 'iso img bin exe msi dmg pkg deb rpm apk appimage vmdk qcow2 vdi',
+            self::C64 => 'd64 g64 d81 g81 t64 crt',
             self::Generic => '',
         };
     }

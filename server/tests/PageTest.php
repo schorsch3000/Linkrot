@@ -30,6 +30,8 @@ final class PageTest extends TestCase
         yield 'config' => ['config.yaml', FileKind::Code, 'yaml'];
         yield 'document' => ['report.pdf', FileKind::Document, 'pdf'];
         yield 'disk image' => ['debian.iso', FileKind::Disk, 'iso'];
+        yield 'c64 disk' => ['game.D64', FileKind::C64, 'd64'];
+        yield 'c64 cartridge' => ['game.crt', FileKind::C64, 'crt'];
         yield 'unknown extension' => ['data.xyz', FileKind::Generic, 'xyz'];
         yield 'no extension' => ['Makefile', FileKind::Generic, null];
         yield 'hidden file' => ['.bashrc', FileKind::Generic, null];
