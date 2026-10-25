@@ -7,6 +7,7 @@ namespace Linkrot;
 use Closure;
 use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
+use Linkrot\Api\HealthController;
 use Linkrot\Api\HomeController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
@@ -51,6 +52,9 @@ final class App
         $upload = fn(): UploadController => new UploadController($this->config, $repository(), $store, $catalog(), $this->clock);
         $files = fn(): FileController => new FileController($this->config, $repository(), $catalog(), $this->clock);
 
+        $this->router->add('GET', '/api/v1/health', $this->authed(
+            fn(Request $request, array $params): Response => new HealthController($this->config, $this->db(), $store, $this->cleanup(), $this->dataDir, $this->clock)->check(),
+        ));
         $this->router->add('POST', '/api/v1/files', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->create($request),
         ));

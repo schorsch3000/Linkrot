@@ -115,6 +115,25 @@ Deletes row and data file. `204`. Unknown id: `404`.
 Runs the cleanup now (ignores the interval, still takes the cleanup lock). Returns `200` with
 `{ "ran": true, "rows_deleted": n, "files_deleted": n }`, or `{ "ran": false }` if another cleanup holds the lock.
 
+### `GET /health` - is the server ready?
+
+Needs a token. Always `200` with the worst level of all checks and the checks themselves:
+
+```json
+{"status": "warn", "checks": [
+  {"name": "database", "level": "ok",   "message": "schema version 2"},
+  {"name": "storage",  "level": "ok",   "message": "data and files directory are writable"},
+  {"name": "disk",     "level": "ok",   "message": "212.4 GiB free of 458.0 GiB"},
+  {"name": "cleanup",  "level": "warn", "message": "the cleanup has not run yet"}
+]}
+```
+
+`level` is `ok`, `warn` (it works, somebody should look) or `error` (it cannot do its job). Errors: the data directory is
+missing or not writable, the database cannot be used. Warnings: free disk space below the larger of 10% and 1 GiB, the
+last successful cleanup older than twice `cleanup_interval` or never, a cleanup that had errors (a file it could not
+remove). While the database schema is not the one of this release (`app/install.sh` has not run) every endpoint,
+this one included, answers `503 schema_outdated`.
+
 ## Public download URLs
 
 No authentication.

@@ -7,6 +7,9 @@ so it works under any name.
 Conventions:
 
 - the **result** (URL, ids, JSON) goes to **stdout**; progress, hints and errors go to **stderr**, so output can be piped
+- every command that talks to the server (`up`, `ls`, `info`, `set`, `rm`, `cleanup`, `down`) first asks `GET /health`.
+  Warnings are printed on stderr in yellow and the command goes on; an error is printed in red and stops the command
+  with exit code 1, since there is no working server. A server that has no health endpoint (404) is not an error
 - colors (`ls`, `info`, errors, progress bar) are used per stream only if it is a terminal. `NO_COLOR` (any
   non-empty value) or `TERM=dumb` turns them off, `CLICOLOR_FORCE=1` turns them on even when piped. JSON output and
   bare URLs are never colored

@@ -18,6 +18,10 @@ use PDO;
 final readonly class Cleanup
 {
     private const string LAST_RUN = 'last_cleanup';
+    /** Last run that finished without any error. */
+    private const string LAST_OK = 'last_cleanup_ok';
+    /** JSON {"at": ..., "message": ...} of the last run that failed or could not remove everything; dropped by the next clean run. */
+    private const string LAST_ERROR = 'last_cleanup_error';
 
     /** @param Closure(): int $clock */
     public function __construct(
@@ -55,8 +59,21 @@ final readonly class Cleanup
             if (!$force && !$this->isDue()) {
                 return null;
             }
-            $result = $this->cleanup();
-            $this->setLastRun(($this->clock)());
+            try {
+                $result = $this->cleanup();
+            } catch (\Throwable $e) {
+                $this->writeError($e->getMessage());
+
+                throw $e;
+            }
+            $now = ($this->clock)();
+            $this->setMeta(self::LAST_RUN, (string) $now);
+            if ($result->filesFailed === 0) {
+                $this->setMeta(self::LAST_OK, (string) $now);
+                $this->pdo->prepare('DELETE FROM meta WHERE key = ?')->execute([self::LAST_ERROR]);
+            } else {
+                $this->writeError($result->filesFailed . ' data files could not be removed');
+            }
 
             return $result;
         } finally {
@@ -72,14 +89,15 @@ final readonly class Cleanup
 
         $ids = $this->deleteRows($now, $orphanTimeout);
         $filesDeleted = 0;
+        $failed = 0;
         foreach ($ids as $id) {
-            $filesDeleted += $this->unlink($id);
+            $this->tally($this->unlink($id), $filesDeleted, $failed);
         }
-        $filesDeleted += $this->deleteUnknownFiles($now, $orphanTimeout);
+        $this->deleteUnknownFiles($now, $orphanTimeout, $filesDeleted, $failed);
 
-        error_log(sprintf('linkrot cleanup: %d rows, %d files removed', count($ids), $filesDeleted));
+        error_log(sprintf('linkrot cleanup: %d rows, %d files removed, %d failed', count($ids), $filesDeleted, $failed));
 
-        return new CleanupResult(count($ids), $filesDeleted);
+        return new CleanupResult(count($ids), $filesDeleted, $failed);
     }
 
     /**
@@ -119,42 +137,78 @@ final readonly class Cleanup
     }
 
     /** Files that no row refers to. Young files are left alone, an upload may just be starting. */
-    private function deleteUnknownFiles(int $now, int $grace): int
+    private function deleteUnknownFiles(int $now, int $grace, int &$deleted, int &$failed): void
     {
         $names = @scandir($this->filesDir);
         if ($names === false) {
-            return 0;
+            return;
         }
         $known = array_flip(array_map(strval(...), Database::query($this->pdo, 'SELECT id FROM files')->fetchAll(PDO::FETCH_COLUMN)));
-        $deleted = 0;
         foreach ($names as $name) {
             if (!FileId::isValid($name) || isset($known[$name])) {
                 continue;
             }
             $mtime = @filemtime($this->filesDir . '/' . $name);
             if ($mtime !== false && $mtime < $now - $grace) {
-                $deleted += $this->unlink($name);
+                $this->tally($this->unlink($name), $deleted, $failed);
             }
         }
-
-        return $deleted;
     }
 
+    /** @return int 1 removed, 0 was not there, -1 exists and could not be removed */
     private function unlink(string $id): int
     {
-        return @unlink($this->filesDir . '/' . $id) ? 1 : 0;
+        $path = $this->filesDir . '/' . $id;
+        if (@unlink($path)) {
+            return 1;
+        }
+
+        return file_exists($path) ? -1 : 0;
+    }
+
+    private function tally(int $result, int &$deleted, int &$failed): void
+    {
+        if ($result < 0) {
+            ++$failed;
+        } else {
+            $deleted += $result;
+        }
+    }
+
+    public function status(): CleanupStatus
+    {
+        $ok = $this->meta(self::LAST_OK);
+        $error = json_decode($this->meta(self::LAST_ERROR) ?? '', true);
+        $at = is_array($error) && is_int($error['at'] ?? null) ? $error['at'] : null;
+        $message = is_array($error) && is_string($error['message'] ?? null) ? $error['message'] : null;
+
+        return new CleanupStatus($ok === null ? null : (int) $ok, $at, $message);
+    }
+
+    private function writeError(string $message): void
+    {
+        $this->setMeta(self::LAST_ERROR, json_encode(['at' => ($this->clock)(), 'message' => $message], JSON_THROW_ON_ERROR));
+    }
+
+    private function meta(string $key): ?string
+    {
+        $select = $this->pdo->prepare('SELECT value FROM meta WHERE key = ?');
+        $select->execute([$key]);
+        $value = $select->fetchColumn();
+
+        return is_string($value) ? $value : null;
     }
 
     private function isDue(): bool
     {
-        $last = Database::query($this->pdo, "SELECT value FROM meta WHERE key = '" . self::LAST_RUN . "'")->fetchColumn();
+        $last = $this->meta(self::LAST_RUN);
 
-        return !is_string($last) || ($this->clock)() - (int) $last >= Duration::parse($this->config->cleanupInterval);
+        return $last === null || ($this->clock)() - (int) $last >= Duration::parse($this->config->cleanupInterval);
     }
 
-    private function setLastRun(int $now): void
+    private function setMeta(string $key, string $value): void
     {
         $this->pdo->prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value')
-            ->execute([self::LAST_RUN, (string) $now]);
+            ->execute([$key, $value]);
     }
 }

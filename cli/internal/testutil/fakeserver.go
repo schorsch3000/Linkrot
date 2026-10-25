@@ -34,6 +34,9 @@ type FakeServer struct {
 	seq   int
 	// Chunks counts accepted chunk requests.
 	Chunks int
+	// Health is the answer of GET /api/v1/health; the zero value is a healthy server. HealthCalls counts the requests.
+	Health      *api.Health
+	HealthCalls int
 }
 
 type fakeFile struct {
@@ -133,6 +136,13 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case path == "/api/v1/health" && r.Method == http.MethodGet:
+		s.HealthCalls++
+		h := s.Health
+		if h == nil {
+			h = &api.Health{Status: api.LevelOK, Checks: []api.HealthCheck{}}
+		}
+		writeJSON(w, 200, h)
 	case path == "/api/v1/files" && r.Method == http.MethodPost:
 		s.create(w, r)
 	case path == "/api/v1/files" && r.Method == http.MethodGet:

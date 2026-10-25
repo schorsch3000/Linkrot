@@ -48,6 +48,12 @@ func refuseDowngrade(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+// Health asks the server whether it is ready (GET /api/v1/health).
+func (c *Client) Health(ctx context.Context) (*Health, error) {
+	var h Health
+	return &h, c.do(ctx, http.MethodGet, "/api/v1/health", nil, 0, "", nil, &h)
+}
+
 // Create starts an upload or resumes one. A completed file with the same hash yields an *Error with
 // Code duplicate (carrying ID and URL).
 func (c *Client) Create(ctx context.Context, req CreateRequest) (*File, error) {

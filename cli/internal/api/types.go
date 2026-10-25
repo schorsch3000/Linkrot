@@ -78,3 +78,23 @@ func (e *Error) Retryable() bool {
 		return false
 	}
 }
+
+// Health levels of GET /api/v1/health.
+const (
+	LevelOK    = "ok"
+	LevelWarn  = "warn"
+	LevelError = "error"
+)
+
+// HealthCheck is one line of the health report.
+type HealthCheck struct {
+	Name    string `json:"name"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+}
+
+// Health is the answer of GET /api/v1/health: the worst level of all checks, and the checks.
+type Health struct {
+	Status string        `json:"status"`
+	Checks []HealthCheck `json:"checks"`
+}

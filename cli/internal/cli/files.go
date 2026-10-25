@@ -32,6 +32,9 @@ func (a *App) withClient(cmd *cobra.Command, fn func(ctx context.Context, c *api
 	if err != nil {
 		return err
 	}
+	if err := a.preflight(cmd.Context(), c); err != nil {
+		return err
+	}
 	return fn(cmd.Context(), c)
 }
 

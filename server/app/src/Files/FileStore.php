@@ -62,6 +62,25 @@ final readonly class FileStore
         return $free === false ? PHP_INT_MAX : (int) $free;
     }
 
+    /**
+     * Free and total bytes of the disk the files live on; the folder is not created for this (health check).
+     *
+     * @return array{free: int, total: int}|null
+     */
+    public function space(): ?array
+    {
+        $path = is_dir($this->directory) ? $this->directory : dirname($this->directory);
+        $free = @disk_free_space($path);
+        $total = @disk_total_space($path);
+
+        return $free === false || $total === false ? null : ['free' => (int) $free, 'total' => (int) $total];
+    }
+
+    public function directory(): string
+    {
+        return $this->directory;
+    }
+
     private function ensureDirectory(): void
     {
         if (is_dir($this->directory)) {

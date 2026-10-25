@@ -6,5 +6,6 @@ namespace Linkrot\Files;
 
 final readonly class CleanupResult
 {
-    public function __construct(public int $rowsDeleted, public int $filesDeleted) {}
+    /** @param int $filesFailed data files that exist but could not be removed */
+    public function __construct(public int $rowsDeleted, public int $filesDeleted, public int $filesFailed = 0) {}
 }

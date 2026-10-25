@@ -76,7 +76,9 @@ All times are UTC unix seconds.
 | `hash` | sha256 of the token; the token itself is never stored |
 | `created_at`, `last_used_at` | `last_used_at` is updated at most once per hour to avoid a write per request |
 
-`meta`: key/value, holds `last_cleanup`.
+`meta`: key/value, holds `last_cleanup` (the last run that finished, drives the interval), `last_cleanup_ok` (the last run
+that finished without any error) and `last_cleanup_error` (JSON with time and message of the last failed run or run that
+could not remove a file; the next clean run drops it). The health endpoint reports them ([API.md](API.md)).
 
 ### Filename handling
 
@@ -170,7 +172,8 @@ Cleanup does two steps in this order:
    grace period are skipped so an upload that is just being created is never touched. Data files of the rows removed
    in step 1 are removed as part of this.
 
-Finally `last_cleanup` is written and a one-line result (counts) is logged.
+Finally `last_cleanup` is written (and `last_cleanup_ok` if every file that had to go is gone, otherwise
+`last_cleanup_error`) and a one-line result (counts, failures) is logged.
 
 Independently of the cleanup, a request that touches an expired file treats it as not found and deletes it
 (see Download).

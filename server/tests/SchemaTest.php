@@ -33,7 +33,7 @@ final class SchemaTest extends TestCase
         $app = new App(new Config(baseUrl: 'https://lr.example'), $this->dir);
         $request = static fn(string $path): Request => new Request('GET', $path, [], [], ['REMOTE_ADDR' => '192.0.2.1'], fopen('php://memory', 'r') ?: throw new \RuntimeException('stream'));
 
-        foreach (['/api/v1/files', '/file/abcd7KfRtm4pWxnZ/a.txt', '/dl/abcd7KfRtm4pWxnZ'] as $path) {
+        foreach (['/api/v1/files', '/api/v1/health', '/file/abcd7KfRtm4pWxnZ/a.txt', '/dl/abcd7KfRtm4pWxnZ'] as $path) {
             $response = $app->handle($request($path));
             self::assertSame(503, $response->status, $path);
             self::assertStringContainsString('"schema_outdated"', $response->body);

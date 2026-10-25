@@ -66,6 +66,9 @@ func (a *App) upCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := a.preflight(cmd.Context(), client); err != nil {
+				return err
+			}
 			return a.runUp(cmd.Context(), client, args[0], opts, flags.Changed("copy"), copySel, asJSON)
 		},
 	}
