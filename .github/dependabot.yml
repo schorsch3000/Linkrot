@@ -1,0 +1,15 @@
+# Keeps the dependencies and the pinned GitHub Actions (by commit SHA) up to date.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /cli
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: /server/app
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,7 +1,7 @@
 # Root Makefile: forwards targets to every part that has a Makefile.
 PARTS := $(patsubst %/Makefile,%,$(wildcard server/Makefile cli/Makefile))
 
-TARGETS := install build dist run test lint fmt clean precommit
+TARGETS := install build dist run test lint audit fmt clean precommit
 
 .PHONY: $(TARGETS) install-hooks
 

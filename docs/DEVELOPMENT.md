@@ -34,6 +34,7 @@ Client and server each have a Makefile with the usual targets:
 | `run` | server: `php -S` with `download_mode = php`; cli: `go run` |
 | `test` | phpunit / `go test ./...` |
 | `lint` | static analysis and style checks without modifying files |
+| `audit` | known vulnerabilities of the dependencies (network needed, fails on any finding) |
 | `fmt` | apply formatting |
 | `clean` | remove build artefacts |
 | `precommit` | tests, linting and format check; must pass for a commit |
@@ -67,6 +68,13 @@ and are skipped if php, the server dependencies (`make -C server install`), APCu
 APCu), the CLI's `precommit` plus a cross-compile of every release platform, and the end-to-end job (php + nginx,
 `LINKROT_E2E_REQUIRED=1` so that missing prerequisites fail instead of skip). Tool versions of the Go linters are pinned in
 `cli/Makefile`.
+
+Both jobs also run `make audit` (`composer audit --locked`, `govulncheck`), which **fails on any known vulnerability**; since
+the release requires green CI, a new advisory blocks releases until the dependency is updated. `audit.yml` runs the same
+checks every Monday, so a new advisory shows up even when nobody pushes. `.github/dependabot.yml` opens weekly pull
+requests for Go modules, Composer packages and GitHub Actions. All actions are pinned by commit SHA (the comment names
+the version); Dependabot keeps both up to date. `govulncheck` needs `vuln.go.dev`, which a restricted network may
+block.
 
 `.github/workflows/release.yml` publishes a GitHub release when a tag `vMAJOR.MINOR.PATCH[-suffix]` is pushed (a suffix makes
 it a pre-release). It does not repeat the CI checks: the job `ci-passed` requires a successful CI run for the tagged

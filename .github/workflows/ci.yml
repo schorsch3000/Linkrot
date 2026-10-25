@@ -18,9 +18,9 @@ jobs:
     name: Server (phpstan, rector, php-cs-fixer, phpunit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: "8.4"
           extensions: apcu, pdo_sqlite, sqlite3, mbstring, ctype
@@ -32,7 +32,7 @@ jobs:
         id: composer-cache
         run: echo "dir=$(composer --working-dir=server/app config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: composer-${{ runner.os }}-${{ hashFiles('server/app/composer.lock') }}
@@ -41,6 +41,9 @@ jobs:
       - run: make -C server install
       - run: make -C server precommit
 
+      - name: Known vulnerabilities in the PHP dependencies (fails on any advisory)
+        run: make -C server audit
+
       - name: Release tarball has the expected layout and installs
         run: make -C server dist-test VERSION=ci
 
@@ -48,21 +51,24 @@ jobs:
     name: CLI (vet, golangci-lint, gofumpt, tests, cross-compile)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
 
       - name: Cache lint tools
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/go/bin
           key: go-tools-${{ runner.os }}-${{ hashFiles('cli/Makefile') }}
 
       - run: make -C cli install
       - run: make -C cli precommit
+
+      - name: Known vulnerabilities in the Go dependencies and standard library (fails on any finding)
+        run: make -C cli audit
 
       - name: All release platforms build
         run: make -C cli dist VERSION=ci
@@ -73,9 +79,9 @@ jobs:
     env:
       LINKROT_E2E_REQUIRED: "1" # a missing prerequisite fails instead of skipping
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: "8.4"
           extensions: apcu, pdo_sqlite, sqlite3, mbstring, ctype
@@ -83,7 +89,7 @@ jobs:
           tools: composer:v2
           coverage: none
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum

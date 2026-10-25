@@ -21,7 +21,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           sparse-checkout: .github/scripts
       - env:
@@ -32,11 +32,11 @@ jobs:
   server-dist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: v
         run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
       - run: make -C server dist VERSION=${{ steps.v.outputs.version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: server-dist
           path: server/build/linkrot-server-*.tar.gz
@@ -45,16 +45,16 @@ jobs:
   cli-dist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - id: v
         run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
       # caches modules and the build cache (restored from main, where CI builds all platforms)
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - run: make -C cli dist VERSION=${{ steps.v.outputs.version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cli-dist
           path: |
@@ -68,7 +68,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: release
           merge-multiple: true

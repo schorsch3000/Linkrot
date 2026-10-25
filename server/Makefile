@@ -6,7 +6,7 @@ VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
 
-.PHONY: install build dist dist-test preview run test lint fmt clean precommit
+.PHONY: install build dist dist-test preview run test lint audit fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
@@ -56,6 +56,10 @@ lint:
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff
+
+# Known vulnerabilities of the locked dependencies (needs the network); fails on any advisory.
+audit:
+	composer --working-dir=app audit --locked
 
 fmt:
 	$(BIN)/rector process --no-progress-bar

@@ -6,8 +6,9 @@ VERSION  ?= dev
 LDFLAGS  := -X github.com/schorsch3000/Linkrot/internal/cli.Version=$(VERSION)
 GOFUMPT  := mvdan.cc/gofumpt@v0.12.0
 GOLANGCI := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+GOVULN   := golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
-.PHONY: install build dist run test lint fmt clean precommit
+.PHONY: install build dist run test lint audit fmt clean precommit
 
 install:
 	go mod download
@@ -32,6 +33,11 @@ lint:
 	go vet ./...
 	golangci-lint run ./...
 	@out="$$(gofumpt -l .)"; test -z "$$out" || { echo "gofumpt would change:"; echo "$$out"; exit 1; }
+
+# Known vulnerabilities in the dependencies and the standard library that the code really reaches (needs the
+# network, vuln.go.dev); fails on any finding.
+audit:
+	go run $(GOVULN) ./...
 
 fmt:
 	gofumpt -w .
