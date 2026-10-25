@@ -8,6 +8,7 @@ use Linkrot\App;
 use Linkrot\Auth\InMemoryRateLimiter;
 use Linkrot\Auth\TokenStore;
 use Linkrot\Config;
+use Linkrot\Database;
 use Linkrot\Http\Request;
 use PHPUnit\Framework\TestCase;
 
@@ -28,6 +29,7 @@ final class UploadTest extends TestCase
             defaultRmAfter: '1w',
             maxRmAfter: '1y',
         );
+        Database::openMigrated($this->dir . '/linkrot.sqlite');
         $this->app = new App($config, $this->dir, new InMemoryRateLimiter(10, 900, fn(): int => $this->now), fn(): int => $this->now);
         $this->token = new TokenStore($this->app->db())->create('test');
     }

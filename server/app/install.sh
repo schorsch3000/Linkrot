@@ -16,6 +16,13 @@ composer install --no-dev --no-interaction --no-progress --prefer-dist --optimiz
 data_dir="${LINKROT_DATA:-$(cd .. && pwd)/app_data}"
 config="$data_dir/config.php"
 
+# Creates the database or migrates it to the schema of this release. The server only checks the version.
+if [ -d "$data_dir" ]; then
+	LINKROT_DATA="$data_dir" php bin/migrate
+else
+	echo "install.sh: note: $data_dir does not exist yet, create it (owned by the php-fpm user) and run install.sh again to set up the database." >&2
+fi
+
 if [ ! -d "$data_dir/files" ]; then
 	echo "install.sh: note: $data_dir/files does not exist yet, create it (writable by the php-fpm user)." >&2
 elif ! find "$data_dir/files" -maxdepth 0 -perm -001 | grep -q .; then

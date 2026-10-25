@@ -1,0 +1,26 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Database;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * Creates the database or brings its schema up to date. Run by install.sh, as the user php-fpm runs as.
+ * usage: migrate   (data directory: $LINKROT_DATA or ../../app_data)
+ */
+$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+if (!is_dir($dataDir)) {
+    fwrite(STDERR, "migrate: data directory not found: $dataDir\n");
+    exit(1);
+}
+
+try {
+    $pdo = Database::openMigrated($dataDir . '/linkrot.sqlite');
+} catch (Throwable $e) {
+    fwrite(STDERR, 'migrate: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+echo 'database schema is at version ' . Database::schemaVersion($pdo) . "\n";

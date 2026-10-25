@@ -132,6 +132,11 @@ func newStack(t *testing.T, withNginx bool) *stack {
 	}
 	t.Setenv("LINKROT_DATA", data)
 
+	migrateCmd := exec.CommandContext(context.Background(), "php", filepath.Join(server, "app", "bin", "migrate")) //nolint:gosec // fixed program
+	if out, err := migrateCmd.CombinedOutput(); err != nil {
+		t.Fatalf("migrate: %v: %s", err, out)
+	}
+
 	tokenCmd := exec.CommandContext(context.Background(), "php", "-d", "apc.enable_cli=1", filepath.Join(server, "app", "bin", "lr-auth"), "get", "end-to-end") //nolint:gosec // fixed program
 	tokenOut, err := tokenCmd.Output()
 	if err != nil {

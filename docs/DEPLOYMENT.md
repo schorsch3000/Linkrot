@@ -25,7 +25,9 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
    Afterwards it checks `app_data/config.php`: if the file is missing it prints a prominent notice with what to create
    (until then every request is answered with "server misconfigured"), and if it exists it is loaded the way the server
-   does, so mistakes show up at deploy time. The script's exit code is 0 either way.
+   does, so mistakes show up at deploy time. If `app_data/` exists it also creates the database or migrates it to the
+   schema of this release (`app/bin/migrate`); on a first installation run `install.sh` again after step 4. The script's
+   exit code is 0 for a missing config, and non-zero if the migration fails.
 
 4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; `app_data/`
    and everything in it must belong to the user php-fpm runs as. See [SERVER.md](SERVER.md#configuration) for all options.
@@ -55,7 +57,8 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 ### Upgrading
 
 Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `app/install.sh` again) and leave
-`app_data/` alone. The database schema is migrated automatically on the first request. Restart php-fpm (or reload opcache)
+`app_data/` alone. `install.sh` migrates the database schema; the server itself only checks the version and answers
+`503 schema_outdated` until `install.sh` has run. Restart php-fpm (or reload opcache)
 afterwards; this also resets the failed-login counters in APCu.
 
 ## CLI

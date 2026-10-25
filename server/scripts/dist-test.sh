@@ -21,6 +21,9 @@ grep -q "$root/app_data/config.php" <<<"$out" || { echo "instructions do not nam
 [ -f "$root/app/vendor/autoload.php" ] || { echo "composer install did not run" >&2; exit 1; }
 [ ! -d "$root/app/vendor/phpunit" ] || { echo "dev dependencies were installed" >&2; exit 1; }
 
+[ -s "$root/app_data/linkrot.sqlite" ] || { echo "install.sh did not create the database" >&2; exit 1; }
+LINKROT_DATA="$root/app_data" "$root/app/bin/lr-auth" ls >/dev/null || { echo "database is not usable after install.sh" >&2; exit 1; }
+
 printf "<?php return ['base_url' => 'https://lr.example'];\n" >"$root/app_data/config.php"
 out="$("$root/app/install.sh" 2>&1)"
 grep -q "is valid" <<<"$out" || { echo "valid config not accepted:" >&2; echo "$out" >&2; exit 1; }

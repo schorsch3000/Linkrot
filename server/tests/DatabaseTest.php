@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Linkrot\Tests;
 
 use Linkrot\Database;
+use Linkrot\SchemaOutdatedException;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 
@@ -26,8 +27,8 @@ final class DatabaseTest extends TestCase
 
     public function testOpenCreatesSchemaAndIsIdempotent(): void
     {
-        Database::open($this->file);
-        $pdo = Database::open($this->file);
+        Database::openMigrated($this->file);
+        $pdo = Database::openMigrated($this->file);
 
         self::assertSame(Database::SCHEMA_VERSION, (int) Database::query($pdo, 'PRAGMA user_version')->fetchColumn());
         self::assertSame('wal', Database::query($pdo, 'PRAGMA journal_mode')->fetchColumn());
@@ -35,9 +36,34 @@ final class DatabaseTest extends TestCase
         self::assertSame(['files', 'meta', 'tokens'], $tables);
     }
 
-    public function testSha256IsUnique(): void
+    public function testOpenAloneNeitherCreatesNorChecksTheSchema(): void
     {
         $pdo = Database::open($this->file);
+
+        self::assertSame(0, Database::schemaVersion($pdo));
+        self::assertSame([], Database::query($pdo, "SELECT name FROM sqlite_master WHERE type = 'table'")->fetchAll());
+    }
+
+    public function testOpenCurrentRefusesAnOutdatedOrNewerSchema(): void
+    {
+        try {
+            Database::openCurrent($this->file);
+            self::fail('a fresh database must be refused');
+        } catch (SchemaOutdatedException $e) {
+            self::assertStringContainsString('run app/install.sh', $e->getMessage());
+        }
+
+        $pdo = Database::openMigrated($this->file);
+        Database::openCurrent($this->file);
+        $pdo->exec('PRAGMA user_version = ' . (Database::SCHEMA_VERSION + 1));
+
+        $this->expectException(SchemaOutdatedException::class);
+        Database::openCurrent($this->file);
+    }
+
+    public function testSha256IsUnique(): void
+    {
+        $pdo = Database::openMigrated($this->file);
         $insert = $pdo->prepare(
             "INSERT INTO files (id, name, size, sha256, status, created_at, updated_at, rm_after) VALUES (?, 'a', 1, 'h', 'uploading', 1, 1, 60)",
         );
@@ -49,7 +75,7 @@ final class DatabaseTest extends TestCase
 
     public function testIdsAreCaseSensitive(): void
     {
-        $pdo = Database::open($this->file);
+        $pdo = Database::openMigrated($this->file);
         $insert = $pdo->prepare(
             'INSERT INTO files (id, name, size, sha256, status, created_at, updated_at, rm_after) VALUES (?, \'a\', 1, ?, \'uploading\', 1, 1, 60)',
         );

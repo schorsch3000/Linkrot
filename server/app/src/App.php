@@ -112,7 +112,7 @@ final class App
 
     public function db(): PDO
     {
-        return $this->pdo ??= Database::open($this->dataDir . '/linkrot.sqlite');
+        return $this->pdo ??= Database::openCurrent($this->dataDir . '/linkrot.sqlite');
     }
 
     public function cleanup(): Cleanup
@@ -134,6 +134,10 @@ final class App
     {
         try {
             return $this->router->dispatch($request);
+        } catch (SchemaOutdatedException $e) {
+            error_log('linkrot: ' . $e->getMessage());
+
+            return Response::error(503, 'schema_outdated', $e->getMessage());
         } catch (Throwable $e) {
             error_log('linkrot: ' . $e);
 

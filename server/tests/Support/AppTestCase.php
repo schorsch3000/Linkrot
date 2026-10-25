@@ -8,6 +8,7 @@ use Linkrot\App;
 use Linkrot\Auth\InMemoryRateLimiter;
 use Linkrot\Auth\TokenStore;
 use Linkrot\Config;
+use Linkrot\Database;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
 use PHPUnit\Framework\TestCase;
@@ -29,6 +30,7 @@ abstract class AppTestCase extends TestCase
     {
         $this->dir = sys_get_temp_dir() . '/linkrot-test-' . bin2hex(random_bytes(6));
         mkdir($this->dir);
+        Database::openMigrated($this->dir . '/linkrot.sqlite');
         $this->app = new App(
             $this->config(),
             $this->dir,

@@ -6,6 +6,7 @@ declare(strict_types=1);
 use Linkrot\Auth\TokenStore;
 use Linkrot\Cli\AuthCommand;
 use Linkrot\Database;
+use Linkrot\SchemaOutdatedException;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -15,5 +16,12 @@ if (!is_dir($dataDir)) {
     exit(AuthCommand::FAILED);
 }
 
-$command = new AuthCommand(new TokenStore(Database::open($dataDir . '/linkrot.sqlite')), STDOUT, STDERR);
+try {
+    $pdo = Database::openCurrent($dataDir . '/linkrot.sqlite');
+} catch (SchemaOutdatedException $e) {
+    fwrite(STDERR, 'lr-auth: ' . $e->getMessage() . "\n");
+    exit(AuthCommand::FAILED);
+}
+
+$command = new AuthCommand(new TokenStore($pdo), STDOUT, STDERR);
 exit($command->run(array_slice($argv, 1)));
