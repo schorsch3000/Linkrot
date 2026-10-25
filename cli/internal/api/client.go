@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/schorsch3000/Linkrot/internal/config"
 )
 
 // DigestLength is the length of the sha256 digest that follows every chunk.
@@ -32,7 +34,18 @@ type Client struct {
 func NewClient(base, token string) *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 2 * time.Minute
-	return &Client{Base: strings.TrimRight(base, "/"), Token: token, HTTP: &http.Client{Transport: transport}}
+	return &Client{Base: strings.TrimRight(base, "/"), Token: token, HTTP: &http.Client{Transport: transport, CheckRedirect: refuseDowngrade}}
+}
+
+// refuseDowngrade stops a redirect from https to plain http (the token would be sent in the clear).
+func refuseDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if !config.AllowedScheme(req.URL) {
+		return fmt.Errorf("refusing redirect to plain http: %s", req.URL.Redacted())
+	}
+	return nil
 }
 
 // Create starts an upload or resumes one. A completed file with the same hash yields an *Error with

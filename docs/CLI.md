@@ -79,7 +79,7 @@ Asks the server to run its cleanup now (`POST /cleanup`).
 ### `config`
 
 ```
-config --server <url>     set the server URL, e.g. https://linkrot.example
+config --server <url>     set the server URL, e.g. https://linkrot.example (https only; http is accepted for localhost and loopback addresses, and an https to http redirect is refused)
 config --token <token>    set the token
 config                    show the current configuration (token masked)
 ```

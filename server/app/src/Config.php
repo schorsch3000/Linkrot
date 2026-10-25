@@ -31,7 +31,10 @@ final readonly class Config
         public DownloadMode $downloadMode = DownloadMode::Xaccel,
     ) {
         if (!preg_match('~^https?://[^/\s]+(/\S*)?$~', $baseUrl)) {
-            throw new InvalidArgumentException('config: base_url must be an http(s) URL');
+            throw new InvalidArgumentException('config: base_url must be an https URL');
+        }
+        if (!$this->isSecureOrLoopback($baseUrl)) {
+            throw new InvalidArgumentException('config: base_url must use https (http is only allowed for localhost)');
         }
         if ($chunkSize < 1) {
             throw new InvalidArgumentException('config: chunk_size must be positive');
@@ -42,6 +45,20 @@ final readonly class Config
         if ($defaultUses !== null && $defaultUses < 1) {
             throw new InvalidArgumentException('config: default_uses must be null (unlimited) or >= 1');
         }
+    }
+
+    /** https, or http to localhost / a loopback address (development). Never http to a network. */
+    private function isSecureOrLoopback(string $url): bool
+    {
+        if (str_starts_with($url, 'https://')) {
+            return true;
+        }
+        $host = strtolower(trim((string) parse_url($url, PHP_URL_HOST), '[]'));
+        if ($host === 'localhost' || $host === '::1') {
+            return true;
+        }
+
+        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false && str_starts_with($host, '127.');
     }
 
     /**

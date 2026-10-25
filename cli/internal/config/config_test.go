@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,5 +109,28 @@ func TestMaskToken(t *testing.T) {
 	}
 	if got := MaskToken("lr_abcdefghijklmnop"); got != "lr_abc…op" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestNormalizeServerRefusesPlainHTTPExceptLoopback(t *testing.T) {
+	for _, ok := range []string{"https://linkrot.example", "http://localhost:8080", "http://127.0.0.1:1234", "http://127.5.5.5", "http://[::1]:8080", "HTTP://LOCALHOST"} {
+		if _, err := NormalizeServer(ok); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"http://linkrot.example", "http://192.168.1.10:8080", "http://10.0.0.1", "http://localhost.evil.example", "http://localhost@evil.example", "ftp://localhost"} {
+		if _, err := NormalizeServer(bad); err == nil {
+			t.Errorf("%s was accepted", bad)
+		}
+	}
+}
+
+func TestCheckRefusesAStoredPlainHTTPServer(t *testing.T) {
+	err := Config{Server: "http://linkrot.example", Token: "lr_x"}.Check()
+	if err == nil || !strings.Contains(err.Error(), "refusing plain http") {
+		t.Fatalf("got %v", err)
+	}
+	if err := (Config{Server: "https://linkrot.example", Token: "lr_x"}).Check(); err != nil {
+		t.Fatal(err)
 	}
 }

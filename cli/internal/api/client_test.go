@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"io"
@@ -134,5 +135,27 @@ func TestDownloadURLAndRange(t *testing.T) {
 	}
 	if !errors.As(err, &e) || e.Status != 404 {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRedirectToPlainHTTPIsRefused(t *testing.T) {
+	req := func(raw string) *http.Request {
+		r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, raw, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if err := refuseDowngrade(req("http://linkrot.example/x"), nil); err == nil {
+		t.Error("https to http was followed")
+	}
+	if err := refuseDowngrade(req("https://linkrot.example/x"), nil); err != nil {
+		t.Errorf("https redirect refused: %v", err)
+	}
+	if err := refuseDowngrade(req("http://127.0.0.1:8080/x"), nil); err != nil {
+		t.Errorf("loopback redirect refused: %v", err)
+	}
+	if err := refuseDowngrade(req("https://linkrot.example/x"), make([]*http.Request, 10)); err == nil {
+		t.Error("redirect loop not stopped")
 	}
 }

@@ -36,17 +36,39 @@ final class ConfigTest extends TestCase
         self::assertSame('1000y', $config->maxRmAfter);
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function allowed(): iterable
+    {
+        yield 'https' => ['https://linkrot.example'];
+        yield 'https with port and path' => ['https://linkrot.example:8443/lr'];
+        yield 'localhost' => ['http://localhost'];
+        yield 'localhost with port' => ['http://localhost:8080'];
+        yield 'loopback' => ['http://127.0.0.1:8080'];
+        yield 'loopback range' => ['http://127.1.2.3'];
+        yield 'ipv6 loopback' => ['http://[::1]:8080'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('allowed')]
+    public function testAllowedBaseUrls(string $url): void
+    {
+        self::assertSame($url, Config::fromArray(['base_url' => $url])->baseUrl);
+    }
+
     /** @return iterable<string, array{array<string, mixed>}> */
     public static function invalid(): iterable
     {
         yield 'missing base_url' => [[]];
         yield 'bad base_url' => [['base_url' => 'ftp://x']];
-        yield 'unknown key' => [['base_url' => 'http://x', 'nope' => 1]];
-        yield 'chunk too small' => [['base_url' => 'http://x', 'chunk_size' => 1024]];
-        yield 'chunk too big' => [['base_url' => 'http://x', 'chunk_size' => 200_000_000]];
-        yield 'bad mode' => [['base_url' => 'http://x', 'download_mode' => 'sendfile']];
-        yield 'uses zero' => [['base_url' => 'http://x', 'default_uses' => 0]];
-        yield 'wrong type' => [['base_url' => 'http://x', 'chunk_size' => '32']];
+        yield 'plain http' => [['base_url' => 'http://linkrot.example']];
+        yield 'plain http on a lan address' => [['base_url' => 'http://192.168.1.10:8080']];
+        yield 'plain http, localhost only in the userinfo' => [['base_url' => 'http://localhost@evil.example']];
+        yield 'plain http, localhost as a prefix' => [['base_url' => 'http://localhost.evil.example']];
+        yield 'unknown key' => [['base_url' => 'https://x', 'nope' => 1]];
+        yield 'chunk too small' => [['base_url' => 'https://x', 'chunk_size' => 1024]];
+        yield 'chunk too big' => [['base_url' => 'https://x', 'chunk_size' => 200_000_000]];
+        yield 'bad mode' => [['base_url' => 'https://x', 'download_mode' => 'sendfile']];
+        yield 'uses zero' => [['base_url' => 'https://x', 'default_uses' => 0]];
+        yield 'wrong type' => [['base_url' => 'https://x', 'chunk_size' => '32']];
     }
 
     /** @param array<string, mixed> $values */

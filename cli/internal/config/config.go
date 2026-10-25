@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -90,24 +91,47 @@ func Save(path string, c Config) error {
 	return nil
 }
 
-// Check reports ErrNotConfigured if server or token are missing.
+// Check reports ErrNotConfigured if server or token are missing, and refuses a server that is reached over plain http.
 func (c Config) Check() error {
 	if c.Server == "" || c.Token == "" {
 		return ErrNotConfigured
 	}
+	if _, err := NormalizeServer(c.Server); err != nil {
+		return err
+	}
 	return nil
 }
 
-// NormalizeServer validates an http(s) URL and removes a trailing slash.
+// NormalizeServer validates a server URL and removes a trailing slash. It must be https; plain http is only
+// accepted for localhost and loopback addresses (development), never for a network.
 func NormalizeServer(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", fmt.Errorf("invalid server URL %q: expected http(s)://host[/path]", raw)
+		return "", fmt.Errorf("invalid server URL %q: expected https://host[/path]", raw)
 	}
 	if u.RawQuery != "" || u.Fragment != "" {
 		return "", fmt.Errorf("invalid server URL %q: no query or fragment allowed", raw)
 	}
+	if !AllowedScheme(u) {
+		return "", fmt.Errorf("refusing plain http for %q: use https (http is only allowed for localhost)", raw)
+	}
 	return strings.TrimRight(u.String(), "/"), nil
+}
+
+// AllowedScheme reports whether the token may be sent to u: https, or http to localhost / a loopback address.
+func AllowedScheme(u *url.URL) bool {
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // MaskToken shortens a token for display.

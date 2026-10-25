@@ -212,7 +212,7 @@ authentication itself:
 
 | key | default | meaning |
 | --- | --- | --- |
-| `base_url` | (required) | public URL used to build share links |
+| `base_url` | (required) | public URL used to build share links. Must be `https://`; plain `http://` is only accepted for `localhost` and loopback addresses (development). Anything else makes the server answer "misconfigured" and `check-config` fail |
 | `chunk_size` | 32 MiB | must be within 10-100 MB |
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
 | `default_rm_after` | `1w` | lifetime if the client does not ask for one |
