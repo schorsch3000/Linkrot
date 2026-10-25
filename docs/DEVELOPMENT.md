@@ -89,7 +89,8 @@ is green). The builds run next to it, the CLI platforms in parallel, and the rel
 - `linkrot_<version>_<os>_<arch>.tar.gz` / `.zip`: the CLI for linux (amd64, arm64, armv7, 386), macOS (amd64, arm64),
   windows (amd64, arm64, 386, as zip) and freebsd (amd64, arm64). Static binaries, built with `-trimpath`; the version is
   shown by `--version`.
-- `SHA256SUMS` for all of them.
+- `SHA256SUMS` for all of them, and a signed build provenance attestation for every file (`actions/attest-build-provenance`,
+  needs a public repository; the release job has `id-token: write` and `attestations: write` for it).
 
 ```
 git tag v1.0.0 && git push origin v1.0.0

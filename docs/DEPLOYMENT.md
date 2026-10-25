@@ -8,7 +8,8 @@ has the server tarball, CLI archives for all usual platforms and a `SHA256SUMS` 
 Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `apcu`, `pdo_sqlite`,
 `mbstring`, `ctype` (`composer install` checks this).
 
-1. Download `linkrot-server-<version>.tar.gz` and verify it against `SHA256SUMS`.
+1. Download `linkrot-server-<version>.tar.gz` and verify it against `SHA256SUMS`, and, for provenance, with
+   `gh attestation verify linkrot-server-<version>.tar.gz --repo schorsch3000/Linkrot` (see [Verifying a release](#verifying-a-release)).
 2. Unpack it into the deploy root. It contains exactly `app/` and `htdocs/`:
 
    ```
@@ -70,6 +71,19 @@ A chunk request (default 32 MiB) writes, reads back and `fsync`s one chunk; it d
 Keep `fastcgi_read_timeout` (nginx, default 60s) and php-fpm's `request_terminate_timeout` above what a chunk needs on
 your disk and uplink, and `client_body_timeout` (default 60s) above the slowest upload speed you want to support
 for one chunk. A slow client times out one chunk and the CLI resumes from the offset the server reports.
+
+### Verifying a release
+
+`SHA256SUMS` only protects against corruption: it is uploaded next to the files it covers. Every file of a release
+also has a signed build provenance attestation (GitHub artifact attestations, made by the release workflow with its
+own identity), which says that exactly these bytes were built by `.github/workflows/release.yml` of this repository
+from the tagged commit:
+
+```
+gh attestation verify linkrot_<version>_linux_amd64.tar.gz --repo schorsch3000/Linkrot
+```
+
+It checks the signature and the file's digest and fails for a file that was changed after the build.
 
 ### Upgrading
 
