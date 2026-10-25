@@ -107,7 +107,7 @@ final class Page
         $body = <<<HTML
             <article class="card">
             <div class="icon" style="--hue: $hue" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.75h7.5L19.25 8.5v12.75H6z"/><path d="M13.5 2.75V8.5h5.75"/>$glyph</svg>
+            <svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.75h7.5L19.25 8.5v12.75H6z"/><path d="M13.5 2.75V8.5h5.75"/>$glyph</svg>
             </div>
             <h1 class="name">$name</h1>
             <p class="meta">$size $badge</p>
@@ -157,7 +157,7 @@ final class Page
         $body = <<<'HTML'
             <article class="card gone">
             <div class="icon" style="--hue: 150" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.75h7.5L19.25 8.5v12.75H6z" stroke-dasharray="2.2 1.6"/><path d="M10 13.5l4 4m0-4l-4 4"/></svg>
+            <svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.75h7.5L19.25 8.5v12.75H6z" stroke-dasharray="2.2 1.6"/><path d="M10 13.5l4 4m0-4l-4 4"/></svg>
             </div>
             <h1 class="name">Nothing here.</h1>
             <p class="meta">This link has rotted away, or it never existed.</p>
