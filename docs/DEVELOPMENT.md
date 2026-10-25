@@ -34,6 +34,7 @@ Client and server each have a Makefile with the usual targets:
 | `run` | server: `php -S` with `download_mode = php`; cli: `go run` |
 | `test` | phpunit / `go test ./...` |
 | `lint` | static analysis and style checks without modifying files |
+| `repro` | builds the release artefacts twice with different umasks and fails if they differ (CI runs it) |
 | `audit` | known vulnerabilities of the dependencies (network needed, fails on any finding) |
 | `fmt` | apply formatting |
 | `clean` | remove build artefacts |

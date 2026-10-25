@@ -47,6 +47,9 @@ jobs:
       - name: Release tarball has the expected layout and installs
         run: make -C server dist-test VERSION=ci
 
+      - name: Release tarball is reproducible
+        run: make -C server repro
+
   cli:
     name: CLI (vet, golangci-lint, gofumpt, tests, cross-compile)
     runs-on: ubuntu-latest
@@ -70,8 +73,8 @@ jobs:
       - name: Known vulnerabilities in the Go dependencies and standard library (fails on any finding)
         run: make -C cli audit
 
-      - name: All release platforms build
-        run: make -C cli dist VERSION=ci
+      - name: All release platforms build, and the archives are reproducible
+        run: make -C cli repro
 
   e2e:
     name: End-to-end (CLI against the real server, behind nginx)

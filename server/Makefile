@@ -6,7 +6,7 @@ VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
 
-.PHONY: install build dist dist-test preview run test lint audit fmt clean precommit
+.PHONY: install build dist dist-test preview run test lint audit repro fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
@@ -24,9 +24,10 @@ build:
 	scripts/build-assets.sh $(DIST)/htdocs $(DIST)/app
 	cp ../LICENSE $(DIST)/app/LICENSE
 
-# Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner and mtime).
+# Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner, mtime and permissions,
+# so the umask of whoever builds does not matter).
 dist: build
-	tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@$(shell git log -1 --format=%ct 2>/dev/null || echo 0)' \
+	tar --sort=name --owner=0 --group=0 --numeric-owner --mode='u+rw,go+rX,go-w' --mtime='@$(shell git log -1 --format=%ct 2>/dev/null || echo 0)' \
 		-C $(DIST) -czf $(TARBALL) app htdocs
 	@top="$$(tar -tzf $(TARBALL) | cut -d/ -f1 | sort -u | tr '\n' ' ')"; \
 		test "$$top" = "app htdocs " || { echo "unexpected top-level entries: $$top"; exit 1; }
@@ -61,6 +62,13 @@ lint:
 # Known vulnerabilities of the locked dependencies (needs the network); fails on any advisory.
 audit:
 	composer --working-dir=app audit --locked
+
+# The release tarball must be bit for bit the same whoever builds it: build twice with different umasks and compare.
+repro:
+	@set -e; v=0.0.0-repro; t=build/linkrot-server-$$v.tar.gz; \
+	rm -rf build; $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null; a=$$(sha256sum $$t | cut -d' ' -f1); \
+	(umask 077; rm -rf build; $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null); b=$$(sha256sum $$t | cut -d' ' -f1); \
+	if [ "$$a" = "$$b" ]; then echo "reproducible: $$a"; else echo "NOT reproducible: $$a != $$b"; exit 1; fi
 
 fmt:
 	$(BIN)/rector process --no-progress-bar

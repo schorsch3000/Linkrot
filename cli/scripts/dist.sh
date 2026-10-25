@@ -43,6 +43,8 @@ build() {
 		-ldflags "-s -w -X github.com/schorsch3000/Linkrot/internal/cli.Version=${version}" \
 		-o "$stage/$exe" ./cmd/linkrot
 
+	chmod 0755 "$stage/$exe" # not the umask of whoever builds
+	chmod 0644 "$stage/LICENSE"
 	if [ "$goos" = windows ]; then
 		(cd "$stage" && TZ=UTC touch -d "$mtime" "$exe" LICENSE && zip -q -X "$OLDPWD/dist/$name.zip" "$exe" LICENSE)
 	else
