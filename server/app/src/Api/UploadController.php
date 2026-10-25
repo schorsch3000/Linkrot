@@ -23,6 +23,7 @@ use PDOException;
 final readonly class UploadController
 {
     public const int DIGEST_LENGTH = 32;
+    private const int HASH_BLOCK = 1_048_576;
     public const string CHUNK_CONTENT_TYPE = 'application/offset+octet-stream';
     private const string EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
@@ -158,11 +159,12 @@ final readonly class UploadController
             return $this->invalid('body is missing the trailing sha256');
         }
 
-        // Verify what was written (hot in the page cache) before the offset moves.
-        $context = hash_init('sha256');
-        fseek($handle, $file->uploadOffset);
-        hash_update_stream($context, $handle, $length);
-        if (!hash_equals(hash_final($context, true), $digest)) {
+        // Verify what was written (hot in the page cache) before the offset moves; the same pass feeds the running
+        // hash of the whole file, so the last chunk does not have to read everything again.
+        $chunkHash = hash_init('sha256');
+        $fileHash = $this->fileHash($handle, $file);
+        $this->hashRange($handle, $file->uploadOffset, $length, $chunkHash, $fileHash);
+        if (!hash_equals(hash_final($chunkHash, true), $digest)) {
             return Response::error(422, 'chunk_hash_mismatch', 'chunk does not match its sha256, resend it', ['offset' => $file->uploadOffset]);
         }
         if (!@fsync($handle)) {
@@ -172,21 +174,56 @@ final readonly class UploadController
         $now = ($this->clock)();
         $newOffset = $file->uploadOffset + $length;
         if ($newOffset < $file->size) {
-            $this->files->setOffset($file->id, $newOffset, $now);
+            $this->files->setOffset($file->id, $newOffset, $now, serialize($fileHash));
 
             return Response::json(['offset' => $newOffset]);
         }
 
-        return $this->complete($handle, $file, $now);
+        return $this->complete($file, $fileHash, $now);
     }
 
-    /** @param resource $handle */
-    private function complete(mixed $handle, FileRecord $file, int $now): Response
+    /** The running sha256 of the bytes before the offset: from the database, rebuilt from the file if it is missing or unusable. */
+    private function fileHash(mixed $handle, FileRecord $file): \HashContext
     {
+        if ($file->uploadOffset === 0) {
+            return hash_init('sha256');
+        }
+        $state = $this->files->hashState($file->id);
+        $context = $state === null ? false : @unserialize($state, ['allowed_classes' => [\HashContext::class]]);
+        if ($context instanceof \HashContext) {
+            return $context;
+        }
+
         $context = hash_init('sha256');
         rewind($handle);
-        hash_update_stream($context, $handle, $file->size);
-        if (!hash_equals($file->sha256, hash_final($context))) {
+        hash_update_stream($context, $handle, $file->uploadOffset);
+
+        return $context;
+    }
+
+    /**
+     * Reads a range of the data file in blocks and feeds every block to all contexts.
+     *
+     * @param resource $handle
+     */
+    private function hashRange(mixed $handle, int $offset, int $length, \HashContext ...$contexts): void
+    {
+        fseek($handle, $offset);
+        for ($left = $length; $left > 0;) {
+            $block = fread($handle, min(self::HASH_BLOCK, $left));
+            if ($block === false || $block === '') {
+                throw new \RuntimeException('cannot read back the chunk that was just written');
+            }
+            foreach ($contexts as $context) {
+                hash_update($context, $block);
+            }
+            $left -= strlen($block);
+        }
+    }
+
+    private function complete(FileRecord $file, \HashContext $fileHash, int $now): Response
+    {
+        if (!hash_equals($file->sha256, hash_final($fileHash))) {
             $this->catalog->remove($file->id);
 
             return Response::error(422, 'file_hash_mismatch', 'file does not match the declared sha256, start over');

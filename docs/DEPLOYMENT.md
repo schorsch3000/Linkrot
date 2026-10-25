@@ -54,6 +54,13 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    sudo -u www-data {deployroot}/app/bin/lr-auth get my-laptop
    ```
 
+### Timeouts
+
+A chunk request (default 32 MiB) writes, reads back and `fsync`s one chunk; it does not depend on the file size.
+Keep `fastcgi_read_timeout` (nginx, default 60s) and php-fpm's `request_terminate_timeout` above what a chunk needs on
+your disk and uplink, and `client_body_timeout` (default 60s) above the slowest upload speed you want to support
+for one chunk. A slow client times out one chunk and the CLI resumes from the offset the server reports.
+
 ### Upgrading
 
 Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `app/install.sh` again) and leave

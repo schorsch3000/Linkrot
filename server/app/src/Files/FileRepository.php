@@ -67,15 +67,31 @@ final readonly class FileRepository
         return $update->rowCount() === 1;
     }
 
-    public function setOffset(string $id, int $offset, int $now): void
+    /** Moves the offset and stores the running whole-file hash that belongs to it, in one statement. */
+    public function setOffset(string $id, int $offset, int $now, ?string $hashState = null): void
     {
-        $this->pdo->prepare('UPDATE files SET upload_offset = ?, updated_at = ? WHERE id = ?')->execute([$offset, $now, $id]);
+        $update = $this->pdo->prepare('UPDATE files SET upload_offset = ?, updated_at = ?, hash_state = ? WHERE id = ?');
+        $update->bindValue(1, $offset, PDO::PARAM_INT);
+        $update->bindValue(2, $now, PDO::PARAM_INT);
+        $update->bindValue(3, $hashState, $hashState === null ? PDO::PARAM_NULL : PDO::PARAM_LOB);
+        $update->bindValue(4, $id);
+        $update->execute();
+    }
+
+    /** The serialized running hash of the bytes before upload_offset, null if there is none (yet). */
+    public function hashState(string $id): ?string
+    {
+        $select = $this->pdo->prepare('SELECT hash_state FROM files WHERE id = ?');
+        $select->execute([$id]);
+        $state = $select->fetchColumn();
+
+        return is_string($state) && $state !== '' ? $state : null;
     }
 
     public function markReady(string $id, int $now): void
     {
         $this->pdo->prepare(
-            "UPDATE files SET status = 'ready', upload_offset = size, updated_at = :now, completed_at = :now, expires_at = :now + rm_after WHERE id = :id",
+            "UPDATE files SET status = 'ready', hash_state = NULL, upload_offset = size, updated_at = :now, completed_at = :now, expires_at = :now + rm_after WHERE id = :id",
         )->execute(['now' => $now, 'id' => $id]);
     }
 

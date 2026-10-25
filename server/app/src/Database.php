@@ -9,7 +9,7 @@ use PDO;
 /** SQLite connection and schema management. */
 final class Database
 {
-    public const int SCHEMA_VERSION = 1;
+    public const int SCHEMA_VERSION = 2;
 
     private const array MIGRATIONS = [
         1 => <<<'SQL'
@@ -40,6 +40,8 @@ final class Database
                 value TEXT NOT NULL
             ) STRICT;
             SQL,
+        // The running sha256 of an upload (serialized HashContext), so that the last chunk does not re-read the whole file.
+        2 => 'ALTER TABLE files ADD COLUMN hash_state BLOB',
     ];
 
     /** Opens the connection (busy timeout, exceptions). The schema is neither created nor checked here. */

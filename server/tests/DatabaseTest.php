@@ -61,6 +61,19 @@ final class DatabaseTest extends TestCase
         Database::openCurrent($this->file);
     }
 
+    public function testMigratesAVersion1DatabaseAndKeepsItsRows(): void
+    {
+        $pdo = Database::openMigrated($this->file);
+        $pdo->exec("INSERT INTO files (id, name, size, sha256, status, created_at, updated_at, rm_after) VALUES ('abcdefghabcdefgh', 'a', 1, 'h', 'uploading', 1, 1, 60)");
+        $pdo->exec('ALTER TABLE files DROP COLUMN hash_state');
+        $pdo->exec('PRAGMA user_version = 1');
+
+        $pdo = Database::openMigrated($this->file);
+
+        self::assertSame(Database::SCHEMA_VERSION, Database::schemaVersion($pdo));
+        self::assertNull(Database::query($pdo, "SELECT hash_state FROM files WHERE id = 'abcdefghabcdefgh'")->fetchColumn() ?: null);
+    }
+
     public function testSha256IsUnique(): void
     {
         $pdo = Database::openMigrated($this->file);

@@ -110,12 +110,15 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
      current offset
    - `fseek` to the offset, `stream_copy_to_stream(php://input, $file, $length)` so no data is handled in PHP
      userland, then `fread(php://input, 32)` for the trailing digest
-   - verify with `hash_update_stream` over the freshly written region (page cache is hot) and compare with the
-     digest. On mismatch the DB offset is **not** advanced; the garbage beyond the committed offset is overwritten
+   - read the freshly written region back in 1 MiB blocks (page cache is hot) and feed each block to two hashes: the
+     chunk's, compared with the digest, and the running sha256 of the whole file. On mismatch the DB offset is **not** advanced; the garbage beyond the committed offset is overwritten
      by the retry and `422 chunk_hash_mismatch` is returned
-   - `fflush` + `fsync`, then advance `offset` and `updated_at` in a quick transaction
-5. **Completion.** After the last chunk the whole file is re-read once and compared against the declared
-   sha256. Match: status `ready`, `completed_at` and `expires_at` set, response carries the URL. Mismatch: file and
+   - `fflush` + `fsync`, then advance `offset` and `updated_at` in one statement together with the running hash
+     (`files.hash_state`, a serialized `HashContext`), so state and offset can never disagree. If the state is missing
+     or unusable (an upload from before this column existed, a manual edit) it is rebuilt once from the bytes before the
+     offset
+5. **Completion.** The running hash is finished with the last chunk and compared against the declared sha256, the
+   file is not read again, so the last request is as short as any other. Match: status `ready`, `completed_at` and `expires_at` set, response carries the URL. Mismatch: file and
    row are deleted and `422 file_hash_mismatch` is returned, the client has to start over.
 
 PHP limits are irrelevant because the body is read raw from `php://input` (no multipart) and chunks are small

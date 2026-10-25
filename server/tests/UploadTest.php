@@ -233,6 +233,65 @@ final class UploadTest extends TestCase
         self::assertFileDoesNotExist($this->dir . '/files/' . $id);
     }
 
+    private function hashState(string $id): mixed
+    {
+        return Database::query($this->app->db(), "SELECT hash_state FROM files WHERE id = '$id'")->fetchColumn();
+    }
+
+    public function testRunningHashIsKeptBetweenChunksAndDroppedWhenReady(): void
+    {
+        $content = str_repeat('0123456789', 2) . 'tail';
+        $id = $this->id($this->create($content)[1]);
+
+        self::assertNull($this->hashState($id) ?: null, 'nothing before the first chunk');
+        self::assertSame(200, $this->chunk($id, 0, substr($content, 0, 10))[0]);
+        self::assertNotNull($this->hashState($id) ?: null, 'state after the first chunk');
+        self::assertSame(200, $this->chunk($id, 10, substr($content, 10, 10))[0]);
+        [$status, $done] = $this->chunk($id, 20, 'tail');
+
+        self::assertSame(200, $status);
+        self::assertSame('ready', $done['status']);
+        self::assertNull($this->hashState($id) ?: null, 'state is dropped when the file is ready');
+    }
+
+    public function testMissingOrBrokenStateIsRebuiltFromTheFile(): void
+    {
+        $content = str_repeat('0123456789', 3) . 'tail';
+        $id = $this->id($this->create($content)[1]);
+        self::assertSame(200, $this->chunk($id, 0, substr($content, 0, 10))[0]);
+
+        $this->app->db()->exec("UPDATE files SET hash_state = NULL WHERE id = '$id'");
+        self::assertSame(200, $this->chunk($id, 10, substr($content, 10, 10))[0]);
+
+        $this->app->db()->exec("UPDATE files SET hash_state = x'deadbeef' WHERE id = '$id'");
+        self::assertSame(200, $this->chunk($id, 20, substr($content, 20, 10))[0]);
+
+        [$status, $done] = $this->chunk($id, 30, 'tail');
+        self::assertSame(200, $status);
+        self::assertSame('ready', $done['status']);
+    }
+
+    public function testTheFinalCheckUsesTheRunningHashNotAnotherReadOfTheFile(): void
+    {
+        $content = str_repeat('0123456789', 2) . 'tail';
+        $id = $this->id($this->create($content)[1]);
+        self::assertSame(200, $this->chunk($id, 0, substr($content, 0, 10))[0]);
+
+        // a state that belongs to different bytes: only a check that uses the state can notice
+        $other = hash_init('sha256');
+        hash_update($other, 'XXXXXXXXXX');
+        $update = $this->app->db()->prepare('UPDATE files SET hash_state = ? WHERE id = ?');
+        $update->bindValue(1, serialize($other), \PDO::PARAM_LOB);
+        $update->bindValue(2, $id);
+        $update->execute();
+
+        self::assertSame(200, $this->chunk($id, 10, substr($content, 10, 10))[0]);
+        [$status, $error] = $this->chunk($id, 20, 'tail');
+
+        self::assertSame(422, $status);
+        self::assertSame('file_hash_mismatch', $error['error']['code'] ?? null);
+    }
+
     public function testLockedWhileAnotherRequestWrites(): void
     {
         $content = str_repeat('x', 25);
