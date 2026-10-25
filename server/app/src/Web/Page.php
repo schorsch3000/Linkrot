@@ -103,6 +103,7 @@ final class Page
         $hue = $kind->hue();
         $glyph = $kind->glyph();
         $box = self::copyBox(...);
+        $qr = QrCode::svg($file->url($baseUrl), 'QR code of this page');
 
         $body = <<<HTML
             <article class="card">
@@ -111,7 +112,17 @@ final class Page
             </div>
             <h1 class="name">$name</h1>
             <p class="meta">$size $badge</p>
+            <div class="actions">
             <a class="button" href="$href">Download</a>
+            <button type="button" class="button alt" data-qr="qr" hidden>QR code</button>
+            </div>
+            <dialog class="qr" id="qr" aria-label="QR code of this page">
+            <div class="qr-body">
+            $qr
+            <p class="small">Scan to open this page</p>
+            <form method="dialog"><button class="button alt">Close</button></form>
+            </div>
+            </dialog>
             <section class="terminal" aria-label="Download from the terminal">
             <h2>From a terminal</h2>
             <p class="label">linkrot</p>
@@ -284,6 +295,13 @@ final class Page
             }
             return Promise.resolve(legacyCopy(el));
           }
+          document.querySelectorAll('button[data-qr]').forEach(function (button) {
+            var dialog = document.getElementById(button.getAttribute('data-qr'));
+            if (!dialog || !dialog.showModal) { return; }
+            button.hidden = false;
+            button.addEventListener('click', function () { dialog.showModal(); });
+            dialog.addEventListener('click', function (event) { if (event.target === dialog) { dialog.close(); } });
+          });
           document.querySelectorAll('button[data-copy]').forEach(function (button) {
             button.hidden = false;
             button.addEventListener('click', function () {
@@ -363,6 +381,18 @@ final class Page
         .button:hover { filter: brightness(1.08); }
         .button:focus-visible { outline: 3px solid var(--rot-b); outline-offset: 3px; }
         @media (min-width: 30rem) { .button { display: inline-block; min-width: 14rem; } }
+        .actions { display: flex; gap: .6rem; justify-content: center; }
+        .actions .button { display: block; text-align: center; }
+        .actions .button:first-child { flex: 1 1 auto; }
+        @media (min-width: 30rem) { .actions .button:first-child { flex: 0 1 auto; min-width: 14rem; } }
+        .button.alt { min-width: 0; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; }
+        .button.alt[hidden] { display: none; }
+        .qr { width: min(20rem, 90vw); padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--card); color: var(--fg); }
+        .qr::backdrop { background: rgb(0 0 0 / .55); }
+        .qr-body { padding: 1.25rem; text-align: center; }
+        .qr svg { display: block; width: 100%; height: auto; border-radius: .5rem; }
+        .qr form { margin-top: 1rem; }
+        .qr .button { width: 100%; }
         .terminal { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); text-align: left; }
         .terminal h2 { margin: 0 0 .5rem; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
         .label { margin: .8rem 0 .2rem; font-size: .85rem; color: var(--muted); }

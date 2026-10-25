@@ -12,7 +12,8 @@
         "ext-mbstring": "*",
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*",
-        "ext-random": "*"
+        "ext-random": "*",
+        "bacon/bacon-qr-code": "^3.1"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",

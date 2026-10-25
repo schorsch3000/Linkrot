@@ -126,7 +126,7 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
 - `GET /`: a small page about linkrot itself, in the style of the download pages: what it is, three steps, and a button
   to the project on GitHub. Static text only: no script, no commands and nothing about the files or the configuration of
   the instance.
-- `GET /file/{id}/{name}`: simple page with filename, size and a download button. No expiry shown. If `{name}` does
+- `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`. No expiry shown. If `{name}` does
   not match the stored name, answer `302` to the canonical URL. Everything is HTML-escaped and the page is served
   with a strict CSP (`default-src 'none'; style-src 'unsafe-inline'`). Viewing the page never consumes a use, so
   chat link previews are harmless.

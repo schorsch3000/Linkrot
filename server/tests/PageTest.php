@@ -8,6 +8,7 @@ use Linkrot\Files\FileRecord;
 use Linkrot\Files\FileStatus;
 use Linkrot\Web\FileKind;
 use Linkrot\Web\Page;
+use Linkrot\Web\QrCode;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -79,6 +80,27 @@ final class PageTest extends TestCase
         foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound(), Page::home()] as $html) {
             self::assertStringContainsString('<header class="brand"><a href="/">', $html);
         }
+    }
+
+    public function testFilePageHasAQrCodeDialogForThePageItself(): void
+    {
+        $html = Page::file($this->file(), 'https://lr.example');
+
+        self::assertStringContainsString('<button type="button" class="button alt" data-qr="qr" hidden>QR code</button>', $html);
+        self::assertStringContainsString('<dialog class="qr" id="qr"', $html);
+        self::assertStringContainsString('<svg role="img" aria-label="QR code of this page" viewBox="0 0 256 256">', $html);
+        self::assertStringNotContainsString('<?xml', $html);
+        self::assertStringNotContainsString('<dialog', Page::notFound());
+    }
+
+    public function testQrCodeEncodesTheText(): void
+    {
+        $short = QrCode::svg('https://lr.example/a', 'x');
+        $long = QrCode::svg('https://lr.example/file/abcd7KfRtm4pWxnZ/report.pdf', 'x');
+
+        self::assertStringStartsWith('<svg role="img" aria-label="x" ', $short);
+        self::assertNotSame($short, $long);
+        self::assertSame($short, QrCode::svg('https://lr.example/a', 'x'));
     }
 
     public function testFollowsTheBrowsersColourScheme(): void
