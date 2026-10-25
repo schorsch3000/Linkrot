@@ -97,14 +97,12 @@ final class Page
         $exact = self::e(number_format($file->size, 0, '.', ' ') . ' bytes');
         $badge = $extension === null ? '' : '<span class="badge">.' . self::e($extension) . '</span>';
         $href = self::e($dlPath);
-        $curl = self::e("curl -OJ '" . $dlUrl . "'");
-        $cli = self::e('linkrot down ' . $file->id);
-        $sha = self::e($file->sha256);
+        $curl = "curl -OJ '" . $dlUrl . "'";
+        $cli = 'linkrot down ' . $file->id;
+        $sha = $file->sha256;
         $hue = $kind->hue();
         $glyph = $kind->glyph();
-        // A copy button per box; hidden until the script runs, so that nobody gets a dead button.
-        $box = static fn(string $id, string $text): string => '<div class="box"><code id="c-' . $id . '">' . $text . '</code>'
-            . '<button type="button" class="copy" data-copy="c-' . $id . '" aria-label="Copy" title="Copy" hidden>' . self::COPY_ICONS . '</button></div>';
+        $box = self::copyBox(...);
 
         $body = <<<HTML
             <article class="card">
@@ -129,6 +127,45 @@ final class Page
         return self::document($file->name, $body, self::tagline($file->id), true);
     }
 
+    /** The about page at `/`. */
+    public static function home(string $baseUrl): string
+    {
+        $server = self::e(rtrim($baseUrl, '/'));
+        $box = self::copyBox(...);
+        $chain = self::CHAIN_LARGE;
+        $releases = self::e(self::PROJECT_URL . '/releases');
+        $project = self::e(self::PROJECT_URL);
+
+        $body = <<<HTML
+            <article class="card about">
+            <div class="icon" style="--hue: 150" aria-hidden="true">$chain</div>
+            <h1 class="name">Links that rot.</h1>
+            <p class="lead">linkrot is a small private file sharing service for the terminal. Upload a file, share the link, and
+            let it rot: after a while the link stops working and the file is gone.</p>
+            <ol class="steps">
+            <li><strong>Upload</strong> a file with the command line client.</li>
+            <li><strong>Share</strong> the link it prints.</li>
+            <li><strong>Rot.</strong> The link and the file disappear on their own, nothing to clean up.</li>
+            </ol>
+            <section class="terminal" aria-label="Try it from a terminal">
+            <h2>Try it</h2>
+            <p class="label">Point the client at this server</p>
+            {$box('config', "linkrot config --server $server")}
+            <p class="label">Upload a file and get its link</p>
+            {$box('up', 'linkrot up report.pdf')}
+            <p class="label">Let it rot sooner: after two days, or after one download</p>
+            {$box('rot', 'linkrot up report.pdf --rm-after 2d --uses 1')}
+            </section>
+            <p class="small">This is a private instance: there are no accounts and no uploads from the browser, the client needs a
+            token from whoever runs this server.</p>
+            <a class="button" href="$releases">Get the command line client</a>
+            <p class="small"><a href="$project">Source code and documentation</a></p>
+            </article>
+            HTML;
+
+        return self::document('Links that rot', $body, self::TAGLINES[0], true);
+    }
+
     public static function notFound(): string
     {
         $body = <<<'HTML'
@@ -145,10 +182,10 @@ final class Page
     }
 
     /**
-     * Content-Security-Policy of the file page: no script except the one inline script, pinned by its hash.
+     * Content-Security-Policy of pages with the copy buttons (file page, about page): no script except the one inline script, pinned by its hash.
      * Everything else stays forbidden: no external resources, no inline event handlers.
      */
-    public static function fileContentSecurityPolicy(): string
+    public static function scriptContentSecurityPolicy(): string
     {
         return "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
     }
@@ -205,6 +242,15 @@ final class Page
             </html>
 
             HTML;
+    }
+
+    /** One command in a box with a copy button (hidden until the script runs, so that nobody gets a dead button). */
+    private static function copyBox(string $id, string $text): string
+    {
+        $text = self::e($text);
+
+        return '<div class="box"><code id="c-' . $id . '">' . $text . '</code>'
+            . '<button type="button" class="copy" data-copy="c-' . $id . '" aria-label="Copy" title="Copy" hidden>' . self::COPY_ICONS . '</button></div>';
     }
 
     private static function humanSize(int $bytes): string
@@ -269,6 +315,11 @@ final class Page
         JS;
 
     /** Two chain links with a gap, and a few spores. */
+    private const string PROJECT_URL = 'https://github.com/schorsch3000/Linkrot';
+
+    /** The mark of the headline, bigger, for the icon tile of the about page. */
+    private const string CHAIN_LARGE = '<svg viewBox="0 0 28 24" width="44" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 7H6a5 5 0 0 0 0 10h4"/><path d="M18 7h4a5 5 0 0 1 0 10h-4"/><circle cx="14" cy="4" r="1" stroke="none" fill="currentColor"/><circle cx="15.5" cy="21" r="1.1" stroke="none" fill="currentColor"/></svg>';
+
     private const string CHAIN = '<svg class="chain" viewBox="0 0 28 24" width="28" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 7H6a5 5 0 0 0 0 10h4"/><path d="M18 7h4a5 5 0 0 1 0 10h-4"/><circle cx="14" cy="4" r="1" class="spore" stroke="none" fill="currentColor"/><circle cx="12.5" cy="20" r=".8" class="spore" stroke="none" fill="currentColor"/><circle cx="15.5" cy="21" r="1.1" class="spore" stroke="none" fill="currentColor"/></svg>';
 
     private const string CSS = <<<'CSS'
@@ -349,6 +400,18 @@ final class Page
         .copy.done { color: var(--accent); }
         .copy.failed { color: #c0504d; }
         .gone .meta { margin-bottom: 0; }
+        .about .lead { margin: 0 0 1.25rem; color: var(--muted); }
+        .steps { margin: 0 0 .5rem; padding: 0; list-style: none; counter-reset: step; text-align: left; }
+        .steps li { position: relative; margin: .55rem 0; padding-left: 2.2rem; }
+        .steps li::before {
+          counter-increment: step; content: counter(step); position: absolute; left: 0; top: .1rem; width: 1.5rem; height: 1.5rem;
+          display: grid; place-items: center; border-radius: 50%; background: var(--code-bg); border: 1px solid var(--line);
+          font-size: .8rem; font-weight: 700; color: var(--accent);
+        }
+        .about .terminal { margin-bottom: 1.25rem; }
+        .small { margin: 1rem 0 0; font-size: .85rem; color: var(--muted); }
+        .small a { color: inherit; }
+        .about .button + .small { margin-top: 1.2rem; }
         footer { margin-top: 1.5rem; text-align: center; font-size: .9rem; font-style: italic; color: var(--muted); }
         CSS;
 }

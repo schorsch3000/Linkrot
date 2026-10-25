@@ -7,6 +7,7 @@ namespace Linkrot;
 use Closure;
 use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
+use Linkrot\Api\HomeController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
 use Linkrot\Auth\Authenticator;
@@ -65,6 +66,9 @@ final class App
         $this->router->add('DELETE', '/api/v1/files/{id}', $this->authed(
             static fn(Request $request, array $params): Response => $files()->delete($params['id']),
         ));
+        foreach (['GET', 'HEAD'] as $method) {
+            $this->router->add($method, '/', fn(): Response => new HomeController($this->config)->index());
+        }
         $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store);
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));

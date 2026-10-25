@@ -101,8 +101,8 @@ final class PageTest extends TestCase
             self::fail('no inline script');
         }
         $hash = base64_encode(hash('sha256', $m[1], true));
-        self::assertSame("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::fileContentSecurityPolicy());
-        self::assertStringNotContainsString('unsafe-eval', Page::fileContentSecurityPolicy());
+        self::assertSame("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::scriptContentSecurityPolicy());
+        self::assertStringNotContainsString('unsafe-eval', Page::scriptContentSecurityPolicy());
         self::assertDoesNotMatchRegularExpression('~\bsrc=|<script[^>]+src~', $html, 'no external script');
     }
 
@@ -126,7 +126,7 @@ final class PageTest extends TestCase
             self::assertStringContainsString('<link rel="icon" href="/favicon.ico" sizes="any">', $html);
             self::assertStringContainsString('<link rel="apple-touch-icon" href="/apple-touch-icon.png">', $html);
         }
-        foreach ([Page::fileContentSecurityPolicy(), Page::staticContentSecurityPolicy()] as $csp) {
+        foreach ([Page::scriptContentSecurityPolicy(), Page::staticContentSecurityPolicy()] as $csp) {
             self::assertStringContainsString("default-src 'none'", $csp);
             self::assertStringContainsString("img-src 'self'", $csp, 'same-origin images only');
         }

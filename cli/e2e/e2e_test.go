@@ -292,6 +292,11 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("redirect: %d %q", redirect.StatusCode, redirect.Header.Get("Location"))
 	}
 
+	// the root answers with the about page, without a token
+	if r, body := get(t, s.baseURL+"/", nil); r.StatusCode != 200 || !strings.Contains(string(body), "Links that rot.") || !strings.Contains(string(body), "linkrot config --server "+s.baseURL) {
+		t.Fatalf("about page: %d %q", r.StatusCode, body)
+	}
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

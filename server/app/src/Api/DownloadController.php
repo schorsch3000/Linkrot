@@ -46,7 +46,7 @@ final readonly class DownloadController
 
         return new Response(200, [
             'Content-Type' => 'text/html; charset=utf-8',
-            'Content-Security-Policy' => Page::fileContentSecurityPolicy(),
+            'Content-Security-Policy' => Page::scriptContentSecurityPolicy(),
         ] + self::SECURITY_HEADERS, $html);
     }
 

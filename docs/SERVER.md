@@ -123,6 +123,9 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
 
 ## Download
 
+- `GET /`: a small page about linkrot itself, in the style of the download pages: what it is, three steps, and example
+  commands with this server's URL (with copy buttons), plus links to the client releases and the source. Public, and it
+  shows nothing about the files or the configuration of the instance.
 - `GET /file/{id}/{name}`: simple page with filename, size and a download button. No expiry shown. If `{name}` does
   not match the stored name, answer `302` to the canonical URL. Everything is HTML-escaped and the page is served
   with a strict CSP (`default-src 'none'; style-src 'unsafe-inline'`). Viewing the page never consumes a use, so
