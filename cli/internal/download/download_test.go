@@ -289,3 +289,52 @@ func TestNotReadyAndUnknown(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestRealSleepWaitsAndIsInterruptible(t *testing.T) {
+	start := time.Now()
+	if err := sleep(context.Background(), 20*time.Millisecond); err != nil || time.Since(start) < 15*time.Millisecond {
+		t.Fatalf("sleep returned early or failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sleep(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestOpenPartCreatesResumesAndRefuses(t *testing.T) {
+	dir := t.TempDir()
+	part := filepath.Join(dir, "a.part")
+
+	f, have, err := openPart(part, 100)
+	if err != nil || have != 0 {
+		t.Fatalf("fresh: %d, %v", have, err)
+	}
+	if _, err := f.WriteString("12345"); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	f, have, err = openPart(part, 100)
+	if err != nil || have != 5 {
+		t.Fatalf("resume: %d, %v", have, err)
+	}
+	_ = f.Close()
+
+	if _, _, err := openPart(part, 3); err == nil || !strings.Contains(err.Error(), "larger than the file") {
+		t.Errorf("a part file larger than the file must be refused, got %v", err)
+	}
+
+	sub := filepath.Join(dir, "dirpart")
+	if err := os.Mkdir(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := openPart(sub, 100); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("a directory must be refused, got %v", err)
+	}
+
+	if _, _, err := openPart(filepath.Join(dir, "missing-dir", "a.part"), 100); err == nil {
+		t.Error("a part file in a missing directory must fail")
+	}
+}

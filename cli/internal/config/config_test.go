@@ -134,3 +134,48 @@ func TestCheckRefusesAStoredPlainHTTPServer(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSaveFailsClearlyWhenTheDirectoryCannotBeCreated(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("a file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := Save(filepath.Join(blocker, "sub", "config.toml"), Config{Server: "https://x", Token: "t"})
+
+	if err == nil || !strings.Contains(err.Error(), "create config directory") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestSaveFailsWhenTheTargetIsADirectoryAndLeavesNoTempFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "config.toml")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Save(target, Config{Server: "https://x", Token: "t"}); err == nil {
+		t.Fatal("renaming a file over a directory must fail")
+	}
+
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("a temporary file was left behind: %v", entries)
+	}
+}
+
+func TestSaveReplacesAnExistingFileAtomically(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	for _, token := range []string{"first", "second"} {
+		if err := Save(path, Config{Server: "https://x", Token: token}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c, err := Load(path)
+	if err != nil || c.Token != "second" {
+		t.Fatalf("%+v, %v", c, err)
+	}
+}

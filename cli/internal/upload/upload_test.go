@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -325,5 +326,87 @@ func TestHashFile(t *testing.T) {
 	got, err := hashFile(bytes.NewReader([]byte(content)), int64(len(content)), nil)
 	if err != nil || got != hex.EncodeToString(sum[:]) {
 		t.Fatalf("%q %v", got, err)
+	}
+}
+
+func TestDuplicateErrorMentionsTheExistingFile(t *testing.T) {
+	e := &DuplicateError{ID: "abcd7KfRtm4pWxnZ", URL: "https://x/file/abcd7KfRtm4pWxnZ/a"}
+
+	if got := e.Error(); !strings.Contains(got, "already exists") || !strings.Contains(got, "abcd7KfRtm4pWxnZ") {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestIsFatal(t *testing.T) {
+	cases := []struct {
+		err   error
+		fatal bool
+	}{
+		{&api.Error{Status: 401, Code: api.CodeUnauthorized}, true},
+		{&api.Error{Status: 409, Code: api.CodeLocked}, false},
+		{&api.Error{Status: 502}, false},
+		{&api.Error{Status: 507, Code: "insufficient_storage"}, true},
+		{api.ErrSourceChanged, true},
+		{context.Canceled, true},
+		{fmt.Errorf("wrapped: %w", context.Canceled), true},
+		{errors.New("connection reset by peer"), false},
+	}
+	for _, tc := range cases {
+		if got := isFatal(tc.err); got != tc.fatal {
+			t.Errorf("%v: fatal=%v, want %v", tc.err, got, tc.fatal)
+		}
+	}
+}
+
+func TestRetryGivesUpAndCountsAttempts(t *testing.T) {
+	o := &Options{MaxRetries: 2, Sleep: func(context.Context, time.Duration) error { return nil }}
+	calls := 0
+
+	err := retry(context.Background(), o, func() error { calls++; return errors.New("boom") })
+
+	if calls != 3 || err == nil || !strings.Contains(err.Error(), "giving up after 2 failed attempts") {
+		t.Fatalf("calls %d, err %v", calls, err)
+	}
+}
+
+func TestRetryStopsWhenSleepingIsInterrupted(t *testing.T) {
+	o := &Options{MaxRetries: 5, Sleep: func(context.Context, time.Duration) error { return context.Canceled }}
+	calls := 0
+
+	err := retry(context.Background(), o, func() error { calls++; return errors.New("boom") })
+
+	if !errors.Is(err, context.Canceled) || calls != 1 {
+		t.Fatalf("calls %d, err %v", calls, err)
+	}
+}
+
+func TestWaitBacksOffExponentiallyUpToACap(t *testing.T) {
+	var waits []time.Duration
+	o := &Options{Sleep: func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }}
+
+	for failure := 1; failure <= 8; failure++ {
+		if err := wait(context.Background(), o, errors.New("x"), failure); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	want := []time.Duration{1, 2, 4, 8, 16, 30, 30, 30}
+	for i, w := range want {
+		if waits[i] != w*time.Second {
+			t.Errorf("wait %d: %v, want %v", i+1, waits[i], w*time.Second)
+		}
+	}
+}
+
+func TestRealSleepWaitsAndIsInterruptible(t *testing.T) {
+	start := time.Now()
+	if err := sleep(context.Background(), 20*time.Millisecond); err != nil || time.Since(start) < 15*time.Millisecond {
+		t.Fatalf("sleep returned early or failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sleep(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
 	}
 }

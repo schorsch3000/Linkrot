@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -100,5 +102,76 @@ func TestUnknownSelectionAndValid(t *testing.T) {
 	}
 	if !Valid(OSC52) || !Valid(Clipboard) || !Valid(Primary) || Valid("secondary") {
 		t.Fatal("Valid")
+	}
+}
+
+func TestNewUsesTheRealEnvironmentAndTheGivenTerminal(t *testing.T) {
+	var term bytes.Buffer
+	t.Setenv("TMUX", "")
+
+	if err := New(&term).Copy(OSC52, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte("hello")) + "\a"; term.String() != want {
+		t.Fatalf("got %q want %q", term.String(), want)
+	}
+}
+
+func TestRunFeedsStdinToARealProgram(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "copied")
+
+	if err := run("sh", []string{"-c", `cat > "$0"`, out}, "https://x/y"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out) //nolint:gosec // a temp file of this test
+	if err != nil || string(got) != "https://x/y" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestRunReportsTheErrorOutputOfAFailingProgram(t *testing.T) {
+	err := run("sh", []string{"-c", "echo no display >&2; exit 3"}, "")
+
+	if err == nil || !strings.Contains(err.Error(), "sh:") || !strings.Contains(err.Error(), "no display") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRunReportsAProgramThatCannotStart(t *testing.T) {
+	if err := run("/nonexistent/linkrot-clip-tool", nil, ""); err == nil {
+		t.Fatal("a missing program must be an error")
+	}
+}
+
+func TestToolFailureIsReturned(t *testing.T) {
+	c, _, _ := newTestCopier(nil, "xclip")
+	c.Run = func(string, []string, string) error { return errors.New("xclip: cannot open display") }
+
+	if err := c.Copy(Clipboard, "u"); err == nil || !strings.Contains(err.Error(), "cannot open display") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestPbcopyHasNoPrimarySelection(t *testing.T) {
+	c, _, calls := newTestCopier(nil, "pbcopy")
+
+	if err := c.Copy(Primary, "u"); !errors.Is(err, ErrNoTool) {
+		t.Fatalf("got %v", err)
+	}
+	if err := c.Copy(Clipboard, "u"); err != nil || len(*calls) != 1 || (*calls)[0].name != "pbcopy" {
+		t.Fatalf("clipboard: %v, %+v", err, *calls)
+	}
+}
+
+func TestValid(t *testing.T) {
+	for _, ok := range []string{OSC52, Clipboard, Primary} {
+		if !Valid(ok) {
+			t.Errorf("%s must be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "secondary", "OSC52"} {
+		if Valid(bad) {
+			t.Errorf("%q must not be valid", bad)
+		}
 	}
 }
