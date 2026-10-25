@@ -29,6 +29,14 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    schema of this release (`app/bin/migrate`); on a first installation run `install.sh` again after step 4. The script's
    exit code is 0 for a missing config, and non-zero if the migration fails.
 
+   Once the config is valid it also checks the installation end to end (`app/bin/check-install`): with a temporary token
+   named `test-install-check` it asks the health endpoint, uploads a small file through `base_url`, opens its page,
+   downloads it and checks the headers (`Content-Disposition: attachment`, `nosniff`, and `X-Rot`, which only arrives
+   if the `/_files/` location of nginx passes it on, see [nginx.conf.example](nginx.conf.example)). The token and the
+   file are removed again, also when the check fails, and an old test token left by an interrupted run is replaced. A
+   failed check makes `install.sh` exit with 1. Run it as the user php-fpm runs as, after nginx is configured. On a host
+   that cannot reach its own `base_url`, use `install.sh --no-network-check`.
+
 4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; `app_data/`
    and everything in it must belong to the user php-fpm runs as. See [SERVER.md](SERVER.md#configuration) for all options.
 

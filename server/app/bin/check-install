@@ -1,0 +1,71 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Auth\TokenStore;
+use Linkrot\Cli\InstallCheck;
+use Linkrot\Config;
+use Linkrot\Database;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * End-to-end check of an installation, run by install.sh: a real round trip through the public base_url with a
+ * temporary token (health, upload, page, download, headers). Exit code 0 only if everything works.
+ * usage: check-install   (data directory: $LINKROT_DATA or ../../app_data)
+ */
+$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+
+try {
+    $config = Config::load($dataDir . '/config.php');
+    $pdo = Database::openCurrent($dataDir . '/linkrot.sqlite');
+} catch (Throwable $e) {
+    fwrite(STDERR, 'check-install: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+
+if (str_starts_with($config->baseUrl, 'https://') && !extension_loaded('openssl')) {
+    fwrite(STDERR, "check-install: PHP needs the openssl extension to reach an https base_url\n");
+    exit(1);
+}
+
+$base = rtrim($config->baseUrl, '/');
+$http = static function (string $method, string $path, array $headers, string $body) use ($base): array {
+    $lines = ['Connection: close'];
+    foreach ($headers as $name => $value) {
+        $lines[] = "$name: $value";
+    }
+    $context = stream_context_create(['http' => [
+        'method' => $method,
+        'header' => implode("\r\n", $lines),
+        'content' => $body,
+        'ignore_errors' => true,
+        'follow_location' => 0,
+        'timeout' => 30,
+        'protocol_version' => 1.1,
+    ], 'ssl' => ['verify_peer' => true, 'verify_peer_name' => true]]);
+    $result = @file_get_contents($base . $path, false, $context);
+    if ($result === false) {
+        $reason = error_get_last()['message'] ?? 'no answer';
+        throw new RuntimeException("cannot reach $base$path: $reason");
+    }
+    $status = 0;
+    $responseHeaders = [];
+    foreach ($http_response_header ?? [] as $line) {
+        if (preg_match('~^HTTP/\S+ (\d{3})~', $line, $match) === 1) {
+            $status = (int) $match[1];
+        } elseif (str_contains($line, ':')) {
+            [$name, $value] = explode(':', $line, 2);
+            $responseHeaders[strtolower(trim($name))] = trim($value);
+        }
+    }
+
+    return [$status, $responseHeaders, $result];
+};
+
+$check = new InstallCheck(new TokenStore($pdo), $http, static function (string $line): void {
+    fwrite(str_starts_with($line, 'FAILED') ? STDERR : STDOUT, "check-install: $line\n");
+});
+echo "check-install: round trip against $base with the temporary token " . InstallCheck::TOKEN_NAME . "\n";
+exit($check->run() ? 0 : 1);

@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 # Installs the production dependencies and checks the setup. Run after unpacking a release, and again after
 # every upgrade.
+# usage: install.sh [--no-network-check]
+#   --no-network-check  skip the round trip through base_url (offline installs, a host that cannot reach itself)
 set -euo pipefail
+
+network_check=1
+for arg in "$@"; do
+	case "$arg" in
+	--no-network-check) network_check=0 ;;
+	*)
+		echo "usage: install.sh [--no-network-check]" >&2
+		exit 2
+		;;
+	esac
+done
 
 cd "$(dirname "$0")"
 
@@ -69,3 +82,24 @@ MSG
 fi
 
 echo "install.sh: $config is valid."
+
+if [ "$network_check" = 0 ]; then
+	echo "install.sh: the end-to-end check was skipped (--no-network-check)."
+	exit 0
+fi
+
+# End to end: a temporary token (test-install-check, removed again) does health, upload, page, download and checks
+# the headers through the public base_url. A failure makes install.sh fail.
+if ! LINKROT_DATA="$data_dir" bin/check-install; then
+	cat >&2 <<MSG
+
+================================================================================
+ FAILED: the end-to-end check did not pass, see the lines above.
+ The installation itself is done. Fix the cause and run install.sh again; if this host cannot reach its own
+ base_url (hairpin NAT, no DNS), run install.sh --no-network-check.
+================================================================================
+
+MSG
+	exit 1
+fi
+echo "install.sh: end-to-end check passed."
