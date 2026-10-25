@@ -123,33 +123,51 @@ final class PageTest extends TestCase
         $html = Page::file($this->file(), 'https://lr.example');
 
         self::assertStringContainsString('<meta name="color-scheme" content="light dark">', $html);
-        self::assertStringContainsString('@media (prefers-color-scheme: dark)', $html);
-        self::assertStringContainsString('color-scheme: light dark;', $html);
+        $css = $this->asset('page.css');
+        self::assertStringContainsString('@media (prefers-color-scheme: dark)', $css);
+        self::assertStringContainsString('color-scheme: light dark;', $css);
     }
 
-    public function testNothingIsLoadedFromAnywhereAndThereIsNoScriptOrAnimation(): void
+    private function asset(string $name): string
     {
-        foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound()] as $html) {
-            foreach (['rel="stylesheet"', 'rel="preload"', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick'] as $forbidden) {
+        return (string) file_get_contents(__DIR__ . '/../htdocs/assets/' . $name);
+    }
+
+    public function testNothingIsLoadedFromAnywhereAndThereIsNoAnimation(): void
+    {
+        foreach ([Page::file($this->file(), 'https://lr.example'), Page::notFound(), Page::home()] as $html) {
+            foreach (['rel="preload"', '<img', '<iframe', 'url(', '@import', 'animation', 'transition', '@keyframes', 'onclick', '<style'] as $forbidden) {
                 self::assertStringNotContainsString($forbidden, $html, $forbidden);
             }
-            self::assertDoesNotMatchRegularExpression('~(src|href)="https?://~', $html);
+            if ($html !== Page::home()) { // the about page has one link to the project
+                self::assertDoesNotMatchRegularExpression('~(src|href)="https?://~', $html);
+            }
+            self::assertSame(1, substr_count($html, 'rel="stylesheet"'));
+            self::assertStringContainsString('<link rel="stylesheet" href="/assets/page.css">', $html);
+        }
+        foreach (['page.css', 'page.js'] as $asset) {
+            $content = $this->asset($asset);
+            foreach (['url(', '@import', 'animation', 'transition', '@keyframes', 'eval(', 'fetch(', 'XMLHttpRequest', 'innerHTML'] as $forbidden) {
+                self::assertStringNotContainsString($forbidden, $content, "$asset: $forbidden");
+            }
+            self::assertDoesNotMatchRegularExpression('~https?://~', $content, "$asset loads or mentions nothing external");
         }
     }
 
-    public function testTheOnlyScriptIsPinnedByTheContentSecurityPolicy(): void
+    public function testTheOnlyScriptIsALocalFileAndTheContentSecurityPolicySaysSo(): void
     {
         $html = Page::file($this->file(), 'https://lr.example');
 
         self::assertSame(1, substr_count($html, '<script'));
+        self::assertSame(1, substr_count($html, '<script src="/assets/page.js" defer></script>'), 'a local, deferred script');
         self::assertSame(0, substr_count(Page::notFound(), '<script'), 'no script on the not-found page');
-        if (preg_match('~<script>(.*?)</script>~s', $html, $m) !== 1) {
-            self::fail('no inline script');
+        self::assertSame(0, substr_count(Page::home(), '<script'), 'no script on the about page');
+        self::assertSame("default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'", Page::scriptContentSecurityPolicy());
+        self::assertSame("default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'", Page::staticContentSecurityPolicy());
+        foreach ([Page::scriptContentSecurityPolicy(), Page::staticContentSecurityPolicy()] as $csp) {
+            self::assertStringNotContainsString('unsafe-eval', $csp);
+            self::assertDoesNotMatchRegularExpression("~(script-src|style-src) [^;]*'unsafe-inline'~", $csp, 'inline style attributes only, via style-src-attr');
         }
-        $hash = base64_encode(hash('sha256', $m[1], true));
-        self::assertSame("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-$hash'", Page::scriptContentSecurityPolicy());
-        self::assertStringNotContainsString('unsafe-eval', Page::scriptContentSecurityPolicy());
-        self::assertDoesNotMatchRegularExpression('~\bsrc=|<script[^>]+src~', $html, 'no external script');
     }
 
     public function testEveryTerminalBoxHasACopyButtonThatStaysHiddenWithoutScript(): void
@@ -161,7 +179,7 @@ final class PageTest extends TestCase
         foreach ($buttons[1] as $id) {
             self::assertSame(1, substr_count($html, "<code id=\"$id\">"), "no code element for $id");
         }
-        self::assertStringContainsString('.copy[hidden] { display: none; }', $html);
+        self::assertStringContainsString('.copy[hidden] { display: none; }', $this->asset('page.css'));
         self::assertStringContainsString('class="copy"', $html);
     }
 
@@ -182,7 +200,7 @@ final class PageTest extends TestCase
     {
         $html = Page::file($this->file('<script>alert(1)</script>"\'&.txt'), "https://lr.example/x'y");
 
-        self::assertSame(1, substr_count($html, '<script>'), 'only our own script');
+        self::assertSame(0, substr_count($html, '<script>'), 'no inline script, the name is escaped');
         self::assertStringNotContainsString('alert(1)</script>', $html);
         self::assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;&quot;&#039;&amp;.txt', $html);
         self::assertStringNotContainsString("x'y/dl", $html);

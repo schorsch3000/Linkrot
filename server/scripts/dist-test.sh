@@ -15,6 +15,20 @@ for icon in favicon.svg favicon.ico apple-touch-icon.png; do
 	[ -f "$root/htdocs/$icon" ] || { echo "$icon is missing from the release" >&2; exit 1; }
 done
 
+# assets have content-hashed names, the manifest maps the plain names to them
+[ -f "$root/app/assets.php" ] || { echo "assets manifest is missing from the release" >&2; exit 1; }
+if [ -e "$root/htdocs/assets/page.css" ] || [ -e "$root/htdocs/assets/page.js" ]; then
+	echo "assets still have their plain names" >&2
+	exit 1
+fi
+for name in page.css page.js; do
+	# shellcheck disable=SC2016 # PHP code, not shell
+	hashed="$(php -r '$m = require $argv[1]; echo $m[$argv[2]] ?? "";' "$root/app/assets.php" "$name")"
+	[[ "$hashed" =~ ^${name%.*}\.[0-9a-f]{12}\.${name##*.}$ ]] || { echo "manifest has no hashed name for $name: '$hashed'" >&2; exit 1; }
+	[ -s "$root/htdocs/assets/$hashed" ] || { echo "$hashed is missing from the release" >&2; exit 1; }
+	[ "$(sha256sum "$root/htdocs/assets/$hashed" | cut -c1-12)" = "$(cut -d. -f2 <<<"$hashed")" ] || { echo "$hashed does not match its content" >&2; exit 1; }
+done
+
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 grep -q "ACTION REQUIRED" <<<"$out" || { echo "no instructions without config:" >&2; echo "$out" >&2; exit 1; }
 grep -q "$root/app_data/config.php" <<<"$out" || { echo "instructions do not name the file" >&2; exit 1; }
@@ -55,6 +69,14 @@ grep -q "end-to-end check passed" <<<"$out" || { echo "no end-to-end result:" >&
 grep -q "download headers: ok, X-Rot: " <<<"$out" || { echo "X-Rot was not checked:" >&2; echo "$out" >&2; exit 1; }
 tokens="$(LINKROT_DATA="$root/app_data" "$root/app/bin/lr-auth" ls)"
 ! grep -q "test-install-check" <<<"$tokens" || { echo "the test token was not removed" >&2; exit 1; }
+
+# the pages of the release link the hashed assets, and the server delivers them
+home="$(curl -fsS "http://127.0.0.1:$port/")"
+css="$(grep -oE '/assets/page\.[0-9a-f]{12}\.css' <<<"$home" | head -1)"
+[ -n "$css" ] || { echo "the about page does not link the hashed stylesheet" >&2; exit 1; }
+[[ "$(curl -sS -o /dev/null -w '%{http_code} %{content_type}' "http://127.0.0.1:$port$css")" =~ ^200\ text/css ]] || { echo "$css is not served as text/css" >&2; exit 1; }
+csp="$(curl -sSI "http://127.0.0.1:$port/" | tr -d '\r' | grep -i '^content-security-policy:')"
+grep -q "style-src 'self'" <<<"$csp" || { echo "unexpected content security policy: $csp" >&2; exit 1; }
 
 # a leftover test token of an interrupted run is replaced
 LINKROT_DATA="$root/app_data" "$root/app/bin/lr-auth" get test-install-check >/dev/null

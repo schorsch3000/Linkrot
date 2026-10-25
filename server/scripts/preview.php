@@ -33,14 +33,25 @@ $samples = [
 ];
 
 $links = [];
+// The pages link /assets/...; next to the files in a folder they need relative links and a copy of the assets.
+$page = static fn(string $html): string => str_replace(['href="/assets/', 'src="/assets/'], ['href="assets/', 'src="assets/'], $html);
+$assets = "$dir/assets";
+if (!is_dir($assets) && !mkdir($assets, 0o775, true) && !is_dir($assets)) {
+    fwrite(STDERR, "cannot create $assets\n");
+    exit(1);
+}
+foreach (glob(__DIR__ . '/../htdocs/assets/*') ?: [] as $asset) {
+    copy($asset, $assets . '/' . basename($asset));
+}
+
 foreach ($samples as $kind => [$name, $size]) {
     $file = new FileRecord('abcd7KfRtm4pWxn' . $kind[0], $name, $size, hash('sha256', $name), FileStatus::Ready, $size, 0, 0, 0, 0, 0, null);
-    file_put_contents("$dir/file-$kind.html", Page::file($file, 'https://linkrot.example'));
+    file_put_contents("$dir/file-$kind.html", $page(Page::file($file, 'https://linkrot.example')));
     $links[] = "<li><a href=\"file-$kind.html\">$kind: " . htmlspecialchars($name) . '</a></li>';
 }
-file_put_contents("$dir/home.html", Page::home());
+file_put_contents("$dir/home.html", $page(Page::home()));
 $links[] = '<li><a href="home.html">about page (/)</a></li>';
-file_put_contents("$dir/notfound.html", Page::notFound());
+file_put_contents("$dir/notfound.html", $page(Page::notFound()));
 $links[] = '<li><a href="notfound.html">not found</a></li>';
 file_put_contents("$dir/index.html", '<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark"><title>previews</title><ul>' . implode('', $links) . '</ul>');
 

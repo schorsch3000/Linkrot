@@ -10,81 +10,6 @@ use Linkrot\Files\FileRecord;
 /** HTML of the public pages: plain, no JavaScript, no external resources, light and dark. */
 final class Page
 {
-    /** Never mention a date or a number of downloads here: the pages must not reveal when a link dies. */
-    private const array TAGLINES = [
-        'A link, but it\'s rotting.',
-        'Fresh today. Compost tomorrow.',
-        'Best before: soon.',
-        'Handle with care, this link is not getting any fresher.',
-        'Smells fine for now.',
-        'Aging like milk.',
-        'Please consume before it goes off.',
-        'Shared fresh. Rotting already.',
-        'Mold is just patience with spores.',
-        'Download it before the mold does.',
-        'Keep refrigerated. Or don\'t, it rots either way.',
-        'Link rot: not a bug, a lifestyle.',
-        'Contains traces of mold.',
-        'Good things come to those who download early.',
-        'Nothing gold can stay. This link, even less.',
-        'Decomposing gracefully since the first click.',
-        'Some links age like wine. This one ages like bananas.',
-        'Brought to you by entropy.',
-        'Entropy always wins.',
-        'Slightly fermented.',
-        'Do not leave in a warm browser tab.',
-        'Fresh from the terminal, going stale at the speed of the internet.',
-        'The mold is patient. You should not be.',
-        'Organic, free-range, short-lived.',
-        'Made from freshly recycled bytes.',
-        'Tick, tock, mold.',
-        'It was a good link. It lived a short, full life.',
-        'Please do not bookmark me. I won\'t last.',
-        'Bookmarking this is a bold move.',
-        'Please do not feed the mold.',
-        'Compost in progress.',
-        'Spores included at no extra charge.',
-        'Your friendly neighbourhood decaying link.',
-        'Rot happens.',
-        'A link with a short shelf life.',
-        'Shelf life: unclear. Mold: certain.',
-        'Handle gently. It bruises easily.',
-        'Freshness not guaranteed.',
-        'Download now, regret less later.',
-        'Not every link is meant to be forever.',
-        'Everything is temporary, including this link.',
-        'Dust to dust, link to not-found.',
-        'Born fresh, raised on bandwidth, destined for the compost heap.',
-        'Gone before you know it, like a good sandwich.',
-        'No preservatives added.',
-        'Preservative-free since forever.',
-        'Mind the mold.',
-        'It\'s not rotten yet. Probably.',
-        'Slowly turning into fertilizer.',
-        'Smells a bit funky. Still fine.',
-        'Fungi are already moving in.',
-        'A fine specimen of impermanence.',
-        'Rotting with dignity.',
-        'Grab it while it\'s fresh.',
-        'Please enjoy before the mold arrives.',
-        'Link rot, but make it intentional.',
-        'The mold got here first. Barely.',
-        'Served fresh, rotting on schedule.',
-        'We keep the mold, you keep the file.',
-        'This link is in its ripe phase.',
-        'Ripe now, overripe soon.',
-        'Peak freshness. It\'s all downhill from here.',
-        'Fermenting quietly in a corner of the internet.',
-        'Slightly moist, entirely temporary.',
-        'Warm, soft and slowly dissolving.',
-        'Some assembly required. Some decay guaranteed.',
-        'Please keep away from damp servers.',
-        'Handle with tongs, it\'s getting fuzzy.',
-        'Marinating in bits and bytes.',
-        'Left out on the counter overnight.',
-        'Its best moment is right now.',
-    ];
-
     public static function file(FileRecord $file, string $baseUrl): string
     {
         $kind = FileKind::fromName($file->name);
@@ -160,7 +85,7 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Links that rot', $body, self::TAGLINES[0]);
+        return self::document('Links that rot', $body, self::taglines()[0]);
     }
 
     public static function notFound(): string
@@ -179,37 +104,43 @@ final class Page
     }
 
     /**
-     * Content-Security-Policy of pages with the copy buttons (file page, about page): no script except the one inline script, pinned by its hash.
-     * Everything else stays forbidden: no external resources, no inline event handlers.
+     * Content-Security-Policy of pages with a script (the file page): style and script only from this origin (htdocs/assets),
+     * no inline script and no inline event handlers. Inline `style` attributes are allowed for the icon colour (--hue) only.
+     * Everything else stays forbidden: no external resources.
      */
     public static function scriptContentSecurityPolicy(): string
     {
-        return "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'sha256-" . base64_encode(hash('sha256', self::SCRIPT, true)) . "'";
+        return self::staticContentSecurityPolicy() . "; script-src 'self'";
     }
 
     /** @return list<string> */
     public static function taglines(): array
     {
-        return self::TAGLINES;
+        /** @var list<string> $taglines */
+        static $taglines = require __DIR__ . '/taglines.php';
+
+        return $taglines;
     }
 
-    /** Content-Security-Policy of pages without a script (not found): only the favicon may be loaded. */
+    /** Content-Security-Policy of pages without a script (about, not found): the stylesheet and the favicon, from this origin. */
     public static function staticContentSecurityPolicy(): string
     {
-        return "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'";
+        return "default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'";
     }
 
     public static function tagline(string $seed): string
     {
-        return self::TAGLINES[crc32($seed) % count(self::TAGLINES)];
+        $taglines = self::taglines();
+
+        return $taglines[crc32($seed) % count($taglines)];
     }
 
     private static function document(string $title, string $body, string $tagline, bool $withScript = false): string
     {
-        $script = $withScript ? '<script>' . self::SCRIPT . '</script>' : '';
+        $script = $withScript ? '<script src="' . Assets::url('page.js') . '" defer></script>' : '';
         $title = self::e($title . ' · linkrot');
         $tagline = self::e($tagline);
-        $css = self::CSS;
+        $css = Assets::url('page.css');
         $chain = self::CHAIN;
 
         return <<<HTML
@@ -224,9 +155,7 @@ final class Page
             <link rel="icon" href="/favicon.ico" sizes="any">
             <link rel="apple-touch-icon" href="/apple-touch-icon.png">
             <title>$title</title>
-            <style>
-            $css
-            </style>
+            <link rel="stylesheet" href="$css">
             </head>
             <body>
             <main>
@@ -275,159 +204,12 @@ final class Page
     /** The copy button shows the first icon, and the second one for a moment after a successful copy. */
     private const string COPY_ICONS = '<svg class="i-copy" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><svg class="i-done" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
-    /** The only script of the site (copy buttons). Changing it changes its hash, which the CSP header derives from it. */
-    private const string SCRIPT = <<<'JS'
-        (function () {
-          function legacyCopy(el) {
-            var range = document.createRange();
-            range.selectNodeContents(el);
-            var selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            var ok = false;
-            try { ok = document.execCommand('copy'); } catch (e) {}
-            selection.removeAllRanges();
-            return ok;
-          }
-          function copy(el) {
-            if (navigator.clipboard && window.isSecureContext) {
-              return navigator.clipboard.writeText(el.textContent).then(function () { return true; }, function () { return legacyCopy(el); });
-            }
-            return Promise.resolve(legacyCopy(el));
-          }
-          document.querySelectorAll('button[data-qr]').forEach(function (button) {
-            var dialog = document.getElementById(button.getAttribute('data-qr'));
-            if (!dialog || !dialog.showModal) { return; }
-            button.hidden = false;
-            button.addEventListener('click', function () { dialog.showModal(); });
-            dialog.addEventListener('click', function (event) { if (event.target === dialog) { dialog.close(); } });
-          });
-          document.querySelectorAll('button[data-copy]').forEach(function (button) {
-            button.hidden = false;
-            button.addEventListener('click', function () {
-              copy(document.getElementById(button.getAttribute('data-copy'))).then(function (ok) {
-                button.classList.add(ok ? 'done' : 'failed');
-                button.setAttribute('aria-label', ok ? 'Copied' : 'Copy failed');
-                setTimeout(function () {
-                  button.classList.remove('done', 'failed');
-                  button.setAttribute('aria-label', 'Copy');
-                }, 1500);
-              });
-            });
-          });
-        })();
-        JS;
-
-    /** Two chain links with a gap, and a few spores. */
+    /** Where the button of the about page points. */
     private const string PROJECT_URL = 'https://github.com/schorsch3000/Linkrot';
 
     /** The mark of the headline, bigger, for the icon tile of the about page. */
     private const string CHAIN_LARGE = '<svg viewBox="0 0 28 24" width="44" height="38" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 7H6a5 5 0 0 0 0 10h4"/><path d="M18 7h4a5 5 0 0 1 0 10h-4"/><circle cx="14" cy="4" r="1" stroke="none" fill="currentColor"/><circle cx="15.5" cy="21" r="1.1" stroke="none" fill="currentColor"/></svg>';
 
+    /** Two chain links with a gap, and a few spores. */
     private const string CHAIN = '<svg class="chain" viewBox="0 0 28 24" width="28" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 7H6a5 5 0 0 0 0 10h4"/><path d="M18 7h4a5 5 0 0 1 0 10h-4"/><circle cx="14" cy="4" r="1" class="spore" stroke="none" fill="currentColor"/><circle cx="12.5" cy="20" r=".8" class="spore" stroke="none" fill="currentColor"/><circle cx="15.5" cy="21" r="1.1" class="spore" stroke="none" fill="currentColor"/></svg>';
-
-    private const string CSS = <<<'CSS'
-        :root {
-          color-scheme: light dark;
-          --bg: #f3f4ef; --card: #fff; --fg: #1c211d; --muted: #646f66; --line: #dde1d8;
-          --accent: #3d7a4b; --accent-fg: #fff; --code-bg: #f0f2ec;
-          --rot-a: #5a9a3c; --rot-b: #a07a2a;
-        }
-        @media (prefers-color-scheme: dark) {
-          :root {
-            --bg: #111411; --card: #1a1f1b; --fg: #e6ebe7; --muted: #94a096; --line: #2b332d;
-            --accent: #7dbd8b; --accent-fg: #0e1a11; --code-bg: #131813;
-            --rot-a: #8ccf5f; --rot-b: #c9a14a;
-          }
-        }
-        * { box-sizing: border-box; }
-        body {
-          margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
-          font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        }
-        main { max-width: 34rem; margin: 0 auto; padding: 2.5rem 1rem 2rem; }
-        .brand { display: flex; justify-content: center; margin-bottom: 1.5rem; }
-        .brand a { display: flex; align-items: center; gap: .6rem; color: inherit; text-decoration: none; border-radius: .4rem; }
-        .brand a:focus-visible { outline: 3px solid var(--rot-b); outline-offset: 4px; }
-        .chain { color: var(--muted); }
-        .spore { color: var(--rot-a); }
-        .word { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; }
-        .rot {
-          background: linear-gradient(90deg, var(--rot-a), var(--rot-b));
-          -webkit-background-clip: text; background-clip: text; color: transparent;
-          text-decoration: underline wavy var(--rot-b) 1px; text-underline-offset: .22em;
-        }
-        .card {
-          background: var(--card); border: 1px solid var(--line); border-radius: 1rem;
-          padding: 2rem 1.5rem; text-align: center; box-shadow: 0 1px 2px rgb(0 0 0 / .05), 0 8px 24px rgb(0 0 0 / .05);
-        }
-        .icon {
-          display: inline-grid; place-items: center; width: 4.5rem; height: 4.5rem; border-radius: 1.1rem;
-          color: hsl(var(--hue) 55% 40%); background: hsl(var(--hue) 60% 94%);
-        }
-        @media (prefers-color-scheme: dark) {
-          .icon { color: hsl(var(--hue) 65% 70%); background: hsl(var(--hue) 25% 20%); }
-        }
-        .name { margin: 1rem 0 .25rem; font-size: 1.35rem; line-height: 1.3; overflow-wrap: anywhere; }
-        .meta { margin: 0 0 1.5rem; color: var(--muted); }
-        .badge {
-          display: inline-block; margin-left: .35rem; padding: 0 .45rem; border: 1px solid var(--line);
-          border-radius: .4rem; font: .8rem ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        }
-        .button {
-          display: block; padding: .8rem 1.2rem; border-radius: .7rem; background: var(--accent); color: var(--accent-fg);
-          font-weight: 600; text-decoration: none;
-        }
-        .button:hover { filter: brightness(1.08); }
-        .button:focus-visible { outline: 3px solid var(--rot-b); outline-offset: 3px; }
-        @media (min-width: 30rem) { .button { display: inline-block; min-width: 14rem; } }
-        .actions { display: flex; gap: .6rem; justify-content: center; }
-        .actions .button { display: block; text-align: center; }
-        .actions .button:first-child { flex: 1 1 auto; }
-        @media (min-width: 30rem) { .actions .button:first-child { flex: 0 1 auto; min-width: 14rem; } }
-        .button.alt { min-width: 0; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-weight: 600; cursor: pointer; }
-        .button.alt[hidden] { display: none; }
-        .qr { width: min(20rem, 90vw); padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--card); color: var(--fg); }
-        .qr::backdrop { background: rgb(0 0 0 / .55); }
-        .qr-body { padding: 1.25rem; text-align: center; }
-        .qr svg { display: block; width: 100%; height: auto; border-radius: .5rem; }
-        .qr form { margin-top: 1rem; }
-        .qr .button { width: 100%; }
-        .terminal { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); text-align: left; }
-        .terminal h2 { margin: 0 0 .5rem; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-        .label { margin: .8rem 0 .2rem; font-size: .85rem; color: var(--muted); }
-        .muted { opacity: .8; }
-        /* A row: the text scrolls on its own on the left, the copy button has its own cell on the right. */
-        .box { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: .5rem; background: var(--code-bg); overflow: hidden; }
-        code {
-          flex: 1 1 auto; min-width: 0; display: block; padding: .5rem .7rem; background: transparent;
-          font: .85rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-x: auto; white-space: nowrap; user-select: all;
-          scrollbar-width: thin; scrollbar-color: var(--line) transparent;
-        }
-        code::-webkit-scrollbar { height: 6px; }
-        code::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
-        .copy {
-          flex: none; display: grid; place-items: start center; width: 2.6rem; padding: .62rem 0 0; border: 0;
-          border-left: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--muted); cursor: pointer;
-        }
-        .copy[hidden] { display: none; }
-        .copy:hover { color: var(--fg); background: var(--card); }
-        .copy:focus-visible { outline: 2px solid var(--rot-b); outline-offset: -3px; }
-        .copy .i-done, .copy.done .i-copy { display: none; }
-        .copy.done .i-done { display: block; }
-        .copy.done { color: var(--accent); }
-        .copy.failed { color: #c0504d; }
-        .gone .meta { margin-bottom: 0; }
-        .about .lead { margin: 0 0 1.25rem; color: var(--muted); }
-        .steps { margin: 0 0 .5rem; padding: 0; list-style: none; counter-reset: step; text-align: left; }
-        .steps li { position: relative; margin: .55rem 0; padding-left: 2.2rem; }
-        .steps li::before {
-          counter-increment: step; content: counter(step); position: absolute; left: 0; top: .1rem; width: 1.5rem; height: 1.5rem;
-          display: grid; place-items: center; border-radius: 50%; background: var(--code-bg); border: 1px solid var(--line);
-          font-size: .8rem; font-weight: 700; color: var(--accent);
-        }
-        .small { margin: 1rem 0 0; font-size: .85rem; color: var(--muted); }
-        .about .button { margin-top: 1.25rem; }
-        footer { margin-top: 1.5rem; text-align: center; font-size: .9rem; font-style: italic; color: var(--muted); }
-        CSS;
 }

@@ -23,6 +23,13 @@ server {
         try_files $uri /index.php$is_args$args;
     }
 
+    # stylesheet and script of the pages: release builds name them after their content (page.<hash>.css), so a cached
+    # copy is never stale and can be kept forever
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
     location ~ ^/index\.php$ {
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $document_root/index.php;

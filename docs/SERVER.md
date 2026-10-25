@@ -133,7 +133,11 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   the instance.
 - `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`. No expiry shown. If `{name}` does
   not match the stored name, answer `302` to the canonical URL. Everything is HTML-escaped and the page is served
-  with a strict CSP (`default-src 'none'; style-src 'unsafe-inline'`). Viewing the page never consumes a use, so
+  with a strict CSP (`default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'`:
+  stylesheet and script come from this origin only, `htdocs/assets/page.css` and `page.js`, there is no inline script and
+  no inline style element; the style attribute is allowed for the icon colour only). A release build renames the assets
+  after their content (`page.<hash>.css`, mapping in `app/assets.php`, `scripts/build-assets.sh`), so nginx can cache
+  them forever, see [nginx.conf.example](nginx.conf.example). Viewing the page never consumes a use, so
   chat link previews are harmless.
 - `GET /dl/{id}/{name}`: the actual download. The name segment is not checked (the stored name is always used in
   the headers). Headers: `Content-Disposition: attachment` (always enforced), `Content-Type:

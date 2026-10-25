@@ -12,7 +12,8 @@ install:
 	composer --working-dir=app install --no-interaction
 
 # PHP needs no compilation. `build` assembles exactly what is deployed (htdocs + app, without vendor/):
-# the target runs `composer install --no-dev` itself as part of the deployment. A release version (1.2.3) is written
+# the target runs `composer install --no-dev` itself as part of the deployment. The files in htdocs/assets get
+# content-hashed names (cache busting), see scripts/build-assets.sh. A release version (1.2.3) is written
 # into the composer.json of the build; the default dev and the ci of the CI leave it alone.
 build:
 	rm -rf $(DIST)
@@ -20,6 +21,7 @@ build:
 	cp -r app/src app/bin app/composer.lock app/install.sh $(DIST)/app/
 	scripts/stamp-version.sh app/composer.json $(DIST)/app/composer.json $(VERSION)
 	cp -r htdocs/. $(DIST)/htdocs/
+	scripts/build-assets.sh $(DIST)/htdocs $(DIST)/app
 
 # Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner and mtime).
 dist: build
@@ -49,7 +51,8 @@ test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
 
 lint:
-	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh
+	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh scripts/build-assets.sh
+	@if command -v node >/dev/null; then node --check htdocs/assets/page.js; else echo 'node not found, page.js is not syntax checked'; fi
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff

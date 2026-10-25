@@ -41,11 +41,12 @@ final class HomeTest extends AppTestCase
     {
         $html = $this->request('GET', '/', auth: false)->body;
 
-        self::assertStringContainsString('@media (prefers-color-scheme: dark)', $html);
+        self::assertStringContainsString('<link rel="stylesheet" href="/assets/page.css">', $html);
+        self::assertStringContainsString('@media (prefers-color-scheme: dark)', (string) file_get_contents(__DIR__ . '/../htdocs/assets/page.css'));
         self::assertStringContainsString('<meta name="color-scheme" content="light dark">', $html);
         self::assertStringContainsString('<link rel="icon" href="/favicon.svg" type="image/svg+xml">', $html);
         self::assertStringContainsString('class="card about"', $html);
-        foreach (['<img', '<iframe', 'url(', '@import', 'animation', 'transition', 'onclick', 'rel="stylesheet"'] as $forbidden) {
+        foreach (['<img', '<iframe', 'url(', '@import', 'animation', 'transition', 'onclick', '<style'] as $forbidden) {
             self::assertStringNotContainsString($forbidden, $html, $forbidden);
         }
     }

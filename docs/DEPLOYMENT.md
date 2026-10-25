@@ -55,7 +55,9 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    `open() ".../app_data/files/<id>" failed (13: Permission denied)` in nginx's error log; `namei -l <path to a file>` shows
    which directory is the problem.
 5. Add the server block from [nginx.conf.example](nginx.conf.example) (`root` is `{deployroot}/htdocs`, the internal
-   `/_files/` location points at `{deployroot}/app_data/files/`).
+   `/_files/` location points at `{deployroot}/app_data/files/`). Its `/assets/` location caches the stylesheet and the
+   script of the pages forever; that is safe because a release names them after their content, so an upgrade brings new
+   names.
 6. Create a token for every device, as the web user. The token is shown once:
 
    ```

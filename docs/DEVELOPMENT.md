@@ -12,6 +12,7 @@ server/
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
   htdocs/index.php   front controller
+  htdocs/assets/     page.css and page.js of the pages (a release build renames them after their content)
   app_data/              local dev data (gitignored)
   tests/
 cli/
