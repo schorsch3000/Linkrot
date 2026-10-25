@@ -7,6 +7,7 @@ namespace Linkrot\Tests;
 use Linkrot\Config;
 use Linkrot\DownloadMode;
 use Linkrot\Tests\Support\AppTestCase;
+use Linkrot\Web\HeaderTaglines;
 
 final class DownloadTest extends AppTestCase
 {
@@ -59,6 +60,7 @@ final class DownloadTest extends AppTestCase
         self::assertSame("attachment; filename=\"_bung.txt\"; filename*=UTF-8''%C3%9Cbung.txt", $response->headers['Content-Disposition']);
         self::assertSame('application/octet-stream', $response->headers['Content-Type']);
         self::assertSame('nosniff', $response->headers['X-Content-Type-Options']);
+        self::assertSame(HeaderTaglines::pick($id), $response->headers['X-Rot']);
         self::assertSame('', $response->body);
     }
 

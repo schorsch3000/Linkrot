@@ -13,6 +13,7 @@ use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
+use Linkrot\Web\HeaderTaglines;
 use Linkrot\Web\Page;
 
 /** The public part: /file/{id}/{name} (page) and /dl/{id}/{name} (download). No authentication. */
@@ -65,6 +66,7 @@ final readonly class DownloadController
         $headers = [
             'Content-Type' => 'application/octet-stream',
             'Content-Disposition' => FileName::contentDisposition($file->name),
+            HeaderTaglines::HEADER => HeaderTaglines::pick($file->id),
         ] + self::SECURITY_HEADERS;
 
         if ($this->config->downloadMode === DownloadMode::Xaccel) {

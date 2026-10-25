@@ -36,6 +36,8 @@ server {
         # Cache-Control and a few more survive), so security headers must be set here.
         add_header X-Content-Type-Options nosniff always;
         add_header Referrer-Policy no-referrer always;
+        # optional, for people who read headers: the tagline PHP sent along (omitted when empty)
+        add_header X-Rot $upstream_http_x_rot always;
         alias {deployroot}/app_data/files/;
     }
 }

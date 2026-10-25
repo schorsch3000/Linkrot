@@ -134,6 +134,10 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   the headers). Headers: `Content-Disposition: attachment` (always enforced), `Content-Type:
   application/octet-stream`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, and
   `X-Accel-Redirect: /_files/<id>`. nginx adds `Content-Length` and handles `Range`.
+  For the nerds there is also `X-Rot: <line>`, a tagline in the shape of header parameters (`ripe; mold=low; ...`).
+  A file always gets the same line. nginx drops it unless the `/_files/` location passes it on with
+  `add_header X-Rot $upstream_http_x_rot always;` (in [nginx.conf.example](nginx.conf.example)); without that line
+  the header is just missing.
 - A file is only served if it is `ready`, not past `expires_at` and not exhausted. A file that is past its time
   is treated as **not found** and removed on the spot.
 - **Uses.** A `GET` counts as a use if it has no `Range` header or a range starting at 0. `HEAD` and the

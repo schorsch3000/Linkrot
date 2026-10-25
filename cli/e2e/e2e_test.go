@@ -156,6 +156,7 @@ http {
       internal;
       add_header X-Content-Type-Options nosniff always;
       add_header Referrer-Policy no-referrer always;
+      add_header X-Rot $upstream_http_x_rot always;
       alias %[4]s/files/;
     }
   }
@@ -330,6 +331,9 @@ func lifecycle(t *testing.T, s *stack) {
 		}
 		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Fatal("nosniff must be set by nginx for X-Accel responses")
+		}
+		if resp.Header.Get("X-Rot") == "" {
+			t.Fatal("the X-Rot tagline must get through nginx")
 		}
 		if r, _ := get(t, s.baseURL+"/_files/"+file.ID, nil); r.StatusCode != 404 {
 			t.Fatalf("internal location reachable: %d", r.StatusCode)
