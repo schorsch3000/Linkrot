@@ -2,7 +2,7 @@
     "name": "schorsch3000/linkrot-server",
     "description": "Linkrot server: expiring file sharing links",
     "type": "project",
-    "license": "proprietary",
+    "license": "GPL-3.0-or-later",
     "require": {
         "php": ">=8.4",
         "ext-apcu": "*",

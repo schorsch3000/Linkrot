@@ -22,6 +22,7 @@ build:
 	scripts/stamp-version.sh app/composer.json $(DIST)/app/composer.json $(VERSION)
 	cp -r htdocs/. $(DIST)/htdocs/
 	scripts/build-assets.sh $(DIST)/htdocs $(DIST)/app
+	cp ../LICENSE $(DIST)/app/LICENSE
 
 # Release tarball: two top-level folders, htdocs and app. Reproducible (sorted, fixed owner and mtime).
 dist: build

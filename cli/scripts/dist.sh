@@ -36,6 +36,7 @@ build() {
 	[ "$goos" = windows ] && exe="linkrot.exe"
 
 	stage="$(mktemp -d)"
+	cp ../LICENSE "$stage/LICENSE"
 	echo "building $name"
 	CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="${goarm:-}" \
 		go build -trimpath \
@@ -43,10 +44,10 @@ build() {
 		-o "$stage/$exe" ./cmd/linkrot
 
 	if [ "$goos" = windows ]; then
-		(cd "$stage" && TZ=UTC touch -d "$mtime" "$exe" && zip -q -X "$OLDPWD/dist/$name.zip" "$exe")
+		(cd "$stage" && TZ=UTC touch -d "$mtime" "$exe" LICENSE && zip -q -X "$OLDPWD/dist/$name.zip" "$exe" LICENSE)
 	else
 		tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="$mtime" \
-			-C "$stage" -czf "dist/$name.tar.gz" "$exe"
+			-C "$stage" -czf "dist/$name.tar.gz" "$exe" LICENSE
 	fi
 	rm -rf "$stage"
 }

@@ -27,6 +27,20 @@ and not worry about cleaning up later.
 - **Terminal friendly.** Results go to stdout, progress and messages to stderr, `--json` where it makes sense,
   shell completion for bash, zsh and fish.
 
+## License
+
+Copyright (C) 2026 Schorsch3000
+
+Linkrot is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is
+distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text. Every release archive
+contains it.
+
+The dependencies keep their own licenses, all compatible with the GPL: `bacon/bacon-qr-code` (BSD-2-Clause),
+`dasprid/enum` (BSD-2-Clause), `spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
+(MIT), `inconshreveable/mousetrap` (Apache-2.0). Development tools are not shipped.
+
 ## Documentation
 
 | Document | Content |
