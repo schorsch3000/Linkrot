@@ -37,7 +37,7 @@ jobs:
       - id: v
         run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
       - run: make -C server dist VERSION=${{ steps.v.outputs.version }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: server-dist
           path: server/build/linkrot-server-*.tar.gz
@@ -55,7 +55,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - run: make -C cli dist VERSION=${{ steps.v.outputs.version }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cli-dist
           path: |
