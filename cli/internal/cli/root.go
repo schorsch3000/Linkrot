@@ -26,7 +26,8 @@ var Version = "dev"
 
 // App holds what commands need from the environment, so tests can replace it.
 type App struct {
-	Name       string // program name, derived from argv[0]
+	Name       string    // program name, derived from argv[0]
+	In         io.Reader // standard input, os.Stdin if nil
 	Out        io.Writer
 	Err        io.Writer
 	ConfigPath func() (string, error)
@@ -47,6 +48,13 @@ func Execute(name string, args []string, stdout, stderr io.Writer) int {
 	app := &App{Name: name, Out: stdout, Err: stderr, ConfigPath: config.Path}
 	app.Copy = clip.New(terminalOrNil(stderr)).Copy
 	return app.Run(args)
+}
+
+func (a *App) stdin() io.Reader {
+	if a.In == nil {
+		return os.Stdin
+	}
+	return a.In
 }
 
 // Run executes the command line and returns the exit code.

@@ -34,13 +34,16 @@ func (a *App) upCommand() *cobra.Command {
 		asJSON                 bool
 	)
 	cmd := &cobra.Command{
-		Use:   "up <file> [flags]",
-		Short: "Upload a file and print its URL",
+		Use:   "up [file] [flags]",
+		Short: "Upload a file (or stdin) and print its URL",
 		Long: "Uploads a file in resumable chunks and prints the share URL on stdout.\n" +
 			"Progress goes to stderr. If the same file already exists on the server, its URL is printed and\n" +
-			"the exit code is 3.",
-		Example: fmt.Sprintf("  %[1]s up report.pdf --rm-after 2d\n  %[1]s up big.iso --uses 1 --copy", a.Name),
-		Args:    usageArgs(cobra.ExactArgs(1)),
+			"the exit code is 3.\n\n" +
+			"Without a file (or with `-`) the data is read from stdin, which must not be a terminal. The size and\n" +
+			"the hash are not known up front, so the upload cannot be resumed after the program is gone, and the\n" +
+			"name on the server is \"" + upload.StreamName + "\" unless --mv says otherwise.",
+		Example: fmt.Sprintf("  %[1]s up report.pdf --rm-after 2d\n  %[1]s up big.iso --uses 1 --copy\n  pg_dump db | gzip | %[1]s up --mv db.sql.gz", a.Name),
+		Args:    usageArgs(cobra.MaximumNArgs(1)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			flags := cmd.Flags()
 			opts := upload.Options{Name: name}
@@ -62,6 +65,10 @@ func (a *App) upCommand() *cobra.Command {
 			if flags.Changed("copy") && !clip.Valid(copySel) {
 				return usageErrorf("invalid --copy value %q: use --copy, --copy=clipboard or --copy=primary", copySel)
 			}
+			fromStdin := len(args) == 0 || args[0] == "-"
+			if fromStdin && progress.IsTerminal(a.stdin()) {
+				return usageErrorf("no file given and stdin is a terminal: name a file or pipe data in")
+			}
 			client, err := a.client()
 			if err != nil {
 				return err
@@ -69,7 +76,13 @@ func (a *App) upCommand() *cobra.Command {
 			if err := a.preflight(cmd.Context(), client); err != nil {
 				return err
 			}
-			return a.runUp(cmd.Context(), client, args[0], opts, flags.Changed("copy"), copySel, asJSON)
+			send := func(ctx context.Context, o upload.Options) (*api.File, error) {
+				if fromStdin {
+					return upload.UploadStream(ctx, client, a.stdin(), o)
+				}
+				return upload.Upload(ctx, client, args[0], o)
+			}
+			return a.runUp(cmd.Context(), send, opts, flags.Changed("copy"), copySel, asJSON)
 		},
 	}
 	f := cmd.Flags()
@@ -82,7 +95,7 @@ func (a *App) upCommand() *cobra.Command {
 	return cmd
 }
 
-func (a *App) runUp(ctx context.Context, client *api.Client, path string, opts upload.Options, doCopy bool, copySel string, asJSON bool) error {
+func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Options) (*api.File, error), opts upload.Options, doCopy bool, copySel string, asJSON bool) error {
 	var bar *progress.Bar
 	finish := func() {
 		if bar != nil {
@@ -108,7 +121,7 @@ func (a *App) runUp(ctx context.Context, client *api.Client, path string, opts u
 	}
 	opts.Sleep = a.Sleep
 
-	file, err := upload.Upload(ctx, client, path, opts)
+	file, err := send(ctx, opts)
 	finish()
 
 	var dup *upload.DuplicateError

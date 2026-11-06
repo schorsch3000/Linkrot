@@ -68,6 +68,7 @@ Makefile           delegates to server/ and cli/
 | --- | --- |
 | Public file id | 16 random characters, first 4 lowercase, lookalikes `1 0 l o I O` removed (see [SERVER.md](docs/SERVER.md#identifiers)). No uuid, no sqids. |
 | Upload | sequential chunks, each chunk followed by its own sha256, whole-file sha256 verified at completion |
+| Streaming upload | `lr up` reads stdin when no file is given (refused on a terminal): created without size and hash, same verified chunks, sealed with the sha256 of everything (see [API.md](docs/API.md#streaming-uploads)) |
 | Duplicate uploads | refused; the existing file is reported |
 | Expiry | `rm-after` counts from upload completion (`up`) or from now (`set`); capped by a mandatory server-side maximum |
 | Download limit | optional `--uses n`; exhausted files count as expired |

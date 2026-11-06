@@ -11,8 +11,8 @@ final readonly class FileRecord
     public function __construct(
         public string $id,
         public string $name,
-        public int $size,
-        public string $sha256,
+        public ?int $size,
+        public ?string $sha256,
         public FileStatus $status,
         public int $uploadOffset,
         public int $createdAt,
@@ -29,8 +29,8 @@ final readonly class FileRecord
         return new self(
             id: (string) $row['id'],
             name: (string) $row['name'],
-            size: (int) $row['size'],
-            sha256: (string) $row['sha256'],
+            size: $row['size'] === null ? null : (int) $row['size'],
+            sha256: $row['sha256'] === null ? null : (string) $row['sha256'],
             status: FileStatus::from((string) $row['status']),
             uploadOffset: (int) $row['upload_offset'],
             createdAt: (int) $row['created_at'],
@@ -40,6 +40,12 @@ final readonly class FileRecord
             expiresAt: $row['expires_at'] === null ? null : (int) $row['expires_at'],
             usesLeft: $row['uses_left'] === null ? null : (int) $row['uses_left'],
         );
+    }
+
+    /** A streaming upload does not know its size and sha256 until it is sealed. */
+    public function isStream(): bool
+    {
+        return $this->size === null;
     }
 
     public function isReady(): bool

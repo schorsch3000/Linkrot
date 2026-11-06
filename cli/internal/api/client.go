@@ -65,6 +65,27 @@ func (c *Client) Create(ctx context.Context, req CreateRequest) (*File, error) {
 	return &f, c.do(ctx, http.MethodPost, "/api/v1/files", bytes.NewReader(body), int64(len(body)), "application/json", nil, &f)
 }
 
+// CreateStream starts a streaming upload (no size, no hash yet); Stream is set for the caller.
+func (c *Client) CreateStream(ctx context.Context, req CreateStreamRequest) (*File, error) {
+	req.Stream = true
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	var f File
+	return &f, c.do(ctx, http.MethodPost, "/api/v1/files", bytes.NewReader(body), int64(len(body)), "application/json", nil, &f)
+}
+
+// Seal completes a streaming upload: the server compares size and sha256 with what it received.
+func (c *Client) Seal(ctx context.Context, id string, size int64, sha256 string) (*File, error) {
+	body, err := json.Marshal(SealRequest{Size: size, SHA256: sha256})
+	if err != nil {
+		return nil, err
+	}
+	var f File
+	return &f, c.do(ctx, http.MethodPost, "/api/v1/files/"+url.PathEscape(id)+"/seal", bytes.NewReader(body), int64(len(body)), "application/json", nil, &f)
+}
+
 // Get returns one file.
 func (c *Client) Get(ctx context.Context, id string) (*File, error) {
 	var f File

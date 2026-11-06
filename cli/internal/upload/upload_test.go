@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -408,5 +409,251 @@ func TestRealSleepWaitsAndIsInterruptible(t *testing.T) {
 	cancel()
 	if err := sleep(ctx, time.Hour); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestStreamUploadSealsWithTheFinalHash(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+	var done, totals []int64
+	o.OnProgress = func(d, total int64) { done, totals = append(done, d), append(totals, total) }
+	o.RmAfter = "2d"
+
+	file, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sum := sha256.Sum256([]byte(content))
+	if file.Status != api.StatusReady || file.URL == "" || file.Name != StreamName || file.Size != int64(len(content)) || file.SHA256 != hex.EncodeToString(sum[:]) {
+		t.Fatalf("%+v", file)
+	}
+	if string(s.Content(file.ID)) != content || s.Chunks != 4 {
+		t.Fatalf("content %q, %d chunks", s.Content(file.ID), s.Chunks)
+	}
+	if fmt.Sprint(done) != "[0 10 20 30 31]" {
+		t.Fatalf("progress %v", done)
+	}
+	for _, total := range totals {
+		if total >= 0 {
+			t.Fatalf("the total is unknown, got %v", totals)
+		}
+	}
+}
+
+func TestStreamUploadNameAndShortReads(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+	o.Name = "dump.sql"
+
+	// A reader that hands out a few bytes at a time must still produce full chunks.
+	file, err := UploadStream(context.Background(), c, &trickle{data: []byte(content), n: 3}, *o)
+
+	if err != nil || file.Name != "dump.sql" || string(s.Content(file.ID)) != content || s.Chunks != 4 {
+		t.Fatalf("%+v, %v, %d chunks", file, err, s.Chunks)
+	}
+}
+
+type trickle struct {
+	data []byte
+	n    int
+}
+
+func (r *trickle) Read(p []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := min(r.n, len(p), len(r.data))
+	copy(p, r.data[:n])
+	r.data = r.data[n:]
+	return n, nil
+}
+
+func TestStreamUploadOfExactlyFullChunksAndOfNothing(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+
+	file, err := UploadStream(context.Background(), c, strings.NewReader("0123456789ABCDEFGHIJ"), *o)
+	if err != nil || file.Size != 20 || s.Chunks != 2 {
+		t.Fatalf("%+v, %v, %d chunks", file, err, s.Chunks)
+	}
+
+	file, err = UploadStream(context.Background(), c, strings.NewReader(""), *o)
+	if err != nil || file.Status != api.StatusReady || file.Size != 0 || s.Chunks != 2 {
+		t.Fatalf("%+v, %v, %d chunks", file, err, s.Chunks)
+	}
+}
+
+func TestStreamUploadReportsADuplicate(t *testing.T) {
+	s, c := setup(t)
+	id := s.Add("first.txt", []byte(content))
+	o, _ := newOptions()
+
+	_, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+
+	var dup *DuplicateError
+	if !errors.As(err, &dup) || dup.ID != id || dup.URL == "" {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestStreamUploadRetriesAChunkFromItsBuffer(t *testing.T) {
+	s, c := setup(t)
+	o, sleeps := newOptions()
+	fail := 2
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if fail > 0 && r.Method == http.MethodPatch && r.Header.Get("Upload-Offset") == "10" {
+			fail--
+			return 503, nil, "busy"
+		}
+		return 0, nil, ""
+	}
+
+	file, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+
+	if err != nil || string(s.Content(file.ID)) != content || len(*sleeps) != 2 {
+		t.Fatalf("%v, %q, sleeps %v", err, s.Content(file.ID), *sleeps)
+	}
+}
+
+func TestStreamUploadRecoversALostAnswer(t *testing.T) {
+	for name, offset := range map[string]string{"middle chunk": "10", "last chunk": "30"} {
+		t.Run(name, func(t *testing.T) {
+			s, c := setup(t)
+			o, _ := newOptions()
+			inner := s.Config.Handler
+			lost := false
+			s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !lost && r.Method == http.MethodPatch && r.Header.Get("Upload-Offset") == offset {
+					lost = true
+					inner.ServeHTTP(&discardWriter{}, r)
+					http.Error(w, "gateway", http.StatusBadGateway)
+					return
+				}
+				inner.ServeHTTP(w, r)
+			})
+
+			file, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+
+			if err != nil || string(s.Content(file.ID)) != content || s.Chunks != 4 {
+				t.Fatalf("%v, %q, %d chunks", err, s.Content(file.ID), s.Chunks)
+			}
+		})
+	}
+}
+
+func TestStreamUploadRetriesALostSeal(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+	inner := s.Config.Handler
+	lost := false
+	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !lost && strings.HasSuffix(r.URL.Path, "/seal") {
+			lost = true
+			inner.ServeHTTP(&discardWriter{}, r)
+			http.Error(w, "gateway", http.StatusBadGateway)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+
+	file, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+
+	if err != nil || file.Status != api.StatusReady || !lost {
+		t.Fatalf("%+v, %v", file, err)
+	}
+}
+
+func TestStreamUploadCannotGoBack(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPatch && r.Header.Get("Upload-Offset") == "20" {
+			return 409, nil, `{"error":{"code":"offset_mismatch","message":"no","offset":10}}`
+		}
+		return 0, nil, ""
+	}
+
+	_, err := UploadStream(context.Background(), c, strings.NewReader(content), *o)
+
+	if err == nil || !strings.Contains(err.Error(), "cannot go back") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestStreamUploadGivesUpAndStopsOnFatalErrors(t *testing.T) {
+	s, c := setup(t)
+	o, sleeps := newOptions()
+	o.MaxRetries = 2
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPatch {
+			return 503, nil, "busy"
+		}
+		return 0, nil, ""
+	}
+	if _, err := UploadStream(context.Background(), c, strings.NewReader(content), *o); err == nil || !strings.Contains(err.Error(), "giving up after 2") || len(*sleeps) != 2 {
+		t.Fatalf("%v, sleeps %v", err, *sleeps)
+	}
+
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPatch {
+			return 413, nil, `{"error":{"code":"too_large","message":"too big"}}`
+		}
+		return 0, nil, ""
+	}
+	if _, err := UploadStream(context.Background(), c, strings.NewReader(content), *o); err == nil || !strings.Contains(err.Error(), "too big") {
+		t.Fatalf("%v", err)
+	}
+
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if strings.HasSuffix(r.URL.Path, "/seal") {
+			return 422, nil, `{"error":{"code":"file_hash_mismatch","message":"nope"}}`
+		}
+		return 0, nil, ""
+	}
+	if _, err := UploadStream(context.Background(), c, strings.NewReader(content), *o); err == nil || !strings.Contains(err.Error(), "file_hash_mismatch") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestStreamUploadInputAndServerProblems(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+
+	if _, err := UploadStream(context.Background(), c, io.MultiReader(strings.NewReader("abc"), failingReader{}), *o); err == nil || !strings.Contains(err.Error(), "read input") {
+		t.Errorf("read error: %v", err)
+	}
+
+	s.ChunkSize = 0
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/files" {
+			return 201, nil, `{"id":"x","status":"uploading"}`
+		}
+		return 0, nil, ""
+	}
+	if _, err := UploadStream(context.Background(), c, strings.NewReader("abc"), *o); err == nil || !strings.Contains(err.Error(), "chunk size") {
+		t.Errorf("no chunk size: %v", err)
+	}
+
+	s.Intercept = func(*http.Request) (int, http.Header, string) {
+		return 401, nil, `{"error":{"code":"unauthorized","message":"bad token"}}`
+	}
+	if _, err := UploadStream(context.Background(), c, strings.NewReader("abc"), *o); err == nil || !strings.Contains(err.Error(), "bad token") {
+		t.Errorf("create refused: %v", err)
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("disk on fire") }
+
+func TestStreamUploadStopsWhenCancelled(t *testing.T) {
+	_, c := setup(t)
+	o, _ := newOptions()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := UploadStream(ctx, c, strings.NewReader(content), *o); !errors.Is(err, context.Canceled) {
+		t.Fatalf("%v", err)
 	}
 }

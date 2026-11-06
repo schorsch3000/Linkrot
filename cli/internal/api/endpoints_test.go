@@ -170,3 +170,50 @@ func TestErrorMessages(t *testing.T) {
 		t.Errorf("with a code: %q", got)
 	}
 }
+
+func TestCreateStreamAnnouncesNoSizeAndNoHash(t *testing.T) {
+	c, seen := newRecordingServer(t, 201, `{"id":"abcd","status":"uploading","size":null,"sha256":null,"chunk_size":10}`)
+	uses := 2
+
+	f, err := c.CreateStream(context.Background(), CreateStreamRequest{Name: "stdin", RmAfter: "2d", Uses: &uses})
+
+	if err != nil || f.ID != "abcd" || f.ChunkSize != 10 {
+		t.Fatalf("%+v, %v", f, err)
+	}
+	r := (*seen)[0]
+	if r.method != "POST" || r.path != "/api/v1/files" || r.contentType != "application/json" {
+		t.Errorf("request %+v", r)
+	}
+	var sent map[string]any
+	if err := json.Unmarshal(r.body, &sent); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := sent["size"]; has || sent["sha256"] != nil || sent["stream"] != true || sent["name"] != "stdin" || sent["rm_after"] != "2d" || sent["uses"] != float64(2) {
+		t.Errorf("body %s", r.body)
+	}
+}
+
+func TestSealSendsSizeAndHash(t *testing.T) {
+	c, seen := newRecordingServer(t, 200, `{"id":"ab/cd","status":"ready","url":"https://x/file/abcd/a"}`)
+
+	f, err := c.Seal(context.Background(), "ab/cd", 31, "beef")
+
+	if err != nil || f.Status != StatusReady {
+		t.Fatalf("%+v, %v", f, err)
+	}
+	r := (*seen)[0]
+	if r.method != "POST" || r.path != "/api/v1/files/ab%2Fcd/seal" || r.contentType != "application/json" || string(r.body) != `{"size":31,"sha256":"beef"}` {
+		t.Errorf("request %+v body %s", r, r.body)
+	}
+}
+
+func TestSealErrorsAreDecoded(t *testing.T) {
+	c, _ := newRecordingServer(t, 409, `{"error":{"code":"offset_mismatch","message":"size differs","offset":10}}`)
+
+	_, err := c.Seal(context.Background(), "abcd", 31, "beef")
+
+	var ae *Error
+	if !errors.As(err, &ae) || ae.Code != CodeOffsetMismatch || ae.Offset == nil || *ae.Offset != 10 {
+		t.Fatalf("%v", err)
+	}
+}

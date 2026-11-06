@@ -35,8 +35,8 @@ func New(out io.Writer, label string, total int64) *Bar {
 	return &Bar{out: out, enabled: IsTerminal(out), paint: color.For(out), label: label, total: total, now: time.Now}
 }
 
-// IsTerminal reports whether w is a character device (a terminal).
-func IsTerminal(w io.Writer) bool {
+// IsTerminal reports whether w (a writer, or the reader of stdin) is a character device (a terminal).
+func IsTerminal(w any) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
@@ -63,7 +63,7 @@ func (b *Bar) Set(done int64) {
 		}
 		b.lastTime, b.lastDone = now, done
 	}
-	if !b.enabled || (now.Sub(b.lastDraw) < 100*time.Millisecond && done < b.total) {
+	if !b.enabled || (now.Sub(b.lastDraw) < 100*time.Millisecond && (b.total < 0 || done < b.total)) {
 		return
 	}
 	b.lastDraw = now
@@ -78,8 +78,11 @@ func (b *Bar) Finish() {
 	}
 }
 
-// Render formats one line, e.g. `uploading [=====>    ] 45%  12.3 MiB/s  ETA 00:12`.
+// Render formats one line (total < 0 = unknown: only the bytes and the rate), e.g. `uploading [=====>    ] 45%  12.3 MiB/s  ETA 00:12`.
 func Render(label string, done, total int64, rate float64) string {
+	if total < 0 { // unknown size (stdin): no bar, no ETA
+		return fmt.Sprintf("%s %s  %s/s", label, FormatBytes(done), FormatBytes(int64(rate)))
+	}
 	frac := 1.0
 	if total > 0 {
 		frac = float64(done) / float64(total)

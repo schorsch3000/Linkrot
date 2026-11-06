@@ -74,3 +74,21 @@ func TestBarSmoothsRateAndDraws(t *testing.T) {
 		t.Errorf("not cleared: %q", buf.String())
 	}
 }
+
+func TestRenderWithoutATotalShowsNoBar(t *testing.T) {
+	got := Render("uploading", 3*1024*1024, -1, 1024*1024)
+	if got != "uploading 3.0 MiB  1.0 MiB/s" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestUnknownTotalIsThrottledLikeAnyOther(t *testing.T) {
+	var buf bytes.Buffer
+	clock := time.Unix(1000, 0)
+	b := &Bar{out: &buf, enabled: true, label: "up", total: -1, now: func() time.Time { return clock }}
+	b.Set(10)
+	b.Set(20) // same instant: not drawn again
+	if n := strings.Count(buf.String(), "\r"); n != 1 {
+		t.Errorf("%d draws: %q", n, buf.String())
+	}
+}

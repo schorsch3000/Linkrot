@@ -37,6 +37,20 @@ type CreateRequest struct {
 	Uses    *int   `json:"uses,omitempty"`
 }
 
+// CreateStreamRequest starts a streaming upload: size and sha256 are not known yet and are given to Seal.
+type CreateStreamRequest struct {
+	Name    string `json:"name"`
+	Stream  bool   `json:"stream"`
+	RmAfter string `json:"rm_after,omitempty"`
+	Uses    *int   `json:"uses,omitempty"`
+}
+
+// SealRequest completes a streaming upload.
+type SealRequest struct {
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}
+
 // Error codes of the API.
 const (
 	CodeDuplicate         = "duplicate"

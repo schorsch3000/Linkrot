@@ -231,3 +231,96 @@ func TestUpFailures(t *testing.T) {
 		t.Errorf("wrong token: code %d, stderr %q", code, errs)
 	}
 }
+
+func (e *env) runStdin(stdin string, args ...string) (code int, stdout, stderr string) {
+	e.t.Helper()
+	var out, errb bytes.Buffer
+	app := &App{
+		Name: "lr", In: strings.NewReader(stdin), Out: &out, Err: &errb, ConfigPath: config.Path,
+		Copy:  func(sel, text string) error { e.copied = append(e.copied, sel+":"+text); return nil },
+		Sleep: func(context.Context, time.Duration) error { return nil },
+	}
+	code = app.Run(args)
+	return code, out.String(), errb.String()
+}
+
+func TestUpReadsStdinWithoutAFile(t *testing.T) {
+	for _, args := range [][]string{{"up"}, {"up", "-"}} {
+		e := newEnv(t)
+
+		code, out, errs := e.runStdin(content, args...)
+
+		if code != 0 || errs != "" {
+			t.Fatalf("%v: code %d: %s", args, code, errs)
+		}
+		if !strings.HasPrefix(out, e.server.URL+"/file/") || !strings.HasSuffix(out, "/stdin\n") || strings.Count(out, "\n") != 1 {
+			t.Fatalf("stdout %q", out)
+		}
+		id := strings.Split(strings.TrimSpace(out), "/")[4]
+		if string(e.server.Content(id)) != content {
+			t.Fatalf("server has %q", e.server.Content(id))
+		}
+	}
+}
+
+func TestUpStdinWithMvOptionsAndJSON(t *testing.T) {
+	e := newEnv(t)
+
+	code, out, errs := e.runStdin(content, "up", "--mv", "dump.sql.gz", "--rm-after", "3w", "--uses", "2", "--json", "--copy")
+
+	var f api.File
+	if code != 0 || json.Unmarshal([]byte(out), &f) != nil || f.Name != "dump.sql.gz" || f.Size != int64(len(content)) || f.Status != "ready" {
+		t.Fatalf("code %d, out %q, stderr %q", code, out, errs)
+	}
+	if len(e.copied) != 1 || !strings.HasSuffix(e.copied[0], "/dump.sql.gz") {
+		t.Fatalf("copied %v", e.copied)
+	}
+}
+
+func TestUpStdinDuplicateExits3(t *testing.T) {
+	e := newEnv(t)
+	id := e.server.Add("first.txt", []byte(content))
+
+	code, out, errs := e.runStdin(content, "up")
+
+	if code != ExitDuplicate || !strings.Contains(out, "/file/"+id+"/first.txt") || !strings.Contains(errs, id) {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
+func TestUpStdinRefusesATerminal(t *testing.T) {
+	e := newEnv(t)
+	tty, err := os.Open(os.DevNull) // a character device, like a terminal
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tty.Close() }()
+	var out, errb bytes.Buffer
+	app := &App{Name: "lr", In: tty, Out: &out, Err: &errb, ConfigPath: config.Path}
+
+	for _, args := range [][]string{{"up"}, {"up", "-"}} {
+		errb.Reset()
+		if code := app.Run(args); code != ExitUsage || !strings.Contains(errb.String(), "stdin is a terminal") || out.Len() != 0 {
+			t.Errorf("%v: code %d, stderr %q", args, code, errb.String())
+		}
+	}
+	if e.server.Chunks != 0 {
+		t.Error("nothing may be uploaded")
+	}
+}
+
+func TestUpStdinFailureIsReported(t *testing.T) {
+	e := newEnv(t)
+	e.server.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPatch {
+			return 413, nil, `{"error":{"code":"too_large","message":"file is larger than allowed"}}`
+		}
+		return 0, nil, ""
+	}
+
+	code, out, errs := e.runStdin(content, "up")
+
+	if code != ExitError || out != "" || !strings.Contains(errs, "larger than allowed") {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errs)
+	}
+}

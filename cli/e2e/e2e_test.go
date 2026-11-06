@@ -188,6 +188,18 @@ func (s *stack) run(t *testing.T, args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// runStdin is run with data on stdin.
+func (s *stack) runStdin(t *testing.T, stdin []byte, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	app := &cli.App{
+		Name: "lr", In: bytes.NewReader(stdin), Out: &out, Err: &errb, ConfigPath: config.Path,
+		Copy: func(string, string) error { return nil },
+	}
+	code := app.Run(args)
+	return code, out.String(), errb.String()
+}
+
 func (s *stack) must(t *testing.T, args ...string) string {
 	t.Helper()
 	code, out, errs := s.run(t, args...)
@@ -230,6 +242,55 @@ func get(t *testing.T, url string, header http.Header) (reply, []byte) {
 }
 
 func TestEndToEndDirect(t *testing.T) { lifecycle(t, newStack(t, false)) }
+
+// A streaming upload: no size and hash at the start, three chunks (the last one short) and a seal.
+func TestEndToEndStream(t *testing.T) {
+	s := newStack(t, false)
+	t.Setenv(config.EnvPath, filepath.Join(t.TempDir(), "config.toml"))
+	s.must(t, "config", "--server", s.baseURL, "--token", s.token)
+	data := make([]byte, fileSize)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errs := s.runStdin(t, data, "up", "--mv", "piped.bin", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	var file api.File
+	if err := json.Unmarshal([]byte(out), &file); err != nil {
+		t.Fatal(err)
+	}
+	if file.Status != "ready" || file.Size != fileSize || file.SHA256 != sha(data) || file.Name != "piped.bin" || file.URL == "" {
+		t.Fatalf("file %+v", file)
+	}
+	onDisk, err := os.ReadFile(filepath.Join(s.dataDir, "files", file.ID)) //nolint:gosec // test path
+	if err != nil || sha(onDisk) != sha(data) {
+		t.Fatalf("data file differs: %v", err)
+	}
+	dir := t.TempDir()
+	s.must(t, "down", file.ID, dir)
+	if got, err := os.ReadFile(filepath.Join(dir, "piped.bin")); err != nil || sha(got) != sha(data) { //nolint:gosec // test path
+		t.Fatalf("download differs: %v", err)
+	}
+
+	// The same bytes again, from stdin and from a file: both are duplicates now.
+	if code, out, _ := s.runStdin(t, data, "up"); code != cli.ExitDuplicate || strings.TrimSpace(out) != file.URL {
+		t.Fatalf("stdin duplicate: exit %d, %q", code, out)
+	}
+	src := filepath.Join(t.TempDir(), "same.bin")
+	if err := os.WriteFile(src, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := s.run(t, "up", src); code != cli.ExitDuplicate || strings.TrimSpace(out) != file.URL {
+		t.Fatalf("file duplicate: exit %d, %q", code, out)
+	}
+
+	// Nothing at all is a valid, empty file.
+	if code, out, errs := s.runStdin(t, nil, "up", "--json"); code != 0 || !strings.Contains(out, `"size": 0`) {
+		t.Fatalf("empty: exit %d, %q, %s", code, out, errs)
+	}
+}
 
 func TestEndToEndBehindNginx(t *testing.T) { lifecycle(t, newStack(t, true)) }
 

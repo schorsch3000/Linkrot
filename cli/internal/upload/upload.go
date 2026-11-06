@@ -2,6 +2,7 @@
 package upload
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -230,4 +231,119 @@ func (c *countingReader) Read(p []byte) (int, error) {
 		c.report(c.base + c.n)
 	}
 	return n, err
+}
+
+// StreamName is the name on the server of an upload from stdin without --mv.
+const StreamName = "stdin"
+
+// UploadStream sends everything r delivers and returns the finished file object. Size and hash are unknown at
+// the start: the chunks go out as they are read (one chunk is buffered) and the final sha256 seals the upload.
+// There is no resuming after the process is gone, the data cannot be read again.
+func UploadStream(ctx context.Context, c *api.Client, r io.Reader, o Options) (*api.File, error) {
+	if o.MaxRetries == 0 {
+		o.MaxRetries = 8
+	}
+	if o.Sleep == nil {
+		o.Sleep = sleep
+	}
+	if o.Name == "" {
+		o.Name = StreamName
+	}
+	var file *api.File
+	err := retry(ctx, &o, func() error {
+		var err error
+		file, err = c.CreateStream(ctx, api.CreateStreamRequest{Name: o.Name, RmAfter: o.RmAfter, Uses: o.Uses})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if file.ChunkSize <= 0 {
+		return nil, errors.New("server did not announce a chunk size")
+	}
+
+	whole := sha256.New()
+	buf := make([]byte, file.ChunkSize)
+	var offset int64
+	if o.OnProgress != nil {
+		o.OnProgress(0, -1)
+	}
+	for last := false; !last; {
+		n, err := io.ReadFull(r, buf)
+		switch {
+		case err == nil:
+		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+			last = true
+		default:
+			return nil, fmt.Errorf("read input: %w", err)
+		}
+		if n == 0 {
+			break
+		}
+		whole.Write(buf[:n])
+		if err := sendStreamChunk(ctx, c, file.ID, offset, buf[:n], &o); err != nil {
+			return nil, err
+		}
+		offset += int64(n)
+		if o.OnProgress != nil {
+			o.OnProgress(offset, -1)
+		}
+	}
+
+	sum := hex.EncodeToString(whole.Sum(nil))
+	var sealed *api.File
+	err = retry(ctx, &o, func() error {
+		var err error
+		sealed, err = c.Seal(ctx, file.ID, offset, sum)
+		return err
+	})
+	if err != nil {
+		var ae *api.Error
+		if errors.As(err, &ae) && ae.Code == api.CodeDuplicate {
+			return nil, &DuplicateError{ID: ae.ID, URL: ae.URL}
+		}
+		return nil, err
+	}
+	return sealed, nil
+}
+
+// sendStreamChunk sends one buffered chunk, retrying transient failures. The data of earlier chunks is gone, so
+// the only recovery is for this chunk: if the answer was lost, the server is already past it.
+func sendStreamChunk(ctx context.Context, c *api.Client, id string, offset int64, data []byte, o *Options) error {
+	end := offset + int64(len(data))
+	for failures := 0; ; {
+		_, err := c.UploadChunk(ctx, id, offset, bytes.NewReader(data), int64(len(data)))
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		var ae *api.Error
+		if errors.As(err, &ae) && ae.Code == api.CodeOffsetMismatch && ae.Offset != nil {
+			if *ae.Offset == end {
+				return nil
+			}
+			return fmt.Errorf("the server is at offset %d, this stream is at %d and cannot go back: %w", *ae.Offset, offset, err)
+		}
+		if errors.As(err, &ae) && !ae.Retryable() && ae.Code != api.CodeChunkHashMismatch {
+			return err
+		}
+		failures++
+		if failures > o.MaxRetries {
+			return fmt.Errorf("giving up after %d failed attempts: %w", failures-1, err)
+		}
+		if err := wait(ctx, o, err, failures); err != nil {
+			return err
+		}
+		cur, gerr := c.Get(ctx, id)
+		switch {
+		case gerr == nil && cur.Offset == end:
+			return nil
+		case gerr == nil && cur.Offset != offset:
+			return fmt.Errorf("the server is at offset %d, this stream is at %d and cannot go back", cur.Offset, offset)
+		case gerr != nil && isFatal(gerr):
+			return gerr
+		}
+	}
 }

@@ -95,6 +95,13 @@ final readonly class FileRepository
         )->execute(['now' => $now, 'id' => $id]);
     }
 
+    /** A streaming upload learns its size and sha256 and becomes a ready file. */
+    public function seal(string $id, int $size, string $sha256, int $now): void
+    {
+        $this->pdo->prepare('UPDATE files SET size = ?, sha256 = ? WHERE id = ?')->execute([$size, $sha256, $id]);
+        $this->markReady($id, $now);
+    }
+
     /** @return list<FileRecord> live files, newest first */
     public function listLive(int $now): array
     {

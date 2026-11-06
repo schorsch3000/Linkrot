@@ -20,14 +20,14 @@ Conventions:
 
 ## Commands
 
-### `up <file> [flags]`
+### `up [file] [flags]`
 
-Uploads a file and prints its URL on stdout.
+Uploads a file and prints its URL on stdout. Without `<file>` (or with `-`) the data is read from **stdin**, see below.
 
 | flag | meaning |
 | --- | --- |
 | `--rm-after <time>` | delete after `<time>` counted from completion of the upload; default is the server's default |
-| `--mv <newname>` | name on the server; default is the basename of `<file>` |
+| `--mv <newname>` | name on the server; default is the basename of `<file>`, `stdin` when reading stdin |
 | `--uses <n>` | allow only `n` downloads; default is the server's default (unlimited unless configured) |
 | `--copy[=<selection>]` | copy the URL; without a value via OSC 52 (works over SSH), with `clipboard` or `primary` via `wl-copy`, `xclip`, `xsel` or `pbcopy`. The `=` form is required because a space would be read as the file argument |
 | `--json` | print the file object as JSON instead of the bare URL |
@@ -44,6 +44,25 @@ Behaviour:
 If the same file (same sha256) already exists and is complete the server refuses. The CLI then prints a message on
 stderr, prints the **existing URL on stdout** and exits with code `3`, so `lr up file | wl-copy` still does the right
 thing while scripts can tell the situation apart.
+
+#### Upload from stdin
+
+```
+pg_dump db | gzip | lr up --mv db.sql.gz
+```
+
+`lr up` without a file, or `lr up -`, uploads whatever arrives on stdin. If stdin is a terminal the command refuses
+with a usage error (exit code `2`) instead of waiting for typed input; a redirect or a pipe is read until EOF.
+
+The size and the sha256 of a pipe are not known up front and the data cannot be read twice, so this does not hash
+first. It uses the streaming variant of the [upload protocol](API.md#streaming-uploads): the upload is created without
+size and hash, the chunks go out while they are read (one chunk, 32 MiB by default, is held in memory so it can be
+resent), and the sha256 and size of everything are sent in a final `seal` request. Differences to a file upload:
+
+- no resuming after the program is gone (running the same command again starts over); retries of a chunk that failed on the network still work
+- the progress line has no percentage and no ETA, only bytes and throughput
+- a duplicate is only detected at the end, after everything was sent; the result is the same as for a file (exit code `3`, existing URL on stdout)
+- the default name is `stdin`, use `--mv`
 
 ### `ls [--json]`
 

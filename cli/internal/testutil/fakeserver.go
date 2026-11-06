@@ -43,6 +43,7 @@ type fakeFile struct {
 	api.File
 	RmAfter string `json:"-"`
 	data    []byte
+	stream  bool // created without size and hash, completed by a seal
 }
 
 // NewFakeServer starts a server; it is closed when the test ends.
@@ -163,8 +164,27 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *FakeServer) create(w http.ResponseWriter, r *http.Request) {
-	var req api.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" || len(req.SHA256) != 64 {
+	var req struct {
+		api.CreateRequest
+		Stream bool `json:"stream"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		writeError(w, 400, "invalid_request", "bad create request", nil)
+		return
+	}
+	if req.Stream {
+		if req.Size != 0 || req.SHA256 != "" {
+			writeError(w, 400, "invalid_request", "a streaming upload has neither size nor sha256", nil)
+			return
+		}
+		f := s.newFile(req.Name, 0, "")
+		f.stream, f.RmAfter = true, req.RmAfter
+		out := f.File
+		out.ChunkSize = s.ChunkSize
+		writeJSON(w, 201, out)
+		return
+	}
+	if len(req.SHA256) != 64 {
 		writeError(w, 400, "invalid_request", "bad create request", nil)
 		return
 	}
@@ -202,6 +222,8 @@ func (s *FakeServer) item(w http.ResponseWriter, r *http.Request, rest string) {
 	switch {
 	case suffix == "content" && r.Method == http.MethodPatch:
 		s.chunk(w, r, f)
+	case suffix == "seal" && r.Method == http.MethodPost:
+		s.seal(w, r, f)
 	case suffix == "" && r.Method == http.MethodGet:
 		writeJSON(w, 200, f.File)
 	case suffix == "" && r.Method == http.MethodDelete:
@@ -252,6 +274,13 @@ func (s *FakeServer) chunk(w http.ResponseWriter, r *http.Request, f *fakeFile) 
 	}
 	body, err := io.ReadAll(r.Body)
 	want := min(s.ChunkSize, f.Size-offset)
+	if f.stream {
+		want = int64(len(body)) - api.DigestLength
+		if want < 1 || want > s.ChunkSize || offset%s.ChunkSize != 0 {
+			writeError(w, 400, "invalid_request", "wrong chunk length", nil)
+			return
+		}
+	}
 	if err != nil || int64(len(body)) != want+api.DigestLength {
 		writeError(w, 400, "invalid_request", "wrong chunk length", nil)
 		return
@@ -265,7 +294,7 @@ func (s *FakeServer) chunk(w http.ResponseWriter, r *http.Request, f *fakeFile) 
 	s.Chunks++
 	f.data = append(f.data, chunk...)
 	f.Offset += want
-	if f.Offset < f.Size {
+	if f.stream || f.Offset < f.Size {
 		writeJSON(w, 200, map[string]any{"offset": f.Offset})
 		return
 	}
@@ -275,6 +304,43 @@ func (s *FakeServer) chunk(w http.ResponseWriter, r *http.Request, f *fakeFile) 
 		writeError(w, 422, api.CodeFileHashMismatch, "file does not match the declared sha256", nil)
 		return
 	}
+	s.finish(f)
+	writeJSON(w, 200, f.File)
+}
+
+// seal completes a streaming upload; it behaves like the real server (docs/API.md).
+func (s *FakeServer) seal(w http.ResponseWriter, r *http.Request, f *fakeFile) {
+	var req api.SealRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.SHA256) != 64 || req.Size < 0 {
+		writeError(w, 400, "invalid_request", "bad seal request", nil)
+		return
+	}
+	if f.Status == api.StatusReady && f.Size == req.Size && f.SHA256 == req.SHA256 {
+		writeJSON(w, 200, f.File)
+		return
+	}
+	if !f.stream || f.Status != api.StatusUploading {
+		writeError(w, 404, api.CodeNotFound, "not found", nil)
+		return
+	}
+	if req.Size != f.Offset {
+		writeError(w, 409, api.CodeOffsetMismatch, "size does not match the bytes the server received", map[string]any{"offset": f.Offset})
+		return
+	}
+	whole := sha256.Sum256(f.data)
+	if hex.EncodeToString(whole[:]) != req.SHA256 {
+		delete(s.files, f.ID)
+		writeError(w, 422, api.CodeFileHashMismatch, "file does not match the given sha256", nil)
+		return
+	}
+	for _, id := range s.order {
+		if other := s.files[id]; other != nil && other != f && other.SHA256 == req.SHA256 && other.Status == api.StatusReady {
+			delete(s.files, f.ID)
+			writeError(w, 409, api.CodeDuplicate, "this file already exists", map[string]any{"id": other.ID, "url": other.URL})
+			return
+		}
+	}
+	f.Size, f.SHA256 = req.Size, req.SHA256
 	s.finish(f)
 	writeJSON(w, 200, f.File)
 }

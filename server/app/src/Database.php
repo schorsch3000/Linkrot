@@ -9,7 +9,7 @@ use PDO;
 /** SQLite connection and schema management. */
 final class Database
 {
-    public const int SCHEMA_VERSION = 2;
+    public const int SCHEMA_VERSION = 3;
 
     private const array MIGRATIONS = [
         1 => <<<'SQL'
@@ -42,6 +42,31 @@ final class Database
             SQL,
         // The running sha256 of an upload (serialized HashContext), so that the last chunk does not re-read the whole file.
         2 => 'ALTER TABLE files ADD COLUMN hash_state BLOB',
+        // Streaming uploads (stdin) do not know size and sha256 until they are sealed: both become nullable (UNIQUE allows
+        // any number of NULLs). SQLite cannot drop NOT NULL, so the table is rebuilt.
+        3 => <<<'SQL'
+            CREATE TABLE files_new (
+                id            TEXT PRIMARY KEY COLLATE BINARY,
+                name          TEXT NOT NULL,
+                size          INTEGER,
+                sha256        TEXT UNIQUE,
+                status        TEXT NOT NULL CHECK (status IN ('uploading', 'ready')),
+                upload_offset INTEGER NOT NULL DEFAULT 0,
+                created_at    INTEGER NOT NULL,
+                updated_at    INTEGER NOT NULL,
+                completed_at  INTEGER,
+                rm_after      INTEGER NOT NULL,
+                expires_at    INTEGER,
+                uses_left     INTEGER,
+                hash_state    BLOB
+            ) STRICT;
+            INSERT INTO files_new (id, name, size, sha256, status, upload_offset, created_at, updated_at, completed_at, rm_after, expires_at, uses_left, hash_state)
+                SELECT id, name, size, sha256, status, upload_offset, created_at, updated_at, completed_at, rm_after, expires_at, uses_left, hash_state FROM files;
+            DROP TABLE files;
+            ALTER TABLE files_new RENAME TO files;
+            CREATE INDEX files_status_updated ON files (status, updated_at);
+            CREATE INDEX files_expires ON files (expires_at);
+            SQL,
     ];
 
     /** Opens the connection (busy timeout, exceptions). The schema is neither created nor checked here. */

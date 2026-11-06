@@ -57,8 +57,8 @@ All times are UTC unix seconds.
 | --- | --- |
 | `id` | public id, primary key |
 | `name` | display / download filename (sanitised, see below) |
-| `size` | declared size in bytes |
-| `sha256` | declared sha256 (hex), unique index |
+| `size` | declared size in bytes; null for a streaming upload until it is sealed |
+| `sha256` | declared sha256 (hex), unique index; null for a streaming upload until it is sealed (the unique index allows any number of nulls) |
 | `status` | `uploading` or `ready` |
 | `upload_offset` | number of verified bytes received (authoritative; the API calls it `offset`) |
 | `created_at` | row created |
@@ -122,6 +122,16 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
 5. **Completion.** The running hash is finished with the last chunk and compared against the declared sha256, the
    file is not read again, so the last request is as short as any other. Match: status `ready`, `completed_at` and `expires_at` set, response carries the URL. Mismatch: file and
    row are deleted and `422 file_hash_mismatch` is returned, the client has to start over.
+
+6. **Streaming uploads** (`stream: true`, see [API.md](API.md#streaming-uploads)) differ in three places. Create inserts the row
+   with null `size` and `sha256` and an empty data file, without any lookup by hash (so also without resume or
+   duplicate check). Chunks are written exactly like above, the data file just grows, but no chunk completes the upload
+   and `max_file_size` is checked per chunk. The **seal** takes the same lock as a chunk, requires the size to equal the
+   offset, finishes the running hash (rebuilt from the file if the stored state is unusable) and compares it with the
+   given sha256, trims the data file to the size (bytes of a rejected chunk may lie behind the offset), and only then
+   looks for a duplicate: a ready file with the same sha256 wins and the stream is deleted, an incomplete upload of the
+   same bytes is deleted, a stale one is cleaned up. Abandoned streams are removed by the cleanup like other uploads
+   (`upload_timeout` after the last chunk). Schema version 3 made `size` and `sha256` nullable.
 
 PHP limits are irrelevant because the body is read raw from `php://input` (no multipart) and chunks are small
 (10-100 MB range, default 32 MiB). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.

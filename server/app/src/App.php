@@ -87,6 +87,9 @@ final class App
                 ? ['ran' => true, 'rows_deleted' => $result->rowsDeleted, 'files_deleted' => $result->filesDeleted]
                 : ['ran' => false]);
         }));
+        $this->router->add('POST', '/api/v1/files/{id}/seal', $this->authed(
+            static fn(Request $request, array $params): Response => $upload()->seal($request, $params['id']),
+        ));
         $this->router->add('PATCH', '/api/v1/files/{id}/content', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->chunk($request, $params['id']),
         ));

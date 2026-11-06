@@ -22,7 +22,8 @@ Durations are strings like `1h`, `2d`, `3w`, `4m`, `5y` (see [SERVER.md](SERVER.
 }
 ```
 
-`status` is `uploading` or `ready`. `expires_at` and `completed_at` are `null` while uploading. `uses_left` is `null`
+`status` is `uploading` or `ready`. `expires_at` and `completed_at` are `null` while uploading. `size` and `sha256` are
+`null` while a [streaming upload](#streaming-uploads) is not sealed yet. `uses_left` is `null`
 for unlimited. `url` is only present when `status` is `ready`.
 
 ## Upload protocol
@@ -64,6 +65,56 @@ Request:
 | `400` | invalid name/size/hash/duration, or same sha256 with a different size, or `rm_after` over the cap | error |
 | `413 too_large` | over `max_file_size` | error |
 | `507 insufficient_storage` | not enough disk space | error |
+
+### Streaming uploads
+
+For data whose size and hash are not known up front (stdin) the upload is created without them and **sealed** at the
+end. Chunks are exactly as in the normal protocol, the hash of the whole file is the last thing that is sent:
+
+```
+client                                  server
+  | POST /files {name,stream:true,...}    |
+  |-------------------------------------->|  create, no dedupe, no resume by hash
+  |<-- {id, chunk_size, offset:0}         |
+  | PATCH /files/{id}/content             |
+  |   Upload-Offset: N                    |
+  |   body = chunk || sha256(chunk)       |  chunk of 1..chunk_size bytes
+  |-------------------------------------->|  verify, advance
+  |<-- {offset}                           |
+  |        ... repeat ...                 |
+  | POST /files/{id}/seal {size,sha256}   |
+  |-------------------------------------->|  compare with the running hash, complete
+  |<-- file object with url               |
+```
+
+`POST /files` with `"stream": true` takes `name`, `rm_after` and `uses` as usual and must not contain `size` or
+`sha256` (`400`). The answer is `201` with the file object (`size` and `sha256` are `null`, `offset` is `0`) plus
+`chunk_size`. There is no lookup by hash, so every create is a new upload; the id is the only handle.
+
+Chunks of a streaming upload use the same request as above, with these differences: a chunk has 1 to `chunk_size`
+bytes, only the last chunk may be shorter (the offset of every chunk must be a multiple of `chunk_size`, `400`
+otherwise), and a chunk that would take the file over `max_file_size` is answered `413 too_large` and deletes the
+upload. A chunk never completes the upload. The server keeps the running sha256 as it does for normal uploads.
+
+### `POST /files/{id}/seal` - complete a streaming upload
+
+```json
+{ "size": 1234567, "sha256": "9f86d0..." }
+```
+
+| status | meaning | body |
+| --- | --- | --- |
+| `200` | size and hash match; the file is `ready` (`rm_after` and `uses` apply from now). Repeating the same seal of a sealed file gives the same answer again | file object with `url` |
+| `409 offset_mismatch` | `size` differs from the bytes the server received; the upload stays open | error with `offset` (current) |
+| `409 duplicate` | a live, completed file with the same sha256 exists; the upload is deleted | error with `id` and `url` of the existing file |
+| `409 locked` | another request is writing this upload right now; `Retry-After: 1` | error |
+| `422 file_hash_mismatch` | the sha256 does not match what was received; the upload is deleted, start over | error |
+| `400` | `size` or `sha256` missing or malformed | error |
+| `404 not_found` | unknown id, or not a streaming upload that is still `uploading` | error |
+
+A zero byte stream is sealed with size `0` and the sha256 of the empty string without any chunk. An incomplete upload
+(normal or streaming) of the same bytes that exists when a stream is sealed is deleted; its client starts over and
+meets the duplicate.
 
 ### `GET /files/{id}` - state of one file
 

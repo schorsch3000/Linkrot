@@ -49,6 +49,9 @@ final readonly class UploadController
         if ($name === null) {
             return $this->invalid('name is missing or unusable');
         }
+        if (($body['stream'] ?? false) === true) {
+            return $this->createStream($body, $name);
+        }
         if (!is_int($size) || $size < 0) {
             return $this->invalid('size must be a non-negative integer');
         }
@@ -83,6 +86,138 @@ final readonly class UploadController
         }
 
         return $this->insert($name, $size, $sha256, $rmAfter, $uses, $now);
+    }
+
+    /**
+     * A streaming upload: size and sha256 are not known yet and are given when the upload is sealed.
+     *
+     * @param array<string, mixed> $body
+     */
+    private function createStream(array $body, string $name): Response
+    {
+        if (($body['size'] ?? null) !== null || ($body['sha256'] ?? null) !== null) {
+            return $this->invalid('a streaming upload has neither size nor sha256, they are given when it is sealed');
+        }
+        try {
+            $rmAfter = Duration::parseWithin($this->optionalString($body, 'rm_after') ?? $this->config->defaultRmAfter, $this->config->maxRmAfter);
+            $uses = $this->uses($body);
+        } catch (InvalidArgumentException $e) {
+            return $this->invalid($e->getMessage());
+        }
+        if ($this->config->chunkSize + $this->files->outstandingBytes() > $this->store->freeSpace()) {
+            return Response::error(507, 'insufficient_storage', 'not enough disk space');
+        }
+        $now = ($this->clock)();
+        $id = $this->insertRecord(new FileRecord(FileId::generate(), $name, null, null, FileStatus::Uploading, 0, $now, $now, null, $rmAfter, null, $uses));
+        $created = $this->files->find($id);
+
+        return Response::json(($created ?? throw new \LogicException('stream upload vanished'))->toArray($this->config->baseUrl) + ['chunk_size' => $this->config->chunkSize], 201);
+    }
+
+    /** Inserts the row and creates the (empty) data file; a failing data file takes the row with it. */
+    private function insertRecord(FileRecord $file): string
+    {
+        $this->files->insert($file);
+        try {
+            $this->store->create($file->id, $file->size ?? 0);
+        } catch (\Throwable $e) {
+            $this->files->delete($file->id);
+            throw $e;
+        }
+
+        return $file->id;
+    }
+
+    /** POST /api/v1/files/{id}/seal - completes a streaming upload: the client now tells size and sha256. */
+    public function seal(Request $request, string $id): Response
+    {
+        $file = $this->live($id);
+        $body = $request->jsonBody();
+        if (!$file instanceof FileRecord || $body === null) {
+            return $file instanceof FileRecord ? $this->invalid('body must be a JSON object') : $this->notFound();
+        }
+        $size = $body['size'] ?? null;
+        $sha256 = is_string($body['sha256'] ?? null) ? strtolower($body['sha256']) : '';
+        if (!is_int($size) || $size < 0 || preg_match('~^[0-9a-f]{64}$~', $sha256) !== 1) {
+            return $this->invalid('size must be a non-negative integer and sha256 64 hex characters');
+        }
+        if ($file->isReady()) {
+            // The answer to the first seal may have been lost: the same seal again gets the same answer.
+            return $file->size === $size && $file->sha256 === $sha256 ? Response::json($file->toArray($this->config->baseUrl)) : $this->notFound();
+        }
+        $handle = @fopen($this->store->path($id), 'r+b');
+        if ($handle === false) {
+            $this->files->delete($id);
+
+            return $this->notFound();
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX | LOCK_NB)) {
+                return Response::error(409, 'locked', 'another request is writing this upload', headers: ['Retry-After' => '1']);
+            }
+            $file = $this->files->find($id);
+            if (!$file instanceof FileRecord || !$file->isStream() || $file->status !== FileStatus::Uploading) {
+                return $this->notFound();
+            }
+            if ($size !== $file->uploadOffset) {
+                return Response::error(409, 'offset_mismatch', 'size does not match the bytes the server received', ['offset' => $file->uploadOffset]);
+            }
+            if (!hash_equals(hash_final($this->fileHash($handle, $file)), $sha256)) {
+                $this->catalog->remove($id);
+
+                return Response::error(422, 'file_hash_mismatch', 'file does not match the given sha256, start over');
+            }
+            // Bytes behind the offset can be left over from a chunk that failed its verification.
+            if (!@ftruncate($handle, $size)) {
+                return Response::error(500, 'internal', 'cannot trim data file');
+            }
+
+            return $this->sealed($file, $size, $sha256);
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    private function sealed(FileRecord $file, int $size, string $sha256): Response
+    {
+        $now = ($this->clock)();
+        $other = $this->files->findBySha256($sha256);
+        if ($other instanceof FileRecord && !$other->isLive($now)) {
+            $this->catalog->remove($other->id);
+            $other = null;
+        }
+        if ($other instanceof FileRecord && $other->isReady()) {
+            return $this->duplicateOfSealed($file, $other);
+        }
+        if ($other instanceof FileRecord) {
+            // An incomplete upload of the same bytes: this one is complete, the other one starts over (and finds this).
+            $this->catalog->remove($other->id);
+        }
+        try {
+            $this->files->seal($file->id, $size, $sha256, $now);
+        } catch (PDOException) {
+            $winner = $this->files->findBySha256($sha256);
+            if ($winner instanceof FileRecord && $winner->isReady()) {
+                return $this->duplicateOfSealed($file, $winner);
+            }
+
+            throw new \RuntimeException('cannot seal upload ' . $file->id);
+        }
+        $ready = $this->files->find($file->id);
+
+        return $ready instanceof FileRecord ? Response::json($ready->toArray($this->config->baseUrl)) : $this->notFound();
+    }
+
+    /** The sealed bytes already exist: the upload is dropped and the existing file reported. */
+    private function duplicateOfSealed(FileRecord $file, FileRecord $existing): Response
+    {
+        $this->catalog->remove($file->id);
+
+        return Response::error(409, 'duplicate', 'this file already exists', [
+            'id' => $existing->id,
+            'url' => $existing->url($this->config->baseUrl),
+        ]);
     }
 
     /** GET /api/v1/files/{id} */
@@ -132,15 +267,38 @@ final readonly class UploadController
             if ($offset !== $file->uploadOffset) {
                 return Response::error(409, 'offset_mismatch', 'Upload-Offset does not match the server', ['offset' => $file->uploadOffset]);
             }
-            $expected = min($this->config->chunkSize, $file->size - $offset);
-            if ($length !== $expected || $expected < 1) {
-                return $this->invalid("chunk must be $expected bytes followed by its 32 byte sha256");
+            if ($file->size === null) {
+                $rejected = $this->streamChunkRefusal($file, $offset, $length);
+            } else {
+                $expected = min($this->config->chunkSize, $file->size - $offset);
+                $rejected = $length !== $expected || $expected < 1 ? $this->invalid("chunk must be $expected bytes followed by its 32 byte sha256") : null;
+            }
+            if ($rejected instanceof Response) {
+                return $rejected;
             }
 
             return $this->writeChunk($request, $handle, $file, $length);
         } finally {
             fclose($handle);
         }
+    }
+
+    /**
+     * Chunks of a streaming upload are full ones (the offset stays a multiple of the chunk size), only the last may be shorter.
+     */
+    private function streamChunkRefusal(FileRecord $file, int $offset, int $length): ?Response
+    {
+        $chunkSize = $this->config->chunkSize;
+        if ($length < 1 || $length > $chunkSize || $offset % $chunkSize !== 0) {
+            return $this->invalid("chunk must be 1 to $chunkSize bytes at a multiple of the chunk size, followed by its 32 byte sha256");
+        }
+        if ($this->config->maxFileSize > 0 && $offset + $length > $this->config->maxFileSize) {
+            $this->catalog->remove($file->id);
+
+            return Response::error(413, 'too_large', 'file is larger than the allowed ' . $this->config->maxFileSize . ' bytes');
+        }
+
+        return null;
     }
 
     /** @param resource $handle */
@@ -173,7 +331,7 @@ final readonly class UploadController
 
         $now = ($this->clock)();
         $newOffset = $file->uploadOffset + $length;
-        if ($newOffset < $file->size) {
+        if ($file->size === null || $newOffset < $file->size) {
             $this->files->setOffset($file->id, $newOffset, $now, serialize($fileHash));
 
             return Response::json(['offset' => $newOffset]);
@@ -223,7 +381,7 @@ final readonly class UploadController
 
     private function complete(FileRecord $file, \HashContext $fileHash, int $now): Response
     {
-        if (!hash_equals($file->sha256, hash_final($fileHash))) {
+        if (!hash_equals((string) $file->sha256, hash_final($fileHash))) {
             $this->catalog->remove($file->id);
 
             return Response::error(422, 'file_hash_mismatch', 'file does not match the declared sha256, start over');
