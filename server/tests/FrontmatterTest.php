@@ -34,6 +34,26 @@ final class FrontmatterTest extends TestCase
         self::assertSame('Text', $body);
     }
 
+    public function testAByteOrderMarkAndEmptyLinesInFrontDoNotHideTheHead(): void
+    {
+        foreach (["\xEF\xBB\xBF---\ntitle: A\n---\nB", "\n\n  \n---\ntitle: A\n---\nB", "\r\n---\r\ntitle: A\r\n---\r\nB"] as $source) {
+            [$values, $body] = Frontmatter::parse($source);
+
+            self::assertSame('A', $values['title'], (string) json_encode($source));
+            self::assertSame('B', $body);
+        }
+    }
+
+    public function testLineNumbersOfErrorsCountTheEmptyLinesInFront(): void
+    {
+        try {
+            Frontmatter::parse("\n\n---\ncolor: red\n---\n");
+            self::fail('accepted');
+        } catch (InvalidCustomFile $e) {
+            self::assertStringContainsString('line 4: unknown key', $e->getMessage());
+        }
+    }
+
     public function testADashLineLaterInTheTextIsNotAHead(): void
     {
         [$values, $body] = Frontmatter::parse("Text\n---\ntitle: x\n---\n");

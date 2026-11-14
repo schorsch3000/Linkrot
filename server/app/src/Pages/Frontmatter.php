@@ -34,7 +34,13 @@ final class Frontmatter
     public static function parse(string $source): array
     {
         $values = ['title' => null, 'link' => null, 'order' => 100, 'published' => true, 'lang' => 'en'];
-        $lines = preg_split('~\r\n|\n|\r~', $source) ?: [];
+        // a byte order mark and empty lines in front (an editor adds them) do not hide the head
+        $lines = preg_split('~\r\n|\n|\r~', preg_replace('~^\xEF\xBB\xBF~', '', $source) ?? $source) ?: [];
+        $skipped = 0;
+        while (isset($lines[0]) && trim($lines[0]) === '' && count($lines) > 1) {
+            array_shift($lines);
+            ++$skipped;
+        }
         if (rtrim($lines[0] ?? '') !== '---') {
             return [$values, $source];
         }
@@ -50,7 +56,7 @@ final class Frontmatter
             if ($line === '' || str_starts_with($line, '#')) {
                 continue;
             }
-            $number = $i + 1;
+            $number = $i + 1 + $skipped;
             if (preg_match('~^([a-z]+)\s*:\s*(.*)$~', $line, $m) !== 1) {
                 throw new InvalidCustomFile("frontmatter line $number: expected `key: value`");
             }
