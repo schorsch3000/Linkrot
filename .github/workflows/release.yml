@@ -22,7 +22,7 @@ jobs:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/scripts
       - env:
@@ -33,7 +33,7 @@ jobs:
   server-dist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
         run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
       - run: make -C server dist VERSION=${{ steps.v.outputs.version }}
@@ -46,7 +46,7 @@ jobs:
   cli-dist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
         run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
       # caches modules and the build cache (restored from main, where CI builds all platforms)
