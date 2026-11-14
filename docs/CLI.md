@@ -140,7 +140,7 @@ pages that are open right now keep their look.
 
 Static pages that are linked in the footer of every page of your server, for an imprint, a privacy notice and the like. A
 page is a Markdown file; see [API.md](API.md#get-pages-getputdelete-pagesname-get-page-template---static-pages) for the
-head (`title`, `link`, `order`, `published`, `lang`) and what the strict Markdown allows (no raw HTML).
+head (`title`, `link`, `order`, `published`, `lang`, `replaces_startpage`) and what the strict Markdown allows (no raw HTML).
 
 ```
 page template [-o path]       print a page to start from: every key of the head, some dummy content (a draft)
@@ -149,6 +149,9 @@ page ls [--json]              list the pages in the order of the footer; drafts 
 page get <name> [-o path] [--html]   print the file exactly as you uploaded it; --html: the rendered body, also of a draft
 page rm <name>...             delete pages (the original is deleted too, download it first)
 ```
+
+A page with `replaces_startpage: true` is shown at `/` instead of the start page of linkrot (several: one after the other,
+split by a line) and is not linked in the footer; `page ls` marks it.
 
 The name of a page, which is its URL (`/page/<name>`), is made from the file name: `Imprint.md` becomes `imprint`. `--name`
 chooses it, and is needed for standard input. The server checks and renders the file when you upload it and refuses it

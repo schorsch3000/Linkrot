@@ -14,15 +14,15 @@ final class FrontmatterTest extends TestCase
     {
         [$values, $body] = Frontmatter::parse("# Hello\n\ntext\n");
 
-        self::assertSame(['title' => null, 'link' => null, 'order' => 100, 'published' => true, 'lang' => 'en'], $values);
+        self::assertSame(['title' => null, 'link' => null, 'order' => 100, 'published' => true, 'lang' => 'en', 'replaces_startpage' => false], $values);
         self::assertSame("# Hello\n\ntext\n", $body);
     }
 
     public function testAllKeys(): void
     {
-        [$values, $body] = Frontmatter::parse("---\n# a comment\ntitle: Impressum\n\nlink: \"Impressum & Kontakt\"\norder: -5\npublished: false\nlang: de-AT\n---\nBody\n");
+        [$values, $body] = Frontmatter::parse("---\n# a comment\ntitle: Impressum\n\nlink: \"Impressum & Kontakt\"\norder: -5\npublished: false\nlang: de-AT\nreplaces_startpage: true\n---\nBody\n");
 
-        self::assertSame(['title' => 'Impressum', 'link' => 'Impressum & Kontakt', 'order' => -5, 'published' => false, 'lang' => 'de-AT'], $values);
+        self::assertSame(['title' => 'Impressum', 'link' => 'Impressum & Kontakt', 'order' => -5, 'published' => false, 'lang' => 'de-AT', 'replaces_startpage' => true], $values);
         self::assertSame("Body\n", $body);
     }
 
@@ -75,6 +75,7 @@ final class FrontmatterTest extends TestCase
         yield 'order text' => ["---\norder: first\n---\n", 'whole number'];
         yield 'order huge' => ["---\norder: 100000\n---\n", 'whole number'];
         yield 'published yes' => ["---\npublished: yes\n---\n", 'true or false'];
+        yield 'replaces_startpage yes' => ["---\nreplaces_startpage: yes\n---\n", 'line 2: `replaces_startpage` must be true or false'];
         yield 'bad lang' => ["---\nlang: German\n---\n", 'language code'];
         yield 'list' => ["---\ntitle:\n  - a\n---\n", 'line 2'];
     }

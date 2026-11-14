@@ -148,6 +148,8 @@ type Page struct {
 	Order     int    `json:"order"`
 	Published bool   `json:"published"`
 	Lang      string `json:"lang"`
-	URL       string `json:"url"`
-	UpdatedAt int64  `json:"updated_at"`
+	// ReplacesStartpage: shown at / instead of the about page, and not linked in the footer.
+	ReplacesStartpage bool   `json:"replaces_startpage"`
+	URL               string `json:"url"`
+	UpdatedAt         int64  `json:"updated_at"`
 }

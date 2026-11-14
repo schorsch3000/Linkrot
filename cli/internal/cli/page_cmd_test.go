@@ -51,6 +51,20 @@ func TestPageLsMarksDrafts(t *testing.T) {
 	}
 }
 
+func TestPagePutAndLsShowAPageThatReplacesTheStartpage(t *testing.T) {
+	e := newEnv(t)
+	code, out, errs := e.run("page", "put", e.file("welcome.md", "---\ntitle: Welcome\nreplaces_startpage: true\n---\nHi\n"))
+	if code != 0 || !strings.Contains(out, "welcome: published, replaces the start page") || strings.Contains(out, "link ") {
+		t.Fatalf("put: code %d: %q %s", code, out, errs)
+	}
+	if _, out, _ := e.run("page", "ls"); !strings.Contains(out, "replaces /") {
+		t.Fatalf("ls: %q", out)
+	}
+	if _, out, _ := e.run("page", "ls", "--json"); !strings.Contains(out, `"replaces_startpage": true`) {
+		t.Fatalf("ls --json: %q", out)
+	}
+}
+
 func TestPageLsWithoutPagesPrintsNothing(t *testing.T) {
 	e := newEnv(t)
 	if code, out, _ := e.run("page", "ls"); code != 0 || out != "" {

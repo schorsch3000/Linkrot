@@ -15,6 +15,8 @@ final readonly class PageMeta
         public int $order,
         public bool $published,
         public string $lang,
+        /** Shown at `/` instead of the about page, and not linked in the footer. */
+        public bool $replacesStartpage,
         /** Version of the renderer that made the cached HTML. */
         public int $renderVersion,
         public int $updatedAt,
@@ -30,6 +32,7 @@ final readonly class PageMeta
             'order' => $this->order,
             'published' => $this->published,
             'lang' => $this->lang,
+            'replaces_startpage' => $this->replacesStartpage,
             'render_version' => $this->renderVersion,
             'updated_at' => $this->updatedAt,
         ];
@@ -44,13 +47,14 @@ final readonly class PageMeta
         $order = $data['order'] ?? null;
         $published = $data['published'] ?? null;
         $lang = $data['lang'] ?? null;
+        $replaces = $data['replaces_startpage'] ?? false; // an index from before this key: no page could have it
         $version = $data['render_version'] ?? null;
         $updatedAt = $data['updated_at'] ?? null;
         if (!is_string($slug) || !is_string($title) || !is_string($link) || !is_int($order) || !is_bool($published)
-            || !is_string($lang) || !is_int($version) || !is_int($updatedAt)) {
+            || !is_string($lang) || !is_bool($replaces) || !is_int($version) || !is_int($updatedAt)) {
             return null;
         }
 
-        return new self($slug, $title, $link, $order, $published, $lang, $version, $updatedAt);
+        return new self($slug, $title, $link, $order, $published, $lang, $replaces, $version, $updatedAt);
     }
 }

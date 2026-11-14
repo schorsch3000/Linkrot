@@ -34,6 +34,14 @@ func slugOf(path string) string {
 	return slug
 }
 
+// pageSummary says where a page shows up: the footer link, or the start page.
+func pageSummary(p *api.Page) string {
+	if p.ReplacesStartpage {
+		return fmt.Sprintf("replaces the start page, order %d, %s", p.Order, p.URL)
+	}
+	return fmt.Sprintf("link %q, order %d, %s", p.Link, p.Order, p.URL)
+}
+
 func (a *App) pageCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "page",
@@ -43,7 +51,8 @@ func (a *App) pageCommand() *cobra.Command {
 			"  link       text of the link in the footer (default: the title)\n" +
 			"  order      links are sorted by this number, lowest first (default 100), then by text\n" +
 			"  published  true (default) or false; a page that is not published is a draft: not reachable, not linked\n" +
-			"  lang       language of the page, en by default\n\n" +
+			"  lang       language of the page, en by default\n" +
+			"  replaces_startpage  true: shown at / instead of the start page, not linked in the footer (default false)\n\n" +
 			"Raw HTML is refused, images come from https addresses or data: URLs. A page is reachable at /page/<name>, the name\n" +
 			"comes from the file name. Start with `page template`.",
 		Example: fmt.Sprintf("  %[1]s page template -o imprint.md\n  %[1]s page put imprint.md\n  %[1]s page ls\n  %[1]s page get imprint -o imprint.md\n  %[1]s page rm imprint", a.Name),
@@ -80,7 +89,7 @@ func (a *App) pageLs() *cobra.Command {
 				}
 				var rows [][]cell
 				if len(pages) > 0 {
-					h := []string{"NAME", "TITLE", "LINK", "ORDER", "PUBLISHED", "LANG", "URL"}
+					h := []string{"NAME", "TITLE", "LINK", "ORDER", "PUBLISHED", "LANG", "START PAGE", "URL"}
 					row := make([]cell, len(h))
 					for i, t := range h {
 						row[i] = cell{t, color.Bold}
@@ -92,6 +101,10 @@ func (a *App) pageLs() *cobra.Command {
 					if !p.Published {
 						published, style = "no (draft)", color.Yellow
 					}
+					startpage := ""
+					if p.ReplacesStartpage {
+						startpage = "replaces /"
+					}
 					rows = append(rows, []cell{
 						{p.Slug, color.Yellow},
 						{p.Title, ""},
@@ -99,6 +112,7 @@ func (a *App) pageLs() *cobra.Command {
 						{strconv.Itoa(p.Order), ""},
 						{published, style},
 						{p.Lang, ""},
+						{startpage, ""},
 						{p.URL, color.Cyan},
 					})
 				}
@@ -192,7 +206,7 @@ func (a *App) pagePut() *cobra.Command {
 				if !p.Published {
 					state = "not published (draft)"
 				}
-				_, err = fmt.Fprintf(a.Out, "%s: %s, link %q, order %d, %s\n", p.Slug, state, p.Link, p.Order, p.URL)
+				_, err = fmt.Fprintf(a.Out, "%s: %s, %s\n", p.Slug, state, pageSummary(p))
 				return err
 			})
 		},

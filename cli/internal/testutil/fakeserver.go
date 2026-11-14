@@ -489,6 +489,9 @@ func (s *FakeServer) pages(w http.ResponseWriter, r *http.Request, path string) 
 			if line == "published: false" {
 				p.Published = false
 			}
+			if line == "replaces_startpage: true" {
+				p.ReplacesStartpage = true
+			}
 		}
 		return p
 	}

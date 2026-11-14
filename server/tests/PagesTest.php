@@ -300,7 +300,7 @@ final class PagesTest extends AppTestCase
 
         self::assertSame(200, $template->status);
         self::assertStringStartsWith('text/markdown', $template->headers['Content-Type']);
-        foreach (['title:', 'link:', 'order:', 'published:', 'lang:'] as $key) {
+        foreach (['title:', 'link:', 'order:', 'published:', 'lang:', 'replaces_startpage:'] as $key) {
             self::assertStringContainsString("\n$key", $template->body, $key);
         }
         $response = $this->put('template', $template->body);
@@ -364,5 +364,108 @@ final class PagesTest extends AppTestCase
 
         self::assertStringNotContainsString('<script>alert', $html);
         self::assertStringContainsString('&lt;script&gt;alert(1)&lt;/script&gt;', $html);
+    }
+
+    private function startpagePage(string $slug, string $title, string $extra = ''): void
+    {
+        self::assertSame(200, $this->put($slug, "---\ntitle: $title\nreplaces_startpage: true\n$extra---\nBody of $title\n")->status);
+    }
+
+    public function testAPageCanReplaceTheStartpage(): void
+    {
+        $this->startpagePage('welcome', 'Welcome', "lang: de\n");
+
+        $response = $this->request('GET', '/', auth: false);
+
+        self::assertSame(200, $response->status);
+        self::assertStringNotContainsString('Links that rot.', $response->body, 'the about page is gone');
+        self::assertStringContainsString('<h1 class="name">Welcome</h1>', $response->body);
+        self::assertStringContainsString('Body of Welcome', $response->body);
+        self::assertStringContainsString('<html lang="de">', $response->body);
+        self::assertStringContainsString('<title>Welcome · linkrot</title>', $response->body);
+        self::assertStringContainsString('<body class="custompage startpage custompage_welcome">', $response->body);
+        self::assertSame('no-store', $response->headers['Cache-Control']);
+        self::assertStringContainsString("img-src 'self' https: data:", $response->headers['Content-Security-Policy']);
+        self::assertStringNotContainsString('script-src', $response->headers['Content-Security-Policy']);
+    }
+
+    public function testSeveralPagesAreShownInOrderSplitByALine(): void
+    {
+        $this->startpagePage('second', 'Second', "order: 20\n");
+        $this->startpagePage('first', 'First', "order: 10\n");
+        $this->startpagePage('third', 'Third', "order: 30\n");
+
+        $html = $this->request('GET', '/', auth: false)->body;
+
+        self::assertMatchesRegularExpression('~Body of First.*<hr>.*Body of Second.*<hr>.*Body of Third~s', $html);
+        self::assertSame(2, substr_count($html, "\n<hr>\n"));
+        self::assertStringContainsString('<title>First · linkrot</title>', $html);
+        self::assertStringContainsString('<body class="custompage startpage custompage_first custompage_second custompage_third">', $html);
+        self::assertSame(1, substr_count($html, '<article class="card doc">'), 'one card');
+    }
+
+    public function testPagesThatReplaceTheStartpageAreNotInTheFooterButStayReachable(): void
+    {
+        $this->startpagePage('welcome', 'Welcome');
+        $this->put('imprint', $this->imprint());
+
+        $home = $this->request('GET', '/', auth: false)->body;
+        self::assertStringContainsString('<a href="/page/imprint"', $home);
+        self::assertStringNotContainsString('href="/page/welcome"', $home);
+        $other = $this->request('GET', '/page/imprint', auth: false)->body;
+        self::assertStringNotContainsString('/page/welcome', $other);
+        self::assertSame(200, $this->request('GET', '/page/welcome', auth: false)->status);
+        self::assertTrue(json_decode($this->request('GET', '/api/v1/pages')->body, true)['pages'][1]['replaces_startpage'] ?? false);
+    }
+
+    public function testADraftDoesNotReplaceTheStartpage(): void
+    {
+        $this->startpagePage('welcome', 'Welcome', "published: false\n");
+
+        self::assertStringContainsString('Links that rot.', $this->request('GET', '/', auth: false)->body);
+    }
+
+    public function testWithTheStartpageOffTheReplacingPagesDoNotShowUp(): void
+    {
+        $this->startpagePage('welcome', 'Welcome');
+        $this->request('PATCH', '/api/v1/settings', json: ['show_startpage' => false]);
+
+        self::assertSame('', $this->request('GET', '/', auth: false)->body);
+        $this->request('PATCH', '/api/v1/settings', json: ['show_startpage' => true]);
+        self::assertStringContainsString('Body of Welcome', $this->request('GET', '/', auth: false)->body);
+    }
+
+    public function testDeletingTheReplacingPageBringsTheAboutPageBack(): void
+    {
+        $this->startpagePage('welcome', 'Welcome');
+        $this->request('DELETE', '/api/v1/pages/welcome');
+
+        self::assertStringContainsString('Links that rot.', $this->request('GET', '/', auth: false)->body);
+    }
+
+    public function testTheReplacedStartpageHasTheFooterTheCustomLooksAndTheTaglinesLikeAnyPage(): void
+    {
+        $this->startpagePage('welcome', 'Welcome');
+        $this->put('imprint', $this->imprint());
+        $this->request('PUT', '/api/v1/custom/taglines', raw: 'Only mine.');
+        $this->request('PUT', '/api/v1/custom/css', raw: 'a { color: red }');
+        $this->request('PATCH', '/api/v1/settings', json: ['show_title' => false]);
+
+        $html = $this->request('GET', '/', auth: false)->body;
+
+        self::assertStringContainsString('<footer>Only mine.</footer>', $html);
+        self::assertStringContainsString('<nav class="pages"', $html);
+        self::assertMatchesRegularExpression('~href="/assets/user\.[0-9a-f]{16}\.css"~', $html);
+        self::assertStringNotContainsString('class="brand"', $html);
+    }
+
+    public function testAnOldIndexWithoutTheKeyStillWorks(): void
+    {
+        $this->put('imprint', $this->imprint());
+        $index = json_decode((string) file_get_contents($this->dir . '/pages/index.json'), true);
+        unset($index['pages'][0]['replaces_startpage']);
+        file_put_contents($this->dir . '/pages/index.json', json_encode($index));
+
+        self::assertStringContainsString('<a href="/page/imprint"', $this->request('GET', '/', auth: false)->body);
     }
 }

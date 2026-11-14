@@ -463,6 +463,23 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("footer link after rm: %s", body)
 	}
 
+	// a page that replaces the start page: shown at /, not in the footer; gone again after the rm
+	welcome := filepath.Join(t.TempDir(), "welcome.md")
+	if err := os.WriteFile(welcome, []byte("---\ntitle: Welcome\nreplaces_startpage: true\n---\nOur own start page.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := s.must(t, "page", "put", welcome); !strings.Contains(out, "replaces the start page") {
+		t.Fatalf("page put:\n%s", out)
+	}
+	if _, body := get(t, s.baseURL+"/", nil); !strings.Contains(string(body), "Our own start page.") || strings.Contains(string(body), "Links that rot.") ||
+		strings.Contains(string(body), `href="/page/welcome"`) {
+		t.Fatalf("replaced start page: %s", body)
+	}
+	s.must(t, "page", "rm", "welcome")
+	if _, body := get(t, s.baseURL+"/", nil); !strings.Contains(string(body), "Links that rot.") {
+		t.Fatalf("about page after rm: %s", body)
+	}
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

@@ -448,7 +448,7 @@ func pageSpec(slug string) editSpec {
 			if !p.Published {
 				state = "not published (draft)"
 			}
-			return fmt.Sprintf("%s is %s, link %q, order %d, %s", p.Slug, state, p.Link, p.Order, p.URL), nil
+			return fmt.Sprintf("%s is %s, %s", p.Slug, state, pageSummary(p)), nil
 		},
 	}
 }

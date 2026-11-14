@@ -50,6 +50,26 @@ final readonly class PageStore
         return array_values(array_filter($this->all(), static fn(PageMeta $page): bool => $page->published));
     }
 
+    /**
+     * The links of the footer: the published pages that do not take the place of the start page.
+     *
+     * @return list<PageMeta>
+     */
+    public function footer(): array
+    {
+        return array_values(array_filter($this->published(), static fn(PageMeta $page): bool => !$page->replacesStartpage));
+    }
+
+    /**
+     * The published pages that are shown at `/` instead of the about page, in order.
+     *
+     * @return list<PageMeta>
+     */
+    public function startpage(): array
+    {
+        return array_values(array_filter($this->published(), static fn(PageMeta $page): bool => $page->replacesStartpage));
+    }
+
     public function meta(string $slug): ?PageMeta
     {
         return $this->index()[$slug] ?? null;
@@ -151,6 +171,9 @@ final readonly class PageStore
             published: false
             # The language of the page: en, de, de-AT, ...
             lang: en
+            # true: this page is shown at / instead of the start page of linkrot (when the start page is on) and is not
+            # linked in the footer. Several such pages are shown one after the other, in the order above.
+            replaces_startpage: false
             ---
 
             Replace this text with your own. The page is written in Markdown; raw HTML is not allowed and is refused
@@ -210,6 +233,7 @@ final readonly class PageStore
             $values['order'],
             $values['published'],
             $values['lang'],
+            $values['replaces_startpage'],
             PageRenderer::VERSION,
             ($this->clock)(),
         ), $html];
@@ -277,7 +301,7 @@ final readonly class PageStore
                 [$meta, $html] = $this->make($slug, $source);
             } catch (InvalidCustomFile) {
                 // the rules got stricter than when it was uploaded: it stays downloadable and listed, but is not shown
-                $meta = new PageMeta($slug, $slug, $slug, 100, false, 'en', PageRenderer::VERSION, ($this->clock)());
+                $meta = new PageMeta($slug, $slug, $slug, 100, false, 'en', false, PageRenderer::VERSION, ($this->clock)());
                 $html = '';
             }
             $this->writeAtomic($this->path($slug, 'html'), $html);

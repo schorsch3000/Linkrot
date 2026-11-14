@@ -100,6 +100,22 @@ final class Page
         return self::document($page->title, $card, $look, self::tagline('page-' . $page->slug, $look->taglines), false, $page->lang, 'custompage custompage_' . $page->slug);
     }
 
+    /**
+     * `/` when pages replace the start page: each page as in staticPage(), one after the other in one card, split by a
+     * line. The tab title and the language are those of the first.
+     *
+     * @param non-empty-list<array{PageMeta, string}> $pages the pages and their rendered bodies, in order
+     */
+    public static function startpage(array $pages, Appearance $look = new Appearance()): string
+    {
+        $sections = array_map(static fn(array $page): string => '<h1 class="name">' . self::e($page[0]->title) . '</h1>' . "\n"
+            . '<div class="doc-body">' . "\n" . $page[1] . "\n" . '</div>', $pages);
+        $card = '<article class="card doc">' . "\n" . implode("\n<hr>\n", $sections) . "\n" . '</article>';
+        $classes = 'custompage startpage ' . implode(' ', array_map(static fn(array $page): string => 'custompage_' . $page[0]->slug, $pages));
+
+        return self::document($pages[0][0]->title, $card, $look, self::tagline('startpage', $look->taglines), false, $pages[0][0]->lang, $classes);
+    }
+
     public static function notFound(Appearance $look = new Appearance()): string
     {
         $body = <<<'HTML'

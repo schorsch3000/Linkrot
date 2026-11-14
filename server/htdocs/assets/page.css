@@ -125,3 +125,4 @@ nav.pages + footer { margin-top: .75rem; }
 .doc-body table { display: block; max-width: 100%; margin: 1rem 0; overflow-x: auto; border-collapse: collapse; }
 .doc-body th, .doc-body td { padding: .4rem .7rem; border: 1px solid var(--line); text-align: left; }
 .doc-body th { background: var(--code-bg); }
+.doc > hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }

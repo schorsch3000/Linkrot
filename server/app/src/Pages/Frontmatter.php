@@ -18,6 +18,7 @@ use Linkrot\Custom\InvalidCustomFile;
  *     order: 10
  *     published: true
  *     lang: de
+ *     replaces_startpage: false
  *     ---
  */
 final class Frontmatter
@@ -26,14 +27,14 @@ final class Frontmatter
     public const int MAX_LINK = 40;
 
     /**
-     * @return array{array{title: ?string, link: ?string, order: int, published: bool, lang: string}, string} the values (null:
+     * @return array{array{title: ?string, link: ?string, order: int, published: bool, lang: string, replaces_startpage: bool}, string} the values (null:
      *         not given) and the Markdown below the head
      *
      * @throws InvalidCustomFile
      */
     public static function parse(string $source): array
     {
-        $values = ['title' => null, 'link' => null, 'order' => 100, 'published' => true, 'lang' => 'en'];
+        $values = ['title' => null, 'link' => null, 'order' => 100, 'published' => true, 'lang' => 'en', 'replaces_startpage' => false];
         // a byte order mark and empty lines in front (an editor adds them) do not hide the head
         $lines = preg_split('~\r\n|\n|\r~', preg_replace('~^\xEF\xBB\xBF~', '', $source) ?? $source) ?: [];
         $skipped = 0;
@@ -57,7 +58,7 @@ final class Frontmatter
                 continue;
             }
             $number = $i + 1 + $skipped;
-            if (preg_match('~^([a-z]+)\s*:\s*(.*)$~', $line, $m) !== 1) {
+            if (preg_match('~^([a-z_]+)\s*:\s*(.*)$~', $line, $m) !== 1) {
                 throw new InvalidCustomFile("frontmatter line $number: expected `key: value`");
             }
             [, $key, $raw] = $m;
@@ -74,7 +75,7 @@ final class Frontmatter
             throw new InvalidCustomFile('frontmatter is not closed: the second `---` line is missing');
         }
 
-        /** @var array{title: ?string, link: ?string, order: int, published: bool, lang: string} $values */
+        /** @var array{title: ?string, link: ?string, order: int, published: bool, lang: string, replaces_startpage: bool} $values */
         return [$values, implode("\n", array_slice($lines, $end + 1))];
     }
 
@@ -109,10 +110,11 @@ final class Frontmatter
 
                 return (int) $value;
             case 'published':
+            case 'replaces_startpage':
                 return match ($value) {
                     'true' => true,
                     'false' => false,
-                    default => throw new InvalidCustomFile("frontmatter line $number: `published` must be true or false"),
+                    default => throw new InvalidCustomFile("frontmatter line $number: `$key` must be true or false"),
                 };
             default: // lang
                 if (preg_match('~^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$~', $value) !== 1) {

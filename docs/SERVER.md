@@ -174,7 +174,7 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
 
 ## Download
 
-- `GET /`: a small page about linkrot itself, in the style of the download pages: what it is, three steps, and a button
+- `GET /`: unless pages of the host replace it (see Static pages), a small page about linkrot itself, in the style of the download pages: what it is, three steps, and a button
   to the project on GitHub. Static text only: no script, no commands and nothing about the files or the configuration of
   the instance. With `show_startpage` off it is an empty page (`200`, empty body). Never cached (`Cache-Control:
   no-store`), so a changed setting is visible at once.
@@ -261,6 +261,11 @@ sorted by `order`, then link text); the empty start page of `show_startpage` off
   `PageRenderer::VERSION` (raised whenever the output for the same Markdown can change, for example with a library update),
   the next request renders every page again from its `.md`. A page the stricter rules no longer accept stays downloadable
   and listed, as a draft.
+- **Start page.** A published page with `replaces_startpage: true` (a fifth key of the head, a boolean) is not a footer
+  link (`PageStore::footer()` leaves it out) but one of `PageStore::startpage()`: `/` shows these pages, if there are any
+  and `show_startpage` is on, instead of the about page, in the order of the footer, in one card split by `<hr>`
+  (`Page::startpage`), with the CSP of the pages. They stay reachable at `/page/<name>`. No pages, no published ones, or the
+  start page off: as before.
 - **Limits.** 20 pages, 64 KB each, title 100 and link text 40 characters.
 
 ## Cleanup

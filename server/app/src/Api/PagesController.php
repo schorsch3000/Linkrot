@@ -73,6 +73,7 @@ final readonly class PagesController
             'order' => $page->order,
             'published' => $page->published,
             'lang' => $page->lang,
+            'replaces_startpage' => $page->replacesStartpage,
             'url' => rtrim($this->config->baseUrl, '/') . '/page/' . $page->slug,
             'updated_at' => $page->updatedAt,
         ];

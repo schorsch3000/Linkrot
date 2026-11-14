@@ -22,7 +22,7 @@ final readonly class AppearanceStore
             $this->custom->lines(Kind::Taglines),
             $this->custom->lines(Kind::Headerlines),
             $this->css->href(),
-            $this->pages->published(),
+            $this->pages->footer(),
         );
     }
 }

@@ -110,7 +110,7 @@ final class App
             static fn(Request $request, array $params): Response => new CustomController($custom, $css)->reset($params['name']),
         ));
         foreach (['GET', 'HEAD'] as $method) {
-            $this->router->add($method, '/', static fn(): Response => new HomeController($appearance())->index());
+            $this->router->add($method, '/', static fn(): Response => new HomeController($appearance(), $pages)->index());
         }
         // the stylesheet of the host: in production nginx hands unknown /assets/ names to index.php, php -S does the same
         $this->router->add('GET', '/assets/{name}', static fn(Request $request, array $params): Response => new CustomController($custom, $css)->stylesheet($params['name']));

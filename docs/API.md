@@ -196,7 +196,7 @@ changes nothing.
 | setting | `false` means |
 | --- | --- |
 | `show_taglines` | no tagline at the bottom of any page, no `X-Rot` header on downloads |
-| `show_startpage` | `/` answers `200` with an empty body instead of the about page |
+| `show_startpage` | `/` answers `200` with an empty body instead of the about page (and of the pages that replace it) |
 | `show_title` | no "linkrot" headline with the logo on any page |
 | `show_linkrot_line` | no `linkrot down` line on the download page |
 | `show_curl_line` | no curl line on the download page |
@@ -255,6 +255,7 @@ an error:
 | `order` | the links are sorted by this whole number (-9999 to 9999), lowest first, then by text | `100` |
 | `published` | `false`: a draft, neither reachable (`404`) nor linked | `true` |
 | `lang` | language of the page, `en`, `de`, `de-AT`, ... | `en` |
+| `replaces_startpage` | `true`: see below | `false` |
 
 The Markdown is strict. Allowed: the usual CommonMark, tables, strikethrough, and URLs that become links. Refused with
 `400 invalid_request`, the message names the lines: **any raw HTML**, links other than `https`, `http`, `mailto`, `tel`
@@ -264,8 +265,15 @@ page `400`. Headings are moved down one level (the title is the `h1`). External 
 `rel="nofollow noopener noreferrer"`, images `loading="lazy"` and `referrerpolicy="no-referrer"`. The body of a page has
 the classes `custompage` and `custompage_<name>` for the custom stylesheet.
 
+**Replacing the start page.** A published page with `replaces_startpage: true` is shown at `/` instead of the about page,
+as long as the start page is on (`show_startpage`; when it is off `/` stays empty). Several such pages are shown one
+after the other in one card, in the order of `order`, then link text, split by a horizontal line; the tab title and the
+language are those of the first. Such a page is not linked in the footer (its `link` is unused), but is still reachable at
+`/page/{name}`. A draft never replaces anything. The `<body>` of `/` then has the classes `custompage`, `startpage` and
+`custompage_<name>` of each page shown, and its CSP is the one of the pages (images from `https` and `data:`).
+
 - `GET /pages` lists the pages in the order of the footer: `{"pages": [{"slug", "title", "link", "order", "published",
-  "lang", "url", "updated_at"}]}`.
+  "lang", "replaces_startpage", "url", "updated_at"}]}`.
 - `PUT /pages/{name}` takes the Markdown as the body, checks it, renders it once and stores both. Answers the entry of
   the list. Replaces a page of the same name. A refused upload changes nothing.
 - `GET /pages/{name}` returns the file exactly as it was uploaded (`text/markdown`), byte for byte, so it can be edited
@@ -283,7 +291,7 @@ unknown name are the same `404`.
 
 No authentication.
 
-- `GET /` - the about page of linkrot (an empty page if `show_startpage` is off). Never cached.
+- `GET /` - the about page of linkrot, or the pages that replace it (see static pages); an empty page if `show_startpage` is off. Never cached.
 - `GET /file/{id}/{name}` - HTML page with filename, size, a download button and, unless switched off, the commands to
   fetch the file from a terminal. A wrong `{name}` gets a `302` to the canonical URL.
 - `GET /dl/{id}/{name}` - the download itself (`attachment`, original filename, size, `X-Accel-Redirect`, `Range`
