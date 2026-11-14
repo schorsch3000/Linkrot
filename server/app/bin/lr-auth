@@ -10,11 +10,9 @@ use Linkrot\SchemaOutdatedException;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
-if (!is_dir($dataDir)) {
-    fwrite(STDERR, "lr-auth: data directory not found: $dataDir\n");
-    exit(AuthCommand::FAILED);
-}
+require __DIR__ . '/_tenant.php';
+
+[, , $dataDir] = linkrotTenant('lr-auth');
 
 try {
     $pdo = Database::openCurrent($dataDir . '/linkrot.sqlite');

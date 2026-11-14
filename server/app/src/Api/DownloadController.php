@@ -30,6 +30,7 @@ final readonly class DownloadController
         private FileRepository $files,
         private FileCatalog $catalog,
         private FileStore $store,
+        private string $host,
     ) {}
 
     /** GET /file/{id}[/{name}] */
@@ -70,7 +71,7 @@ final readonly class DownloadController
         ] + self::SECURITY_HEADERS;
 
         if ($this->config->downloadMode === DownloadMode::Xaccel) {
-            return new Response(200, $headers + ['X-Accel-Redirect' => '/_files/' . $file->id]);
+            return new Response(200, $headers + ['X-Accel-Redirect' => '/_files/' . $this->host . '/files/' . $file->id]);
         }
 
         // Development only: PHP streams the file (no range support).

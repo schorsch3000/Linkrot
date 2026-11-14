@@ -13,9 +13,11 @@ require __DIR__ . '/../vendor/autoload.php';
 /*
  * End-to-end check of an installation, run by install.sh: a real round trip through the public base_url with a
  * temporary token (health, upload, page, download, headers). Exit code 0 only if everything works.
- * usage: check-install   (data directory: $LINKROT_DATA or ../../app_data)
+ * usage: check-install   (data directory: $LINKROT_DATA or ../../app_data; tenant: $LINKROT_HOST)
  */
-$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+require __DIR__ . '/_tenant.php';
+
+[, , $dataDir] = linkrotTenant('check-install');
 
 try {
     $config = Config::load($dataDir . '/config.php');

@@ -44,8 +44,9 @@ preview:
 	php scripts/preview.php
 
 run: install
-	@mkdir -p $(DATA_DIR)/files
-	@test -f $(DATA_DIR)/config.php || printf "<?php\nreturn [\n    'base_url' => 'http://localhost:$(PORT)',\n    'download_mode' => 'php',\n];\n" > $(DATA_DIR)/config.php
+	@mkdir -p $(DATA_DIR)/localhost/files
+	@test -f $(DATA_DIR)/global-config.yaml || printf "hosts:\n  - localhost\n" > $(DATA_DIR)/global-config.yaml
+	@test -f $(DATA_DIR)/localhost/config.php || printf "<?php\nreturn [\n    'base_url' => 'http://localhost:$(PORT)',\n    'download_mode' => 'php',\n];\n" > $(DATA_DIR)/localhost/config.php
 	LINKROT_DATA=$(DATA_DIR) php app/bin/migrate
 	LINKROT_DATA=$(DATA_DIR) php -d apc.enable_cli=1 -S localhost:$(PORT) -t htdocs htdocs/index.php
 

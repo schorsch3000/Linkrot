@@ -1,0 +1,29 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Tenants;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * hosts            prints the hosts of global-config.yaml, one per line
+ * hosts add <host> enrolls a host (creates global-config.yaml if needed)
+ * data directory: $LINKROT_DATA or ../../app_data
+ */
+$file = (getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data') . '/' . Tenants::FILE_NAME;
+
+try {
+    if (($argv[1] ?? '') === 'add' && isset($argv[2])) {
+        echo (Tenants::enroll($file, $argv[2]) ? 'enrolled ' : 'already enrolled ') . Tenants::normalize($argv[2]) . "\n";
+    } elseif (count($argv) === 1) {
+        echo implode("\n", Tenants::load($file)->hosts) . "\n";
+    } else {
+        fwrite(STDERR, "usage: hosts [add <host>]\n");
+        exit(2);
+    }
+} catch (InvalidArgumentException $e) {
+    fwrite(STDERR, 'hosts: ' . $e->getMessage() . "\n");
+    exit(1);
+}

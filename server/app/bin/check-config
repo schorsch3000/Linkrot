@@ -9,9 +9,15 @@ require __DIR__ . '/../vendor/autoload.php';
 
 /*
  * Loads the configuration the way the server does and reports the first problem.
- * usage: check-config [path/to/config.php]   (default: $LINKROT_DATA or ../../app_data, then config.php)
+ * usage: check-config [path/to/config.php]   (default: config.php of the tenant $LINKROT_HOST in $LINKROT_DATA or ../../app_data)
  */
-$file = $argv[1] ?? ((getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data') . '/config.php');
+if (isset($argv[1])) {
+    $file = $argv[1];
+} else {
+    require __DIR__ . '/_tenant.php';
+
+    $file = linkrotTenant('check-config')[2] . '/config.php';
+}
 
 try {
     Config::load($file);

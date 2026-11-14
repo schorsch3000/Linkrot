@@ -34,6 +34,7 @@ abstract class AppTestCase extends TestCase
         $this->app = new App(
             $this->config(),
             $this->dir,
+            'lr.example',
             new InMemoryRateLimiter(10, 900, fn(): int => $this->now),
             fn(): int => $this->now,
         );

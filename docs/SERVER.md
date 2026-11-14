@@ -18,20 +18,44 @@ There is no user management. The server consists of
 {deployroot}/app_data     application data, never touched by deployments
 ```
 
-`app_data` contains:
+`app_data` contains the list of hosts and one folder per host (a tenant):
 
 ```
-app_data/config.php       configuration, merged over the defaults in code
-app_data/linkrot.sqlite   database (WAL mode, busy_timeout set)
-app_data/files/<id>       uploaded files, named by id only
-app_data/cleanup.lock     lock file for the cleanup
+app_data/global-config.yaml          the hosts this installation answers for
+app_data/<host>/config.php           configuration of that host, merged over the defaults in code
+app_data/<host>/linkrot.sqlite       its database (WAL mode, busy_timeout set)
+app_data/<host>/files/<id>           its uploaded files, named by id only
+app_data/<host>/cleanup.lock         lock file for its cleanup
 ```
 
-All three folders are owned by the user nginx and php-fpm run as. `lr-auth` is run as that same user, so
+### Tenants
+
+One installation serves any number of hostnames (subdomains of one domain or completely different domains). Every
+host is a tenant of its own: own configuration, tokens, files, cleanup and failed-login counters. Nothing is shared
+but the code.
+
+`app_data/global-config.yaml` lists the allowed hosts, lower case, without port:
+
+```yaml
+hosts:
+  - files.example.com
+  - share.example.org
+```
+
+The `Host` header of a request is normalized (lower case, port and trailing dot removed) and must equal an entry of the
+list. Any other host, including a malformed one, is answered with `421 Misdirected Request` before anything under
+`app_data` is touched; the header never reaches a path unchecked. A listed host whose folder or `config.php` is
+missing is answered with "server misconfigured". `app/bin/hosts` prints the list, `install.sh --add-host <host>`
+enrolls a new host.
+
+The command line tools (`lr-auth`, `check-config`, `check-install`, `migrate`) work on the host named in
+`LINKROT_HOST`. It can be omitted if exactly one host is configured; `migrate` without it migrates every host.
+
+All folders are owned by the user nginx and php-fpm run as. `lr-auth` is run as that same user, so
 no special permission handling is needed.
 
-Uploaded files are never in `htdocs`. nginx has an `internal` location mapped to `app_data/files/`; PHP
-authorises the request and answers with `X-Accel-Redirect`. See [nginx.conf.example](nginx.conf.example).
+Uploaded files are never in `htdocs`. nginx has an `internal` location mapped to `app_data/`; PHP
+authorises the request and answers with `X-Accel-Redirect: /_files/<host>/files/<id>`. See [nginx.conf.example](nginx.conf.example).
 
 ## Identifiers
 
@@ -82,7 +106,7 @@ could not remove a file; the next clean run drops it). The health endpoint repor
 
 ### Filename handling
 
-- the user supplied name is never used on disk, files are stored as `app_data/files/<id>`
+- the user supplied name is never used on disk, files are stored as `app_data/<host>/files/<id>`
 - the name is reduced to a base name, control characters, path separators and NUL are stripped, length limited,
   empty names are rejected
 - `Content-Disposition` carries an ASCII fallback `filename=` plus RFC 5987 `filename*=UTF-8''...`
@@ -173,7 +197,7 @@ There is no cronjob. Any request may run the cleanup **after** the response has 
 (`fastcgi_finish_request`), when `now - last_cleanup > cleanup_interval` (default 8h). It can also be triggered by
 `linkrot cleanup` (`POST /api/v1/cleanup`, ignores the interval).
 
-Locking: `flock(LOCK_EX | LOCK_NB)` on `app_data/cleanup.lock`. If somebody else holds it, skip. After taking the
+Locking: `flock(LOCK_EX | LOCK_NB)` on `app_data/<host>/cleanup.lock`. If somebody else holds it, skip. After taking the
 lock, re-check `last_cleanup` so a second request does not repeat the work.
 
 Cleanup does two steps in this order:
@@ -182,7 +206,7 @@ Cleanup does two steps in this order:
    - `ready` and past `expires_at`, or with `uses_left = 0`
    - `uploading` with `updated_at` older than `upload_timeout` (default 1d)
    - without a data file and older than `orphan_row_timeout` (default 1h)
-2. **Then files.** Delete every file in `app_data/files/` that is unknown to the database. Files younger than a short
+2. **Then files.** Delete every file in `app_data/<host>/files/` that is unknown to the database. Files younger than a short
    grace period are skipped so an upload that is just being created is never touched. Data files of the rows removed
    in step 1 are removed as part of this.
 
@@ -228,7 +252,7 @@ authentication itself:
 
 ## Configuration
 
-`app_data/config.php` returns an array which is merged over the defaults:
+`app_data/<host>/config.php` returns an array which is merged over the defaults:
 
 | key | default | meaning |
 | --- | --- | --- |

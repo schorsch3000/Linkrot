@@ -13,7 +13,7 @@ server/
                          vendor/ (not in git, not in the release)
   htdocs/index.php   front controller
   htdocs/assets/     page.css and page.js of the pages (a release build renames them after their content)
-  app_data/              local dev data (gitignored)
+  app_data/              local dev data (gitignored), `make run` enrolls `localhost`
   tests/
 cli/
   Makefile

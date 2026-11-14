@@ -14,7 +14,8 @@ final readonly class ApcuRateLimiter implements RateLimiter
 {
     private const string PREFIX = 'linkrot:rl:';
 
-    public function __construct(private int $attempts, private int $window)
+    /** @param string $namespace the tenant: one host must not use up the attempts of another */
+    public function __construct(private int $attempts, private int $window, private string $namespace = '')
     {
         if (!function_exists('apcu_enabled') || !apcu_enabled()) {
             throw new RuntimeException('APCu is required for rate limiting but not enabled');
@@ -23,7 +24,7 @@ final readonly class ApcuRateLimiter implements RateLimiter
 
     public function blockedFor(string $clientIp): ?int
     {
-        $key = self::PREFIX . ClientKey::for($clientIp);
+        $key = self::PREFIX . $this->namespace . ':' . ClientKey::for($clientIp);
         $count = apcu_fetch($key . ':n');
         if (!is_int($count) || $count < $this->attempts) {
             return null;
@@ -35,7 +36,7 @@ final readonly class ApcuRateLimiter implements RateLimiter
 
     public function recordFailure(string $clientIp): void
     {
-        $key = self::PREFIX . ClientKey::for($clientIp);
+        $key = self::PREFIX . $this->namespace . ':' . ClientKey::for($clientIp);
         // The window starts with the first failure; both entries expire together.
         apcu_add($key . ':t', time() + $this->window, $this->window);
         apcu_add($key . ':n', 0, $this->window);

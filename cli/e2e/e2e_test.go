@@ -112,8 +112,13 @@ func newStack(t *testing.T, withNginx bool) *stack {
 		}
 	}
 	tmp := t.TempDir()
-	data := filepath.Join(tmp, "data")
+	// one tenant: the host is the one of the base URL, the Host header carries a port that is ignored
+	root := filepath.Join(tmp, "data")
+	data := filepath.Join(root, "127.0.0.1")
 	if err := os.MkdirAll(filepath.Join(data, "files"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "global-config.yaml"), []byte("hosts:\n  - 127.0.0.1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	phpPort := freePort(t)
@@ -130,7 +135,7 @@ func newStack(t *testing.T, withNginx bool) *stack {
 	if err := os.WriteFile(filepath.Join(data, "config.php"), []byte(phpConfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("LINKROT_DATA", data)
+	t.Setenv("LINKROT_DATA", root)
 
 	migrateCmd := exec.CommandContext(context.Background(), "php", filepath.Join(server, "app", "bin", "migrate")) //nolint:gosec // fixed program
 	if out, err := migrateCmd.CombinedOutput(); err != nil {
@@ -162,11 +167,11 @@ http {
       add_header X-Content-Type-Options nosniff always;
       add_header Referrer-Policy no-referrer always;
       add_header X-Rot $upstream_http_x_rot always;
-      alias %[4]s/files/;
+      alias %[4]s/;
     }
   }
 }
-`, tmp, publicPort, phpPort, data)
+`, tmp, publicPort, phpPort, root)
 		if err := os.WriteFile(conf, []byte(nginxConf), 0o600); err != nil {
 			t.Fatal(err)
 		}

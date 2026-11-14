@@ -36,6 +36,7 @@ final class App
     public function __construct(
         public readonly Config $config,
         public readonly string $dataDir,
+        public readonly string $host,
         private ?RateLimiter $limiter = null,
         ?Closure $clock = null,
     ) {
@@ -73,7 +74,7 @@ final class App
         foreach (['GET', 'HEAD'] as $method) {
             $this->router->add($method, '/', fn(): Response => new HomeController()->index());
         }
-        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store);
+        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host);
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
         foreach (['GET', 'HEAD'] as $method) {
@@ -105,7 +106,7 @@ final class App
         return function (Request $request, array $params) use ($handler): Response {
             $guard = new Guard(
                 new Authenticator(new TokenStore($this->db())),
-                $this->limiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow),
+                $this->limiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $this->host),
             );
 
             return $guard->check($request) ?? $handler($request, $params);

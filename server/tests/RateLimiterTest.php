@@ -92,4 +92,19 @@ final class RateLimiterTest extends TestCase
         self::assertLessThanOrEqual(60, $blocked);
         self::assertNull($limiter->blockedFor('192.0.2.10'));
     }
+
+    public function testApcuTenantsDoNotShareAttempts(): void
+    {
+        if (!function_exists('apcu_enabled') || !apcu_enabled()) {
+            self::markTestSkipped('APCu not enabled in the CLI (run with -d apc.enable_cli=1)');
+        }
+        apcu_clear_cache();
+        $one = new ApcuRateLimiter(1, 60, 'one.example');
+        $two = new ApcuRateLimiter(1, 60, 'two.example');
+
+        $one->recordFailure('192.0.2.9');
+
+        self::assertNotNull($one->blockedFor('192.0.2.9'));
+        self::assertNull($two->blockedFor('192.0.2.9'));
+    }
 }

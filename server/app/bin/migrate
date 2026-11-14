@@ -4,23 +4,38 @@
 declare(strict_types=1);
 
 use Linkrot\Database;
+use Linkrot\Tenants;
 
 require __DIR__ . '/../vendor/autoload.php';
 
 /*
- * Creates the database or brings its schema up to date. Run by install.sh, as the user php-fpm runs as.
+ * Creates the database or brings its schema up to date, for every host of global-config.yaml (or only for
+ * $LINKROT_HOST). Run by install.sh, as the user php-fpm runs as.
  * usage: migrate   (data directory: $LINKROT_DATA or ../../app_data)
  */
-$dataDir = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
-if (!is_dir($dataDir)) {
-    fwrite(STDERR, "migrate: data directory not found: $dataDir\n");
-    exit(1);
-}
-
+$root = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
 try {
-    $pdo = Database::openMigrated($dataDir . '/linkrot.sqlite');
-} catch (Throwable $e) {
+    $tenants = Tenants::load($root . '/' . Tenants::FILE_NAME);
+    $hosts = getenv('LINKROT_HOST') ? [$tenants->select(getenv('LINKROT_HOST'))] : $tenants->hosts;
+} catch (InvalidArgumentException $e) {
     fwrite(STDERR, 'migrate: ' . $e->getMessage() . "\n");
     exit(1);
 }
-echo 'database schema is at version ' . Database::schemaVersion($pdo) . "\n";
+
+$failed = false;
+foreach ($hosts as $host) {
+    if (!is_dir("$root/$host")) {
+        fwrite(STDERR, "migrate: $host: data directory not found: $root/$host\n");
+        $failed = true;
+        continue;
+    }
+    try {
+        $pdo = Database::openMigrated("$root/$host/linkrot.sqlite");
+    } catch (Throwable $e) {
+        fwrite(STDERR, "migrate: $host: " . $e->getMessage() . "\n");
+        $failed = true;
+        continue;
+    }
+    echo "$host: database schema is at version " . Database::schemaVersion($pdo) . "\n";
+}
+exit($failed ? 1 : 0);

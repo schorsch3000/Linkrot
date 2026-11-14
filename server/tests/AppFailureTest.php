@@ -16,7 +16,7 @@ final class AppFailureTest extends TestCase
         $dir = sys_get_temp_dir() . '/linkrot-broken-' . bin2hex(random_bytes(6));
         file_put_contents($dir, 'a file where the data directory should be');
         try {
-            $app = new App(new Config(baseUrl: 'https://lr.example'), $dir);
+            $app = new App(new Config(baseUrl: 'https://lr.example'), $dir, 'lr.example');
             $request = new Request('GET', '/dl/abcd7KfRtm4pWxnZ', [], [], ['REMOTE_ADDR' => '192.0.2.1'], fopen('php://memory', 'r') ?: self::fail('stream'));
 
             $response = $app->handle($request);
@@ -33,7 +33,7 @@ final class AppFailureTest extends TestCase
         $dir = sys_get_temp_dir() . '/linkrot-broken-' . bin2hex(random_bytes(6));
         file_put_contents($dir, 'a file where the data directory should be');
         try {
-            new App(new Config(baseUrl: 'https://lr.example'), $dir)->cleanupIfDue();
+            new App(new Config(baseUrl: 'https://lr.example'), $dir, 'lr.example')->cleanupIfDue();
             $this->addToAssertionCount(1);
         } finally {
             unlink($dir);

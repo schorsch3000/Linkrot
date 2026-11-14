@@ -30,7 +30,7 @@ final class SchemaTest extends TestCase
 
     public function testServerAnswersClearlyUntilInstallShHasMigrated(): void
     {
-        $app = new App(new Config(baseUrl: 'https://lr.example'), $this->dir);
+        $app = new App(new Config(baseUrl: 'https://lr.example'), $this->dir, 'lr.example');
         $request = static fn(string $path): Request => new Request('GET', $path, [], [], ['REMOTE_ADDR' => '192.0.2.1'], fopen('php://memory', 'r') ?: throw new \RuntimeException('stream'));
 
         foreach (['/api/v1/files', '/api/v1/health', '/file/abcd7KfRtm4pWxnZ/a.txt', '/dl/abcd7KfRtm4pWxnZ'] as $path) {
@@ -41,6 +41,6 @@ final class SchemaTest extends TestCase
         }
 
         Database::openMigrated($this->dir . '/linkrot.sqlite');
-        self::assertSame(404, new App(new Config(baseUrl: 'https://lr.example'), $this->dir)->handle($request('/dl/abcd7KfRtm4pWxnZ'))->status);
+        self::assertSame(404, new App(new Config(baseUrl: 'https://lr.example'), $this->dir, 'lr.example')->handle($request('/dl/abcd7KfRtm4pWxnZ'))->status);
     }
 }

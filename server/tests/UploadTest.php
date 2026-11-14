@@ -30,7 +30,7 @@ final class UploadTest extends TestCase
             maxRmAfter: '1y',
         );
         Database::openMigrated($this->dir . '/linkrot.sqlite');
-        $this->app = new App($config, $this->dir, new InMemoryRateLimiter(10, 900, fn(): int => $this->now), fn(): int => $this->now);
+        $this->app = new App($config, $this->dir, 'lr.example', new InMemoryRateLimiter(10, 900, fn(): int => $this->now), fn(): int => $this->now);
         $this->token = new TokenStore($this->app->db())->create('test');
     }
 

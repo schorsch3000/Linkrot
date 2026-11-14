@@ -24,11 +24,12 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
    It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
    --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
-   Afterwards it checks `app_data/config.php`: if the file is missing it prints a prominent notice with what to create
-   (until then every request is answered with "server misconfigured"), and if it exists it is loaded the way the server
-   does, so mistakes show up at deploy time. If `app_data/` exists it also creates the database or migrates it to the
-   schema of this release (`app/bin/migrate`); on a first installation run `install.sh` again after step 4. The script's
-   exit code is 0 for a missing config, and non-zero if the migration fails.
+   Afterwards, for every host of `app_data/global-config.yaml`, it checks `app_data/<host>/config.php`: if the file is
+   missing it prints a prominent notice with what to create (until then every request for that host is answered with
+   "server misconfigured"), and if it exists it is loaded the way the server does, so mistakes show up at deploy time.
+   It also creates the database of every host or migrates it to the schema of this release (`app/bin/migrate`). Without
+   `global-config.yaml` it says how to enroll the first host (step 4). The script's exit code is 0 for a missing
+   config, and non-zero if the migration fails.
 
    Once the config is valid it also checks the installation end to end (`app/bin/check-install`): with a temporary token
    named `test-install-check` it asks the health endpoint, uploads a small file through `base_url`, opens its page,
@@ -38,8 +39,17 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    failed check makes `install.sh` exit with 1. Run it as the user php-fpm runs as, after nginx is configured. On a host
    that cannot reach its own `base_url`, use `install.sh --no-network-check`.
 
-4. Create `{deployroot}/app_data/` (never touched by a deployment) with the `files/` folder and a `config.php`; `app_data/`
-   and everything in it must belong to the user php-fpm runs as. See [SERVER.md](SERVER.md#configuration) for all options.
+4. Enroll a host. `{deployroot}/app_data/` is never touched by a deployment, it and everything in it must belong to the
+   user php-fpm runs as (run the script as that user). Every hostname the server answers to is a tenant (see
+   [SERVER.md](SERVER.md#tenants)); repeat for each:
+
+   ```
+   {deployroot}/app/install.sh --add-host linkrot.example
+   ```
+
+   This lists the host in `app_data/global-config.yaml` (created if needed), creates `app_data/linkrot.example/files/`
+   and the database, and tells you to create `app_data/linkrot.example/config.php`. See
+   [SERVER.md](SERVER.md#configuration) for all options. Run `install.sh` again afterwards for the end-to-end check.
 
    ```php
    <?php
@@ -50,19 +60,20 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    ```
 
    **nginx and php-fpm as different users:** php-fpm writes the files, but nginx opens them itself (`X-Accel-Redirect`). Every
-   directory down to `app_data/files/` must be searchable for nginx's user (mode `x` for others, e.g. `chmod o+x`, or an ACL
+   directory down to `app_data/<host>/files/` must be searchable for nginx's user (mode `x` for others, e.g. `chmod o+x`, or an ACL
    such as `setfacl -m u:www-data:x`), and the files must be readable. The server creates `files/` as `0711` and the data
    files as `0644` regardless of the umask. The symptom of a missing permission is a `403` on `/dl/...` and
-   `open() ".../app_data/files/<id>" failed (13: Permission denied)` in nginx's error log; `namei -l <path to a file>` shows
+   `open() ".../app_data/<host>/files/<id>" failed (13: Permission denied)` in nginx's error log; `namei -l <path to a file>` shows
    which directory is the problem.
 5. Add the server block from [nginx.conf.example](nginx.conf.example) (`root` is `{deployroot}/htdocs`, the internal
-   `/_files/` location points at `{deployroot}/app_data/files/`). Its `/assets/` location caches the stylesheet and the
+   `/_files/` location points at `{deployroot}/app_data/`; PHP redirects to `/_files/<host>/files/<id>`). List every
+   host in `server_name`, or use one block per host. Hosts that are not in `global-config.yaml` get `421`. Its `/assets/` location caches the stylesheet and the
    script of the pages forever; that is safe because a release names them after their content, so an upgrade brings new
    names.
-6. Create a token for every device, as the web user. The token is shown once:
+6. Create a token for every device (tokens belong to one host; `LINKROT_HOST` can be omitted with a single host), as the web user. The token is shown once:
 
    ```
-   sudo -u www-data {deployroot}/app/bin/lr-auth get my-laptop
+   sudo -u www-data LINKROT_HOST=linkrot.example {deployroot}/app/bin/lr-auth get my-laptop
    ```
 
 ### Timeouts

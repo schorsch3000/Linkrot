@@ -54,7 +54,7 @@ final class DownloadTest extends AppTestCase
         $response = $this->request('GET', "/dl/$id/ignored", auth: false);
 
         self::assertSame(200, $response->status);
-        self::assertSame("/_files/$id", $response->headers['X-Accel-Redirect']);
+        self::assertSame("/_files/lr.example/files/$id", $response->headers['X-Accel-Redirect']);
         self::assertSame("attachment; filename=\"_bung.txt\"; filename*=UTF-8''%C3%9Cbung.txt", $response->headers['Content-Disposition']);
         self::assertSame('application/octet-stream', $response->headers['Content-Type']);
         self::assertSame('nosniff', $response->headers['X-Content-Type-Options']);
@@ -119,6 +119,7 @@ final class DownloadTest extends AppTestCase
         $app = new \Linkrot\App(
             new Config(baseUrl: 'https://lr.example', chunkSize: 10, downloadMode: DownloadMode::Php),
             $this->dir,
+            'lr.example',
             new \Linkrot\Auth\InMemoryRateLimiter(10, 900, fn(): int => $this->now),
             fn(): int => $this->now,
         );
