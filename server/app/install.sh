@@ -2,7 +2,7 @@
 # Installs the production dependencies and checks the setup. Run after unpacking a release, and again after
 # every upgrade.
 # usage: install.sh [--add-host <hostname>]... [--no-network-check]
-#   --add-host          enroll a host (a tenant): lists it in app_data/global-config.yaml and creates its data folder
+#   --add-host          enroll a host (a tenant): lists it in app_data/global-config.php and creates its data folder
 #   --no-network-check  skip the round trip through base_url (offline installs, a host that cannot reach itself)
 set -euo pipefail
 
@@ -37,7 +37,7 @@ command -v composer >/dev/null 2>&1 || {
 composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --classmap-authoritative
 
 # app_data lives next to app/ and is never touched by a deployment (LINKROT_DATA overrides it, as for the server).
-# It holds global-config.yaml (the hosts) and one folder per host.
+# It holds global-config.php (the hosts) and one folder per host.
 data_dir="${LINKROT_DATA:-$(cd .. && pwd)/app_data}"
 export LINKROT_DATA="$data_dir"
 
@@ -53,12 +53,12 @@ for new_host in "${new_hosts[@]}"; do
 	echo "install.sh: $host_status"
 done
 
-if [ ! -f "$data_dir/global-config.yaml" ]; then
+if [ ! -f "$data_dir/global-config.php" ]; then
 	cat >&2 <<MSG
 
 ================================================================================
  ACTION REQUIRED: no host is set up yet.
- Until $data_dir/global-config.yaml exists every request is answered with
+ Until $data_dir/global-config.php exists every request is answered with
  "server misconfigured". Enroll the first host (one per hostname the server answers to):
 
      install.sh --add-host your.server.example

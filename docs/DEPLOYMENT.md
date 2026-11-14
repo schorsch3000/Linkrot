@@ -24,11 +24,11 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
    It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
    --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
-   Afterwards, for every host of `app_data/global-config.yaml`, it checks `app_data/<host>/config.php`: if the file is
+   Afterwards, for every host of `app_data/global-config.php`, it checks `app_data/<host>/config.php`: if the file is
    missing it prints a prominent notice with what to create (until then every request for that host is answered with
    "server misconfigured"), and if it exists it is loaded the way the server does, so mistakes show up at deploy time.
    It also creates the database of every host or migrates it to the schema of this release (`app/bin/migrate`). Without
-   `global-config.yaml` it says how to enroll the first host (step 4). The script's exit code is 0 for a missing
+   `global-config.php` it says how to enroll the first host (step 4). The script's exit code is 0 for a missing
    config, and non-zero if the migration fails.
 
    Once the config is valid it also checks the installation end to end (`app/bin/check-install`): with a temporary token
@@ -47,7 +47,7 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    {deployroot}/app/install.sh --add-host linkrot.example
    ```
 
-   This lists the host in `app_data/global-config.yaml` (created if needed), creates `app_data/linkrot.example/files/`
+   This lists the host in `app_data/global-config.php` (created if needed), creates `app_data/linkrot.example/files/`
    and the database, and tells you to create `app_data/linkrot.example/config.php`. See
    [SERVER.md](SERVER.md#configuration) for all options. Run `install.sh` again afterwards for the end-to-end check.
 
@@ -67,7 +67,7 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    which directory is the problem.
 5. Add the server block from [nginx.conf.example](nginx.conf.example) (`root` is `{deployroot}/htdocs`, the internal
    `/_files/` location points at `{deployroot}/app_data/`; PHP redirects to `/_files/<host>/files/<id>`). List every
-   host in `server_name`, or use one block per host. Hosts that are not in `global-config.yaml` get `421`. Its `/assets/` location caches the stylesheet and the
+   host in `server_name`, or use one block per host. Hosts that are not in `global-config.php` get `421`. Its `/assets/` location caches the stylesheet and the
    script of the pages forever; that is safe because a release names them after their content, so an upgrade brings new
    names.
 6. Create a token for every device (tokens belong to one host; `LINKROT_HOST` can be omitted with a single host), as the web user. The token is shown once:

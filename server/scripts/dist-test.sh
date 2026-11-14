@@ -41,12 +41,12 @@ grep -q -- "--add-host" <<<"$out" || { echo "instructions do not name --add-host
 out="$("$root/app/install.sh" --add-host 127.0.0.1:1 --no-network-check 2>&1)" || { echo "--add-host failed:" >&2; echo "$out" >&2; exit 1; }
 grep -q "ACTION REQUIRED: there is no configuration for $host" <<<"$out" || { echo "no instructions for the new host:" >&2; echo "$out" >&2; exit 1; }
 grep -q "$hd/config.php" <<<"$out" || { echo "instructions do not name the file" >&2; exit 1; }
-grep -q -- "- $host" "$root/app_data/global-config.yaml" || { echo "host not listed in global-config.yaml" >&2; exit 1; }
+grep -q "'$host'" "$root/app_data/global-config.php" || { echo "host not listed in global-config.php" >&2; exit 1; }
 [ -d "$hd/files" ] || { echo "--add-host did not create the files folder" >&2; exit 1; }
 [ -s "$hd/linkrot.sqlite" ] || { echo "install.sh did not create the database" >&2; exit 1; }
 LINKROT_DATA="$root/app_data" "$root/app/bin/lr-auth" ls >/dev/null || { echo "database is not usable after install.sh" >&2; exit 1; }
 out="$("$root/app/install.sh" --add-host "$host" --no-network-check 2>&1)" || { echo "enrolling twice failed" >&2; exit 1; }
-[ "$(grep -c -- "- $host" "$root/app_data/global-config.yaml")" = 1 ] || { echo "host listed twice" >&2; exit 1; }
+[ "$(grep -c "'$host'" "$root/app_data/global-config.php")" = 1 ] || { echo "host listed twice" >&2; exit 1; }
 if "$root/app/install.sh" --add-host '../etc' --no-network-check >/dev/null 2>&1; then echo "a path as host was accepted" >&2; exit 1; fi
 
 printf "<?php return ['base_url' => 'https://lr.example'];\n" >"$hd/config.php"

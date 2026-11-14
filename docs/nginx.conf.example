@@ -1,12 +1,12 @@
 # Example server block for Linkrot. Adjust paths, server_name, TLS and the php-fpm socket.
 # {deployroot}/htdocs  public folder
-# {deployroot}/app_data    data: global-config.yaml, one folder per host (app_data/<host>/files holds the uploads)
+# {deployroot}/app_data    data: global-config.php, one folder per host (app_data/<host>/files holds the uploads)
 
 limit_req_zone $binary_remote_addr zone=linkrot:10m rate=20r/s;   # http{} context, DoS protection only
 
 server {
     listen 443 ssl;
-    server_name linkrot.example;   # every host of app_data/global-config.yaml (or one block per host)
+    server_name linkrot.example;   # every host of app_data/global-config.php (or one block per host)
 
     root {deployroot}/htdocs;
     index index.php;

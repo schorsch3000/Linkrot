@@ -8,8 +8,8 @@ use Linkrot\Tenants;
 require __DIR__ . '/../vendor/autoload.php';
 
 /*
- * hosts            prints the hosts of global-config.yaml, one per line
- * hosts add <host> enrolls a host (creates global-config.yaml if needed)
+ * hosts            prints the hosts of global-config.php, one per line
+ * hosts add <host> enrolls a host (creates global-config.php if needed)
  * data directory: $LINKROT_DATA or ../../app_data
  */
 $file = (getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data') . '/' . Tenants::FILE_NAME;

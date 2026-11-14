@@ -15,7 +15,12 @@ final class TenantsTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->file = sys_get_temp_dir() . '/linkrot-tenants-' . bin2hex(random_bytes(6)) . '.yaml';
+        $this->file = sys_get_temp_dir() . '/linkrot-tenants-' . bin2hex(random_bytes(6)) . '.php';
+    }
+
+    private function write(string $hosts): void
+    {
+        file_put_contents($this->file, "<?php return ['hosts' => $hosts];\n");
     }
 
     protected function tearDown(): void
@@ -52,7 +57,7 @@ final class TenantsTest extends TestCase
 
     public function testEntriesMustBeNormalized(): void
     {
-        file_put_contents($this->file, "hosts:\n  - B.example.org\n");
+        $this->write("['B.example.org']");
         // otherwise the list names a folder the server would never look in
         $this->expectException(InvalidArgumentException::class);
         Tenants::load($this->file);
@@ -60,7 +65,7 @@ final class TenantsTest extends TestCase
 
     public function testMatchOnlyListedHosts(): void
     {
-        file_put_contents($this->file, "hosts:\n  - a.example\n  - b.example.org\n");
+        $this->write("['a.example', 'b.example.org']");
         $tenants = Tenants::load($this->file);
 
         self::assertSame(['a.example', 'b.example.org'], $tenants->hosts);
@@ -73,16 +78,15 @@ final class TenantsTest extends TestCase
     /** @return iterable<string, array{string}> */
     public static function brokenFiles(): iterable
     {
-        yield 'no hosts' => ["other: 1\n"];
-        yield 'empty list' => ["hosts: []\n"];
-        yield 'not a list' => ["hosts:\n  a: b\n"];
-        yield 'not a string' => ["hosts:\n  - 12\n"];
-        yield 'path' => ["hosts:\n  - ../etc\n"];
-        yield 'port' => ["hosts:\n  - a.example:8080\n"];
-        yield 'twice' => ["hosts:\n  - a.example\n  - a.example\n"];
-        yield 'unknown key' => ["hosts:\n  - a.example\nfoo: 1\n"];
-        yield 'not yaml' => ["hosts: [unclosed\n"];
-        yield 'scalar' => ["just a string\n"];
+        yield 'no hosts' => ["<?php return ['other' => 1];"];
+        yield 'empty list' => ["<?php return ['hosts' => []];"];
+        yield 'not a list' => ["<?php return ['hosts' => ['a' => 'b']];"];
+        yield 'not a string' => ["<?php return ['hosts' => [12]];"];
+        yield 'path' => ["<?php return ['hosts' => ['../etc']];"];
+        yield 'port' => ["<?php return ['hosts' => ['a.example:8080']];"];
+        yield 'twice' => ["<?php return ['hosts' => ['a.example', 'a.example']];"];
+        yield 'unknown key' => ["<?php return ['hosts' => ['a.example'], 'foo' => 1];"];
+        yield 'not an array' => ["<?php return 'just a string';"];
     }
 
     #[DataProvider('brokenFiles')]

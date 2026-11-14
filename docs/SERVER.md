@@ -21,7 +21,7 @@ There is no user management. The server consists of
 `app_data` contains the list of hosts and one folder per host (a tenant):
 
 ```
-app_data/global-config.yaml          the hosts this installation answers for
+app_data/global-config.php          the hosts this installation answers for
 app_data/<host>/config.php           configuration of that host, merged over the defaults in code
 app_data/<host>/linkrot.sqlite       its database (WAL mode, busy_timeout set)
 app_data/<host>/files/<id>           its uploaded files, named by id only
@@ -34,12 +34,16 @@ One installation serves any number of hostnames (subdomains of one domain or com
 host is a tenant of its own: own configuration, tokens, files, cleanup and failed-login counters. Nothing is shared
 but the code.
 
-`app_data/global-config.yaml` lists the allowed hosts, lower case, without port:
+`app_data/global-config.php` lists the allowed hosts, lower case, without port:
 
-```yaml
-hosts:
-  - files.example.com
-  - share.example.org
+```php
+<?php
+return [
+    'hosts' => [
+        'files.example.com',
+        'share.example.org',
+    ],
+];
 ```
 
 The `Host` header of a request is normalized (lower case, port and trailing dot removed) and must equal an entry of the

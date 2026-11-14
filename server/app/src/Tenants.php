@@ -5,22 +5,19 @@ declare(strict_types=1);
 namespace Linkrot;
 
 use InvalidArgumentException;
-use Symfony\Component\Yaml\Exception\ParseException;
-use Symfony\Component\Yaml\Yaml;
 
 /**
- * The tenants of this installation: one per hostname, listed in app_data/global-config.yaml:
+ * The tenants of this installation: one per hostname, listed in app_data/global-config.php:
  *
- *     hosts:
- *       - files.example.com
- *       - other.example.org
+ *     <?php
+ *     return ['hosts' => ['files.example.com', 'other.example.org']];
  *
  * The data of a tenant lives in app_data/<host>/. The Host header ends up in a path, so it is only ever used
  * after it matched an entry of this list, and the entries themselves are validated hostnames.
  */
 final readonly class Tenants
 {
-    public const string FILE_NAME = 'global-config.yaml';
+    public const string FILE_NAME = 'global-config.php';
 
     /** @param list<string> $hosts normalized hostnames */
     public function __construct(public array $hosts) {}
@@ -43,13 +40,9 @@ final readonly class Tenants
         if (!is_file($file)) {
             throw new InvalidArgumentException("global config: file not found: $file");
         }
-        try {
-            $values = Yaml::parseFile($file);
-        } catch (ParseException $e) {
-            throw new InvalidArgumentException("global config: $file is not valid YAML: " . $e->getMessage(), 0, $e);
-        }
+        $values = (static fn(): mixed => require $file)();
         if (!is_array($values)) {
-            throw new InvalidArgumentException("global config: $file must contain a mapping with a hosts list");
+            throw new InvalidArgumentException("global config: $file must return an array with a hosts list");
         }
         $unknown = array_diff(array_map(strval(...), array_keys($values)), ['hosts']);
         if ($unknown !== []) {
@@ -95,7 +88,8 @@ final readonly class Tenants
             return false;
         }
         $hosts[] = $normalized;
-        if (file_put_contents($file, Yaml::dump(['hosts' => $hosts], 2, 2), LOCK_EX) === false) {
+        $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $hosts)) . "    ],\n];\n";
+        if (file_put_contents($file, $php, LOCK_EX) === false) {
             throw new InvalidArgumentException("cannot write $file");
         }
 
@@ -109,7 +103,7 @@ final readonly class Tenants
     public function select(?string $host): string
     {
         if ($host !== null && $host !== '') {
-            return $this->match($host) ?? throw new InvalidArgumentException("host is not listed in global-config.yaml: $host");
+            return $this->match($host) ?? throw new InvalidArgumentException("host is not listed in global-config.php: $host");
         }
         if (count($this->hosts) === 1) {
             return $this->hosts[0];

@@ -13,8 +13,7 @@
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*",
         "ext-random": "*",
-        "bacon/bacon-qr-code": "^3.1",
-        "symfony/yaml": "^8.1"
+        "bacon/bacon-qr-code": "^3.1"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",

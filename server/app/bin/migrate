@@ -9,7 +9,7 @@ use Linkrot\Tenants;
 require __DIR__ . '/../vendor/autoload.php';
 
 /*
- * Creates the database or brings its schema up to date, for every host of global-config.yaml (or only for
+ * Creates the database or brings its schema up to date, for every host of global-config.php (or only for
  * $LINKROT_HOST). Run by install.sh, as the user php-fpm runs as.
  * usage: migrate   (data directory: $LINKROT_DATA or ../../app_data)
  */
