@@ -37,6 +37,8 @@ type FakeServer struct {
 	// Health is the answer of GET /api/v1/health; the zero value is a healthy server. HealthCalls counts the requests.
 	Health      *api.Health
 	HealthCalls int
+	// Settings are the settings of the host; nil means all on.
+	Settings map[string]bool
 	// Quota is reported by GET /api/v1/files when set.
 	Quota *api.Quota
 }
@@ -160,6 +162,8 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 			answer["quota"] = s.Quota
 		}
 		writeJSON(w, 200, answer)
+	case path == "/api/v1/settings" && (r.Method == http.MethodGet || r.Method == http.MethodPatch):
+		s.settings(w, r)
 	case path == "/api/v1/cleanup" && r.Method == http.MethodPost:
 		writeJSON(w, 200, map[string]any{"ran": true, "rows_deleted": 0, "files_deleted": 0})
 	case strings.HasPrefix(path, "/api/v1/files/"):
@@ -386,4 +390,30 @@ func writeError(w http.ResponseWriter, status int, code, msg string, extra map[s
 		e[k] = v
 	}
 	writeJSON(w, status, map[string]any{"error": e})
+}
+
+func (s *FakeServer) settings(w http.ResponseWriter, r *http.Request) {
+	if s.Settings == nil {
+		s.Settings = map[string]bool{}
+		for _, key := range api.SettingKeys {
+			s.Settings[key] = true
+		}
+	}
+	if r.Method == http.MethodPatch {
+		var changes map[string]bool
+		if err := json.NewDecoder(r.Body).Decode(&changes); err != nil || len(changes) == 0 {
+			writeError(w, 400, "invalid_request", "body must be a JSON object of booleans", nil)
+			return
+		}
+		for key := range changes {
+			if _, known := s.Settings[key]; !known {
+				writeError(w, 400, "invalid_request", "unknown setting: "+key, nil)
+				return
+			}
+		}
+		for key, value := range changes {
+			s.Settings[key] = value
+		}
+	}
+	writeJSON(w, 200, map[string]any{"settings": s.Settings})
 }

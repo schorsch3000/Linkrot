@@ -186,6 +186,24 @@ last successful cleanup older than twice `cleanup_interval` or never, a cleanup 
 remove). While the database schema is not the one of this release (`app/install.sh` has not run) every endpoint,
 this one included, answers `503 schema_outdated`.
 
+### `GET /settings`, `PATCH /settings` - the look of the public pages
+
+Both need a token. The settings belong to the host, are all booleans and are all `true` by default. `GET` answers
+`{"settings": {...}}` with every setting. `PATCH` takes a JSON object with any of them, changes only those and answers
+the same way; an empty body, an unknown name or a value that is not `true` or `false` is `400 invalid_request` and
+changes nothing.
+
+| setting | `false` means |
+| --- | --- |
+| `show_taglines` | no tagline at the bottom of any page, no `X-Rot` header on downloads |
+| `show_startpage` | `/` answers `200` with an empty body instead of the about page |
+| `show_title` | no "linkrot" headline with the logo on any page |
+| `show_linkrot_line` | no `linkrot down` line on the download page |
+| `show_curl_line` | no curl line on the download page |
+| `show_hash_line` | no SHA-256 line on the download page |
+
+The "From a terminal" section of the download page disappears when all three lines are off.
+
 ## Public download URLs
 
 No authentication.

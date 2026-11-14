@@ -6,11 +6,12 @@ namespace Linkrot\Web;
 
 use Linkrot\FileName;
 use Linkrot\Files\FileRecord;
+use Linkrot\Settings;
 
 /** HTML of the public pages: plain, no JavaScript, no external resources, light and dark. */
 final class Page
 {
-    public static function file(FileRecord $file, string $baseUrl): string
+    public static function file(FileRecord $file, string $baseUrl, Settings $settings = new Settings()): string
     {
         $kind = FileKind::fromName($file->name);
         $extension = FileKind::extension($file->name);
@@ -29,6 +30,7 @@ final class Page
         $glyph = $kind->glyph();
         $box = self::copyBox(...);
         $qr = QrCode::svg($file->url($baseUrl), 'QR code of this page');
+        $terminal = self::terminalSection($settings, $box, $cli, $curl, $sha, $exact);
 
         $body = <<<HTML
             <article class="card">
@@ -48,23 +50,15 @@ final class Page
             <form method="dialog"><button class="button alt">Close</button></form>
             </div>
             </dialog>
-            <section class="terminal" aria-label="Download from the terminal">
-            <h2>From a terminal</h2>
-            <p class="label">linkrot</p>
-            {$box('cli', $cli)}
-            <p class="label">curl</p>
-            {$box('curl', $curl)}
-            <p class="label">SHA-256 <span class="muted">($exact)</span></p>
-            {$box('sha', $sha)}
-            </section>
+            $terminal
             </article>
             HTML;
 
-        return self::document($file->name, $body, self::tagline($file->id), true);
+        return self::document($file->name, $body, $settings, self::tagline($file->id), true);
     }
 
     /** The about page at `/`. No script, no copy buttons: only static text and one link to the project. */
-    public static function home(): string
+    public static function home(Settings $settings = new Settings()): string
     {
         $chain = self::CHAIN_LARGE;
         $project = self::e(self::PROJECT_URL);
@@ -85,10 +79,10 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Links that rot', $body, self::taglines()[0]);
+        return self::document('Links that rot', $body, $settings, self::taglines()[0]);
     }
 
-    public static function notFound(): string
+    public static function notFound(Settings $settings = new Settings()): string
     {
         $body = <<<'HTML'
             <article class="card gone">
@@ -100,7 +94,7 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Not found', $body, 'Told you it was rotting.');
+        return self::document('Not found', $body, $settings, 'Told you it was rotting.');
     }
 
     /**
@@ -135,13 +129,13 @@ final class Page
         return $taglines[crc32($seed) % count($taglines)];
     }
 
-    private static function document(string $title, string $body, string $tagline, bool $withScript = false): string
+    private static function document(string $title, string $body, Settings $settings, string $tagline, bool $withScript = false): string
     {
         $script = $withScript ? '<script src="' . Assets::url('page.js') . '" defer></script>' : '';
         $title = self::e($title . ' · linkrot');
-        $tagline = self::e($tagline);
+        $footer = $settings->showTaglines ? '<footer>' . self::e($tagline) . '</footer>' : '';
+        $brand = $settings->showTitle ? '<header class="brand"><a href="/">' . self::CHAIN . '<span class="word">link<span class="rot">rot</span></span></a></header>' : '';
         $css = Assets::url('page.css');
-        $chain = self::CHAIN;
 
         return <<<HTML
             <!doctype html>
@@ -159,15 +153,35 @@ final class Page
             </head>
             <body>
             <main>
-            <header class="brand"><a href="/">$chain<span class="word">link<span class="rot">rot</span></span></a></header>
+            $brand
             $body
-            <footer>$tagline</footer>
+            $footer
             </main>
             $script
             </body>
             </html>
 
             HTML;
+    }
+
+    /** The commands to fetch the file; each line has its own setting, without any line there is no section. */
+    private static function terminalSection(Settings $settings, \Closure $box, string $cli, string $curl, string $sha, string $exact): string
+    {
+        if (!$settings->showTerminalSection()) {
+            return '';
+        }
+        $lines = [];
+        if ($settings->showLinkrotLine) {
+            $lines[] = '<p class="label">linkrot</p>' . $box('cli', $cli);
+        }
+        if ($settings->showCurlLine) {
+            $lines[] = '<p class="label">curl</p>' . $box('curl', $curl);
+        }
+        if ($settings->showHashLine) {
+            $lines[] = '<p class="label">SHA-256 <span class="muted">(' . $exact . ')</span></p>' . $box('sha', $sha);
+        }
+
+        return '<section class="terminal" aria-label="Download from the terminal"><h2>From a terminal</h2>' . implode('', $lines) . '</section>';
     }
 
     /** One command in a box with a copy button (hidden until the script runs, so that nobody gets a dead button). */

@@ -9,6 +9,7 @@ use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
 use Linkrot\Api\HealthController;
 use Linkrot\Api\HomeController;
+use Linkrot\Api\SettingsController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
 use Linkrot\Auth\Authenticator;
@@ -71,10 +72,17 @@ final class App
         $this->router->add('DELETE', '/api/v1/files/{id}', $this->authed(
             static fn(Request $request, array $params): Response => $files()->delete($params['id']),
         ));
+        $settings = fn(): SettingsStore => new SettingsStore($this->db());
+        $this->router->add('GET', '/api/v1/settings', $this->authed(
+            static fn(Request $request, array $params): Response => new SettingsController($settings())->show(),
+        ));
+        $this->router->add('PATCH', '/api/v1/settings', $this->authed(
+            static fn(Request $request, array $params): Response => new SettingsController($settings())->update($request),
+        ));
         foreach (['GET', 'HEAD'] as $method) {
-            $this->router->add($method, '/', fn(): Response => new HomeController()->index());
+            $this->router->add($method, '/', static fn(): Response => new HomeController($settings())->index());
         }
-        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host);
+        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $settings());
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
         foreach (['GET', 'HEAD'] as $method) {

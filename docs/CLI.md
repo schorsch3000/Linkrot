@@ -107,7 +107,13 @@ Asks the server to run its cleanup now (`POST /cleanup`).
 config --server <url>     set the server URL, e.g. https://linkrot.example (https only; http is accepted for localhost and loopback addresses, and an https to http redirect is refused)
 config --token <token>    set the token
 config                    show the current configuration (token masked)
+config get [--json]       show the settings of the server (they change its public pages)
+config set <setting> <on|off> [<setting> <on|off>...]   change settings of the server
 ```
+
+The settings are `show_taglines`, `show_startpage`, `show_title`, `show_linkrot_line`, `show_curl_line` and
+`show_hash_line`, see [API.md](API.md#get-settings-patch-settings---the-look-of-the-public-pages). All are on by default.
+`show_` and `_`/`-` are optional when typing them: `lr config set curl-line off`.
 
 The config file is `$XDG_CONFIG_HOME/linkrot/config.toml` (default `~/.config/linkrot/config.toml`) with mode `0600`; `$LINKROT_CONFIG` overrides the path. The directory is fixed and does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
 

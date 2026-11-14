@@ -297,3 +297,29 @@ func (b *chunkBody) Read(p []byte) (int, error) {
 	b.pos += n
 	return n, nil
 }
+
+// Settings returns the settings of the host (GET /api/v1/settings).
+func (c *Client) Settings(ctx context.Context) (map[string]bool, error) {
+	var out struct {
+		Settings map[string]bool `json:"settings"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/settings", nil, 0, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Settings, nil
+}
+
+// UpdateSettings changes the given settings and returns all of them (PATCH /api/v1/settings).
+func (c *Client) UpdateSettings(ctx context.Context, changes map[string]bool) (map[string]bool, error) {
+	body, err := json.Marshal(changes)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Settings map[string]bool `json:"settings"`
+	}
+	if err := c.do(ctx, http.MethodPatch, "/api/v1/settings", bytes.NewReader(body), int64(len(body)), "application/json", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Settings, nil
+}

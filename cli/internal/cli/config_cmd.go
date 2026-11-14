@@ -12,8 +12,8 @@ func (a *App) configCommand() *cobra.Command {
 	var server, token string
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show or set the server URL and token",
-		Example: fmt.Sprintf("  %[1]s config --server https://linkrot.example\n  %[1]s config --token <token>\n  %[1]s config",
+		Short: "Show or set the server URL and token; get and set change the settings of the server",
+		Example: fmt.Sprintf("  %[1]s config --server https://linkrot.example\n  %[1]s config --token <token>\n  %[1]s config\n  %[1]s config get\n  %[1]s config set taglines off",
 			a.Name),
 		Args: usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -47,6 +47,7 @@ func (a *App) configCommand() *cobra.Command {
 			return err
 		},
 	}
+	cmd.AddCommand(a.settingsCommands()...)
 	cmd.Flags().StringVar(&server, "server", "", "server URL, e.g. https://linkrot.example")
 	cmd.Flags().StringVar(&token, "token", "", "API token (see lr-auth on the server)")
 	return cmd

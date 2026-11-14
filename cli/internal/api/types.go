@@ -119,3 +119,13 @@ type Health struct {
 	Status string        `json:"status"`
 	Checks []HealthCheck `json:"checks"`
 }
+
+// SettingKeys are the settings of a host in the order the server lists them. All are booleans.
+var SettingKeys = []string{
+	"show_taglines",
+	"show_startpage",
+	"show_title",
+	"show_linkrot_line",
+	"show_curl_line",
+	"show_hash_line",
+}

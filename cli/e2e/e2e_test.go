@@ -369,6 +369,19 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("about page: %d %q", r.StatusCode, body)
 	}
 
+	// settings: changed with the CLI, visible on the public pages
+	if out := s.must(t, "config", "set", "title", "off", "curl-line", "off", "taglines", "off", "startpage", "off"); !strings.Contains(out, "show_curl_line     off") {
+		t.Fatalf("config set:\n%s", out)
+	}
+	if _, body := get(t, newURL, nil); strings.Contains(string(body), `class="brand"`) || strings.Contains(string(body), "<footer>") ||
+		strings.Contains(string(body), `id="c-curl"`) || !strings.Contains(string(body), `id="c-sha"`) {
+		t.Fatalf("page with settings off: %s", body)
+	}
+	if r, body := get(t, s.baseURL+"/", nil); r.StatusCode != 200 || len(body) != 0 {
+		t.Fatalf("empty start page: %d %q", r.StatusCode, body)
+	}
+	s.must(t, "config", "set", "title", "on", "curl-line", "on", "taglines", "on", "startpage", "on")
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

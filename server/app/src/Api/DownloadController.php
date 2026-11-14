@@ -13,6 +13,7 @@ use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
+use Linkrot\SettingsStore;
 use Linkrot\Web\HeaderTaglines;
 use Linkrot\Web\Page;
 
@@ -31,6 +32,7 @@ final readonly class DownloadController
         private FileCatalog $catalog,
         private FileStore $store,
         private string $host,
+        private SettingsStore $settings,
     ) {}
 
     /** GET /file/{id}[/{name}] */
@@ -44,7 +46,7 @@ final readonly class DownloadController
             return new Response(302, ['Location' => '/file/' . $file->id . '/' . FileName::urlSegment($file->name)] + self::SECURITY_HEADERS);
         }
 
-        $html = Page::file($file, $this->config->baseUrl);
+        $html = Page::file($file, $this->config->baseUrl, $this->settings->get());
 
         return new Response(200, [
             'Content-Type' => 'text/html; charset=utf-8',
@@ -67,8 +69,10 @@ final readonly class DownloadController
         $headers = [
             'Content-Type' => 'application/octet-stream',
             'Content-Disposition' => FileName::contentDisposition($file->name),
-            HeaderTaglines::HEADER => HeaderTaglines::pick($file->id),
         ] + self::SECURITY_HEADERS;
+        if ($this->settings->get()->showTaglines) {
+            $headers[HeaderTaglines::HEADER] = HeaderTaglines::pick($file->id);
+        }
 
         if ($this->config->downloadMode === DownloadMode::Xaccel) {
             return new Response(200, $headers + ['X-Accel-Redirect' => '/_files/' . $this->host . '/files/' . $file->id]);
@@ -100,6 +104,6 @@ final readonly class DownloadController
         return new Response(404, [
             'Content-Type' => 'text/html; charset=utf-8',
             'Content-Security-Policy' => Page::staticContentSecurityPolicy(),
-        ] + self::SECURITY_HEADERS, Page::notFound());
+        ] + self::SECURITY_HEADERS, Page::notFound($this->settings->get()));
     }
 }

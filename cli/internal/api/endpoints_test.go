@@ -217,3 +217,22 @@ func TestSealErrorsAreDecoded(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+func TestSettingsAreReadWithGetAndChangedWithPatch(t *testing.T) {
+	c, seen := newRecordingServer(t, 200, `{"settings":{"show_title":false,"show_taglines":true}}`)
+
+	got, err := c.Settings(context.Background())
+	if err != nil || got["show_title"] || !got["show_taglines"] {
+		t.Fatalf("%v, %v", got, err)
+	}
+	if _, err = c.UpdateSettings(context.Background(), map[string]bool{"show_title": false}); err != nil {
+		t.Fatal(err)
+	}
+	get, patch := (*seen)[0], (*seen)[1]
+	if get.method != "GET" || get.path != "/api/v1/settings" {
+		t.Errorf("get %+v", get)
+	}
+	if patch.method != "PATCH" || patch.path != "/api/v1/settings" || patch.contentType != "application/json" || string(patch.body) != `{"show_title":false}` {
+		t.Errorf("patch %+v %s", patch, patch.body)
+	}
+}

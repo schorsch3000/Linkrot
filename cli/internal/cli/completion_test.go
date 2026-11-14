@@ -75,7 +75,7 @@ func TestConfigCompletesItsFlags(t *testing.T) {
 	e := newEnv(t)
 
 	got := flagNamesOf(e.completions("config", ""))
-	if strings.Join(got, " ") != "--server --token" {
+	if strings.Join(got, " ") != "get set --server --token" {
 		t.Fatalf("config: %v", got)
 	}
 	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--token" {
