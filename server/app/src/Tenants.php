@@ -35,12 +35,12 @@ final readonly class Tenants
         return preg_match('~^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$~', $host) === 1 ? $host : null;
     }
 
-    public static function load(string $file): self
+    public static function load(string $file, bool $strict = false): self
     {
         if (!is_file($file)) {
             throw new InvalidArgumentException("global config: file not found: $file");
         }
-        $values = (static fn(): mixed => require $file)();
+        $values = PhpFile::load($file, 'global config', $strict);
         if (!is_array($values)) {
             throw new InvalidArgumentException("global config: $file must return an array with a hosts list");
         }

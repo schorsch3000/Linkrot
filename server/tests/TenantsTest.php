@@ -135,4 +135,18 @@ final class TenantsTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $two->select('c.example');
     }
+
+    public function testOutputOfTheGlobalConfigIsDiscardedAndAnErrorForTheCheckTools(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'linkrot-global-') ?: self::fail('tempnam');
+        file_put_contents($file, "\xEF\xBB\xBF<?php return ['hosts' => ['lr.example']];\n");
+        try {
+            self::assertSame(['lr.example'], Tenants::load($file)->hosts);
+            $this->expectException(\InvalidArgumentException::class);
+            $this->expectExceptionMessage('prints output');
+            Tenants::load($file, strict: true);
+        } finally {
+            unlink($file);
+        }
+    }
 }

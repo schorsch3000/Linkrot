@@ -87,6 +87,28 @@ final class ConfigTest extends TestCase
         }
     }
 
+    public function testOutputOfAConfigFileIsDiscardedAndAnErrorForTheCheckTools(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'linkrot-config-') ?: self::fail('tempnam');
+        file_put_contents($file, "   <?php\n   return ['default_uses' => 2];\n");
+        try {
+            $before = ob_get_level();
+            $config = Config::load($file, 'https://lr.example');
+
+            self::assertSame(2, $config->defaultUses);
+            self::assertSame($before, ob_get_level());
+            try {
+                Config::load($file, 'https://lr.example', strict: true);
+                self::fail('strict must refuse a file that prints');
+            } catch (InvalidArgumentException $e) {
+                self::assertStringContainsString('prints output (3 bytes: "   ")', $e->getMessage());
+                self::assertStringContainsString('first column', $e->getMessage());
+            }
+        } finally {
+            unlink($file);
+        }
+    }
+
     public function testLoadReportsAMissingFileAndAFileThatReturnsNoArray(): void
     {
         try {

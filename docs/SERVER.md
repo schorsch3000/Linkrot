@@ -328,7 +328,7 @@ authentication itself:
 
 ## Configuration
 
-`app_data/<host>/config.php` returns an array which is merged over the defaults (`return [];` is valid). The public URL of a host, used for share links, is not configured: it is `https://<host>` with the host from `global-config.php`. Only `localhost` and `127.x` hosts get `http://` plus the port of the request (development). A leftover `base_url` key makes the config invalid. The settings and custom files that the users of a host change through the API are not in this file, see [Appearance](#appearance).
+`app_data/<host>/config.php` returns an array which is merged over the defaults (`return [];` is valid). The public URL of a host, used for share links, is not configured: it is `https://<host>` with the host from `global-config.php`. Only `localhost` and `127.x` hosts get `http://` plus the port of the request (development). A leftover `base_url` key makes the config invalid. The file (and `global-config.php`) must start with `<?php` in the first column: anything PHP prints while loading it (leading spaces, a byte order mark, text after `?>`) is discarded and logged by the server and is an error for `check-config`. The settings and custom files that the users of a host change through the API are not in this file, see [Appearance](#appearance).
 
 | key | default | meaning |
 | --- | --- | --- |

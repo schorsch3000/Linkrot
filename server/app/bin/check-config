@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Linkrot\Config;
+use Linkrot\Tenants;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -11,17 +12,21 @@ require __DIR__ . '/../vendor/autoload.php';
  * Loads the configuration the way the server does and reports the first problem.
  * usage: check-config [path/to/config.php]  (an explicit file is checked for host localhost)   (default: config.php of the tenant $LINKROT_HOST in $LINKROT_DATA or ../../app_data)
  */
+$root = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
 if (isset($argv[1])) {
     $file = $argv[1];
 } else {
     require __DIR__ . '/_tenant.php';
 
-    [, $host, $dir] = linkrotTenant('check-config');
+    [$root, $host, $dir] = linkrotTenant('check-config');
     $file = $dir . '/config.php';
 }
 
 try {
-    Config::load($file, Config::baseUrlFor($host ?? 'localhost'));
+    if (is_file($root . '/' . Tenants::FILE_NAME)) {
+        Tenants::load($root . '/' . Tenants::FILE_NAME, strict: true);
+    }
+    Config::load($file, Config::baseUrlFor($host ?? 'localhost'), strict: true);
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . "\n");
     exit(1);

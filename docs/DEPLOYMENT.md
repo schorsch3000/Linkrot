@@ -59,6 +59,11 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    ];
    ```
 
+   The file must start with `<?php` in the **first column**: spaces in front of it (easy to copy along from an indented
+   example), a byte order mark or text after a closing `?>` are printed by PHP and would be sent in front of every answer,
+   which corrupts text downloads such as `lr page get`. The server discards such output and logs it; `check-config` (and
+   with it `install.sh`) reports it as an error.
+
    **nginx and php-fpm as different users:** php-fpm writes the files, but nginx opens them itself (`X-Accel-Redirect`). Every
    directory down to `app_data/<host>/files/` must be searchable for nginx's user (mode `x` for others, e.g. `chmod o+x`, or an ACL
    such as `setfacl -m u:www-data:x`), and the files must be readable. The server creates `files/` as `0711` and the data

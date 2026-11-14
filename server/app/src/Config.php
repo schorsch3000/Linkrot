@@ -127,12 +127,12 @@ final readonly class Config
         );
     }
 
-    public static function load(string $file, string $baseUrl): self
+    public static function load(string $file, string $baseUrl, bool $strict = false): self
     {
         if (!is_file($file)) {
             throw new InvalidArgumentException("config: file not found: $file");
         }
-        $values = (static fn(): mixed => require $file)();
+        $values = PhpFile::load($file, 'config', $strict);
         if (!is_array($values)) {
             throw new InvalidArgumentException("config: $file must return an array");
         }

@@ -104,10 +104,11 @@ check_host() {
  ACTION REQUIRED: there is no configuration for $host yet.
  Until it exists every request for this host is answered with "server misconfigured".
 
- Create $config, readable by the user php-fpm runs as:
+ Create $config, readable by the user php-fpm runs as. The file starts with <?php in the
+ first column (no spaces in front: they would be sent in front of every answer):
 
-     <?php
-     return [];   // all defaults; the share links are https://$host
+<?php
+return [];   // all defaults; the share links are https://$host
 
  The folder $dir/files must exist and be writable by that user too.
  All options: docs/SERVER.md (Configuration)
