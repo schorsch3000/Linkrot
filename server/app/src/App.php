@@ -17,6 +17,7 @@ use Linkrot\Auth\Authenticator;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
 use Linkrot\Auth\TokenStore;
+use Linkrot\Custom\CssStore;
 use Linkrot\Custom\CustomStore;
 use Linkrot\Files\Cleanup;
 use Linkrot\Files\FileCatalog;
@@ -25,6 +26,7 @@ use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
 use Linkrot\Http\Router;
+use Linkrot\Web\AppearanceStore;
 use PDO;
 use Throwable;
 
@@ -82,19 +84,23 @@ final class App
             static fn(Request $request, array $params): Response => new SettingsController($settings())->update($request),
         ));
         $custom = new CustomStore($this->dataDir . '/custom');
+        $css = $this->css();
+        $appearance = fn(): AppearanceStore => new AppearanceStore($settings(), $custom, $css);
         $this->router->add('GET', '/api/v1/custom/{name}', $this->authed(
-            static fn(Request $request, array $params): Response => new CustomController($custom)->show($params['name']),
+            static fn(Request $request, array $params): Response => new CustomController($custom, $css)->show($params['name']),
         ));
         $this->router->add('PUT', '/api/v1/custom/{name}', $this->authed(
-            static fn(Request $request, array $params): Response => new CustomController($custom)->put($request, $params['name']),
+            static fn(Request $request, array $params): Response => new CustomController($custom, $css)->put($request, $params['name']),
         ));
         $this->router->add('DELETE', '/api/v1/custom/{name}', $this->authed(
-            static fn(Request $request, array $params): Response => new CustomController($custom)->reset($params['name']),
+            static fn(Request $request, array $params): Response => new CustomController($custom, $css)->reset($params['name']),
         ));
         foreach (['GET', 'HEAD'] as $method) {
-            $this->router->add($method, '/', static fn(): Response => new HomeController($settings(), $custom)->index());
+            $this->router->add($method, '/', static fn(): Response => new HomeController($appearance())->index());
         }
-        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $settings(), $custom);
+        // the stylesheet of the host: in production nginx hands unknown /assets/ names to index.php, php -S does the same
+        $this->router->add('GET', '/assets/{name}', static fn(Request $request, array $params): Response => new CustomController($custom, $css)->stylesheet($params['name']));
+        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $appearance());
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
         foreach (['GET', 'HEAD'] as $method) {
@@ -145,7 +151,12 @@ final class App
 
     public function cleanup(): Cleanup
     {
-        return new Cleanup($this->db(), $this->config, $this->dataDir . '/files', $this->dataDir . '/cleanup.lock', $this->clock);
+        return new Cleanup($this->db(), $this->config, $this->dataDir . '/files', $this->dataDir . '/cleanup.lock', $this->clock, $this->css());
+    }
+
+    private function css(): CssStore
+    {
+        return new CssStore($this->dataDir . '/custom', $this->clock);
     }
 
     /** Called after the response was sent: runs the lazy cleanup if it is due. Never throws. */

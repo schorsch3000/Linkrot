@@ -131,4 +131,11 @@ var SettingKeys = []string{
 }
 
 // CustomNames are the files a host can replace with `custom put`.
-var CustomNames = []string{"taglines", "headerlines"}
+var CustomNames = []string{"taglines", "headerlines", "css"}
+
+// CustomResult is the answer to replacing a customizable file: the number of lines in use (taglines, headerlines) or the
+// URL of the stylesheet (css).
+type CustomResult struct {
+	Lines int    `json:"lines"`
+	URL   string `json:"url"`
+}

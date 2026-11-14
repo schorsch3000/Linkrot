@@ -36,13 +36,13 @@ func TestCustomPutGetResetRoundTrip(t *testing.T) {
 		t.Fatalf("file: %q, %v", b, err)
 	}
 
-	if code, out, errs := e.run("custom", "reset", "taglines"); code != 0 || !strings.Contains(out, "back to the built-in lines") {
+	if code, out, errs := e.run("custom", "reset", "taglines"); code != 0 || !strings.Contains(out, "back to the built-in version") {
 		t.Fatalf("reset: code %d: %q %s", code, out, errs)
 	}
 	if _, out, _ := e.run("custom", "get", "taglines"); out != "built-in 1\nbuilt-in 2\n" {
 		t.Fatalf("get after reset: %q", out)
 	}
-	if code, out, _ := e.run("custom", "get", "headerlines", "-o", target); code != 0 || !strings.Contains(out, "wrote the built-in lines") {
+	if code, out, _ := e.run("custom", "get", "headerlines", "-o", target); code != 0 || !strings.Contains(out, "wrote the built-in version") {
 		t.Fatalf("built-in message: %d %q", code, out)
 	}
 }
@@ -83,5 +83,17 @@ func TestCustomPutShowsTheServersObjection(t *testing.T) {
 	code, _, errs := e.run("custom", "put", "taglines", f)
 	if code == 0 || !strings.Contains(errs, "no usable line") {
 		t.Fatalf("code %d: %s", code, errs)
+	}
+}
+
+func TestCustomCSSShowsItsURLAndIsKnownToTheCommand(t *testing.T) {
+	e := newEnv(t)
+	if _, out, _ := e.run("custom", "get", "css"); !strings.Contains(out, "--bg") {
+		t.Fatalf("starter: %q", out)
+	}
+	f := e.file("user.css", "a { color: red }\n")
+	code, out, errs := e.run("custom", "put", "css", f)
+	if code != 0 || !strings.Contains(out, "css: in use as /assets/user.0123456789abcdef.css") {
+		t.Fatalf("code %d: %q %s", code, out, errs)
 	}
 }

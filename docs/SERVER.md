@@ -26,6 +26,9 @@ app_data/<host>/config.php           configuration of that host, merged over the
 app_data/<host>/linkrot.sqlite       its database (WAL mode, busy_timeout set)
 app_data/<host>/files/<id>           its uploaded files, named by id only
 app_data/<host>/cleanup.lock         lock file for its cleanup
+app_data/<host>/custom/              what the host replaced through the API (only exists after an upload):
+                                     taglines.txt, headerlines.txt, user.<hash>.css, css.json (which stylesheet is
+                                     current, which ones were retired when), css.lock
 ```
 
 ### Tenants
@@ -204,7 +207,7 @@ There is no cronjob. Any request may run the cleanup **after** the response has 
 Locking: `flock(LOCK_EX | LOCK_NB)` on `app_data/<host>/cleanup.lock`. If somebody else holds it, skip. After taking the
 lock, re-check `last_cleanup` so a second request does not repeat the work.
 
-Cleanup does two steps in this order:
+Cleanup does three steps in this order:
 
 1. **Database first, one quick transaction.** Delete rows that are
    - `ready` and past `expires_at`, or with `uses_left = 0`
@@ -213,6 +216,9 @@ Cleanup does two steps in this order:
 2. **Then files.** Delete every file in `app_data/<host>/files/` that is unknown to the database. Files younger than a short
    grace period are skipped so an upload that is just being created is never touched. Data files of the rows removed
    in step 1 are removed as part of this.
+3. **Retired stylesheets.** A replaced or reset custom stylesheet (`custom/user.<hash>.css`, see
+   [API.md](API.md#getputdelete-customname---files-that-replace-the-built-in-look)) is retired, not deleted, because a
+   page that was loaded a moment ago still links it. This step removes the ones retired more than 24 hours ago.
 
 Finally `last_cleanup` is written (and `last_cleanup_ok` if every file that had to go is gone, otherwise
 `last_cleanup_error`) and a one-line result (counts, failures) is logged.

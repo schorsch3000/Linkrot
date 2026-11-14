@@ -68,7 +68,9 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    `/_files/` location points at `{deployroot}/app_data/`; PHP redirects to `/_files/<host>/files/<id>`). List every
    host in `server_name`, or use one block per host. Hosts that are not in `global-config.php` get `421`. Its `/assets/` location caches the stylesheet and the
    script of the pages forever; that is safe because a release names them after their content, so an upgrade brings new
-   names.
+   names. It also needs `try_files $uri /index.php$is_args$args;`: the stylesheet a host uploads with `lr custom put css`
+   (`/assets/user.<hash>.css`) is not a file of the release, PHP serves it. **Existing installations: add that line to the
+   `/assets/` location**, otherwise the custom stylesheet answers 404 and the pages link a stylesheet that is not there.
 6. Create a token for every device (tokens belong to one host; `LINKROT_HOST` can be omitted with a single host), as the web user. The token is shown once:
 
    ```

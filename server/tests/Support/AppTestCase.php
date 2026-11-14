@@ -43,13 +43,19 @@ abstract class AppTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        foreach (glob($this->dir . '/{,files/}*', GLOB_BRACE) ?: [] as $file) {
-            if (is_file($file)) {
-                unlink($file);
+        $remove = static function (string $path) use (&$remove): void {
+            if (is_dir($path) && !is_link($path)) {
+                foreach (scandir($path) ?: [] as $entry) {
+                    if ($entry !== '.' && $entry !== '..') {
+                        $remove($path . '/' . $entry);
+                    }
+                }
+                rmdir($path);
+            } elseif (file_exists($path) || is_link($path)) {
+                unlink($path);
             }
-        }
-        @rmdir($this->dir . '/files');
-        @rmdir($this->dir);
+        };
+        $remove($this->dir);
     }
 
     /**

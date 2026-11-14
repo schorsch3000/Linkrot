@@ -407,6 +407,25 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("tagline after reset: %s", body)
 	}
 
+	// custom css: linked after the page stylesheet, served with long caching, gone from the pages after the reset
+	userCSS := filepath.Join(t.TempDir(), "user.css")
+	if err := os.WriteFile(userCSS, []byte(":root { --accent: #c00; }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	putOut := s.must(t, "custom", "put", "css", userCSS)
+	cssPath := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(putOut), "css: in use as "))
+	if _, body := get(t, newURL, nil); !strings.Contains(string(body), `href="`+cssPath+`"`) {
+		t.Fatalf("user css is not linked (%q): %s", cssPath, body)
+	}
+	if r, body := get(t, s.baseURL+cssPath, nil); r.StatusCode != 200 || string(body) != ":root { --accent: #c00; }\n" ||
+		!strings.Contains(r.Header.Get("Content-Type"), "text/css") || !strings.Contains(r.Header.Get("Cache-Control"), "immutable") {
+		t.Fatalf("user css: %d %q %v", r.StatusCode, body, r.Header)
+	}
+	s.must(t, "custom", "reset", "css")
+	if _, body := get(t, newURL, nil); strings.Contains(string(body), "user.") {
+		t.Fatalf("user css still linked after the reset: %s", body)
+	}
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

@@ -439,6 +439,9 @@ func (s *FakeServer) custom(w http.ResponseWriter, r *http.Request, name string)
 		content, customized := s.Custom[name]
 		if !customized {
 			content = "built-in 1\nbuilt-in 2\n"
+			if name == "css" {
+				content = ":root { --bg: #fff; }\n"
+			}
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Customized", fmt.Sprint(customized))
@@ -450,7 +453,11 @@ func (s *FakeServer) custom(w http.ResponseWriter, r *http.Request, name string)
 			return
 		}
 		s.Custom[name] = string(body)
-		writeJSON(w, 200, map[string]any{"name": name, "customized": true, "lines": strings.Count(string(body), "\n")})
+		answer := map[string]any{"name": name, "customized": true, "lines": strings.Count(string(body), "\n")}
+		if name == "css" {
+			answer = map[string]any{"name": name, "customized": true, "url": "/assets/user.0123456789abcdef.css"}
+		}
+		writeJSON(w, 200, answer)
 	case http.MethodDelete:
 		delete(s.Custom, name)
 		w.WriteHeader(204)

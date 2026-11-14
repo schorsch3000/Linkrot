@@ -11,8 +11,7 @@ use Linkrot\Settings;
 /** HTML of the public pages: plain, no JavaScript, no external resources, light and dark. */
 final class Page
 {
-    /** @param list<string>|null $taglines the footer lines the host uploaded; null: the built-in ones */
-    public static function file(FileRecord $file, string $baseUrl, Settings $settings = new Settings(), ?array $taglines = null): string
+    public static function file(FileRecord $file, string $baseUrl, Appearance $look = new Appearance()): string
     {
         $kind = FileKind::fromName($file->name);
         $extension = FileKind::extension($file->name);
@@ -31,7 +30,7 @@ final class Page
         $glyph = $kind->glyph();
         $box = self::copyBox(...);
         $qr = QrCode::svg($file->url($baseUrl), 'QR code of this page');
-        $terminal = self::terminalSection($settings, $box, $cli, $curl, $sha, $exact);
+        $terminal = self::terminalSection($look->settings, $box, $cli, $curl, $sha, $exact);
 
         $body = <<<HTML
             <article class="card">
@@ -55,12 +54,11 @@ final class Page
             </article>
             HTML;
 
-        return self::document($file->name, $body, $settings, self::tagline($file->id, $taglines), true);
+        return self::document($file->name, $body, $look, self::tagline($file->id, $look->taglines), true);
     }
 
     /** The about page at `/`. No script, no copy buttons: only static text and one link to the project. */
-    /** @param list<string>|null $taglines */
-    public static function home(Settings $settings = new Settings(), ?array $taglines = null): string
+    public static function home(Appearance $look = new Appearance()): string
     {
         $chain = self::CHAIN_LARGE;
         $project = self::e(self::PROJECT_URL);
@@ -81,11 +79,10 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Links that rot', $body, $settings, ($taglines ?? self::taglines())[0]);
+        return self::document('Links that rot', $body, $look, ($look->taglines ?? self::taglines())[0]);
     }
 
-    /** @param list<string>|null $taglines */
-    public static function notFound(Settings $settings = new Settings(), ?array $taglines = null): string
+    public static function notFound(Appearance $look = new Appearance()): string
     {
         $body = <<<'HTML'
             <article class="card gone">
@@ -97,7 +94,7 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Not found', $body, $settings, $taglines === null ? 'Told you it was rotting.' : self::tagline('not-found', $taglines));
+        return self::document('Not found', $body, $look, $look->taglines === null ? 'Told you it was rotting.' : self::tagline('not-found', $look->taglines));
     }
 
     /**
@@ -133,13 +130,14 @@ final class Page
         return $taglines[crc32($seed) % count($taglines)];
     }
 
-    private static function document(string $title, string $body, Settings $settings, string $tagline, bool $withScript = false): string
+    private static function document(string $title, string $body, Appearance $look, string $tagline, bool $withScript = false): string
     {
         $script = $withScript ? '<script src="' . Assets::url('page.js') . '" defer></script>' : '';
         $title = self::e($title . ' · linkrot');
-        $footer = $settings->showTaglines ? '<footer>' . self::e($tagline) . '</footer>' : '';
-        $brand = $settings->showTitle ? '<header class="brand"><a href="/">' . self::CHAIN . '<span class="word">link<span class="rot">rot</span></span></a></header>' : '';
+        $footer = $look->settings->showTaglines ? '<footer>' . self::e($tagline) . '</footer>' : '';
+        $brand = $look->settings->showTitle ? '<header class="brand"><a href="/">' . self::CHAIN . '<span class="word">link<span class="rot">rot</span></span></a></header>' : '';
         $css = Assets::url('page.css');
+        $userCss = $look->cssHref === null ? '' : '<link rel="stylesheet" href="' . self::e($look->cssHref) . '">';
 
         return <<<HTML
             <!doctype html>
@@ -154,6 +152,7 @@ final class Page
             <link rel="apple-touch-icon" href="/apple-touch-icon.png">
             <title>$title</title>
             <link rel="stylesheet" href="$css">
+            $userCss
             </head>
             <body>
             <main>

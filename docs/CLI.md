@@ -119,16 +119,19 @@ The config file is `$XDG_CONFIG_HOME/linkrot/config.toml` (default `~/.config/li
 
 ### `custom`
 
-Files of your server that you can replace with your own, see [API.md](API.md#getputdelete-customname---files-that-replace-the-built-in-lines):
+Files of your server that you can replace with your own, see [API.md](API.md#getputdelete-customname---files-that-replace-the-built-in-look):
 
 ```
-custom get <file> [-o path]   print the file (the built-in lines as long as you did not replace it), or write it to a path
+custom get <file> [-o path]   print the file (the built-in version as long as you did not replace it), or write it to a path
 custom put <file> <path|->    replace the file with the content of a file (- is standard input)
-custom reset <file>           go back to the built-in lines
+custom reset <file>           go back to the built-in version
 ```
 
-`<file>` is `taglines` (one footer tagline per line) or `headerlines` (one `X-Rot` header line per line, printable ASCII
-only). A good way to start: `lr custom get taglines -o taglines.txt`, edit, `lr custom put taglines taglines.txt`.
+`<file>` is `taglines` (one footer tagline per line), `headerlines` (one `X-Rot` header line per line, printable ASCII
+only) or `css` (your stylesheet, loaded after the built-in one). A good way to start: `lr custom get taglines -o
+taglines.txt`, edit, `lr custom put taglines taglines.txt`. For `css`, `get` gives the color scheme of the built-in pages as
+the starting point; after `put` the pages link `/assets/user.<hash>.css`. An old stylesheet stays reachable for a day, so
+pages that are open right now keep their look.
 
 ### `completion bash|zsh|fish`
 

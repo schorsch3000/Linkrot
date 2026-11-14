@@ -240,8 +240,8 @@ func TestSettingsAreReadWithGetAndChangedWithPatch(t *testing.T) {
 func TestCustomFilesUseGetPutAndDelete(t *testing.T) {
 	c, seen := newRecordingServer(t, 200, `{"name":"taglines","customized":true,"lines":3}`)
 
-	if lines, err := c.PutCustom(context.Background(), "taglines", []byte("a\nb\nc\n")); err != nil || lines != 3 {
-		t.Fatalf("%d, %v", lines, err)
+	if res, err := c.PutCustom(context.Background(), "taglines", []byte("a\nb\nc\n")); err != nil || res.Lines != 3 {
+		t.Fatalf("%+v, %v", res, err)
 	}
 	if err := c.ResetCustom(context.Background(), "taglines"); err != nil {
 		t.Fatal(err)

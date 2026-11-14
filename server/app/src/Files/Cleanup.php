@@ -6,6 +6,7 @@ namespace Linkrot\Files;
 
 use Closure;
 use Linkrot\Config;
+use Linkrot\Custom\CssStore;
 use Linkrot\Database;
 use Linkrot\Duration;
 use Linkrot\FileId;
@@ -30,6 +31,7 @@ final readonly class Cleanup
         private string $filesDir,
         private string $lockFile,
         private Closure $clock,
+        private ?CssStore $css = null,
     ) {}
 
     /** Runs only if the interval since the last cleanup has passed. Null if nothing ran. */
@@ -94,6 +96,9 @@ final readonly class Cleanup
             $this->tally($this->unlink($id), $filesDeleted, $failed);
         }
         $this->deleteUnknownFiles($now, $orphanTimeout, $filesDeleted, $failed);
+        [$cssRemoved, $cssFailed] = $this->css?->removeExpired() ?? [0, 0];
+        $filesDeleted += $cssRemoved;
+        $failed += $cssFailed;
 
         error_log(sprintf('linkrot cleanup: %d rows, %d files removed, %d failed', count($ids), $filesDeleted, $failed));
 

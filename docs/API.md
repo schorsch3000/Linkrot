@@ -204,10 +204,10 @@ changes nothing.
 
 The "From a terminal" section of the download page disappears when all three lines are off.
 
-### `GET|PUT|DELETE /custom/{name}` - files that replace the built-in lines
+### `GET|PUT|DELETE /custom/{name}` - files that replace the built-in look
 
-Need a token. `name` is `taglines` (the footer line of the pages, one per line) or `headerlines` (the `X-Rot` header of
-downloads, one per line). The bodies are plain text, not JSON.
+Need a token. `name` is `taglines` (the footer line of the pages, one per line), `headerlines` (the `X-Rot` header of
+downloads, one per line) or `css` (see below). The bodies are plain text, not JSON.
 
 - `GET` returns the file. As long as nothing was uploaded it returns the built-in lines and writes nothing, so a later
   release that adds lines reaches every host that did not replace them. The header `X-Customized: true|false` says which.
@@ -225,6 +225,18 @@ downloads, one per line). The bodies are plain text, not JSON.
 | `headerlines` | 16 KB | 500 | 120 |
 
 `show_taglines` off still switches both off: custom lines are only used while it is on.
+
+**`css`** is a stylesheet that every page links after the built-in one (`<link rel="stylesheet" href="/assets/user.<hash>.css">`),
+so it only has to contain what it changes. `GET` returns a starter file as long as nothing was uploaded: the color
+variables of the built-in stylesheet, light and dark, with comments. `PUT` (at most 64 KB of valid UTF-8 without NUL
+bytes; `400` or `413` otherwise) answers `{"name": "css", "customized": true, "url": "/assets/user.<hash>.css", "hash": ...}`.
+The hash is the first 16 hex characters of the sha256 of the content, so the URL changes with every new stylesheet.
+`DELETE` goes back to the built-in look.
+
+`GET /assets/user.<hash>.css` needs no token and is served with `Cache-Control: public, max-age=31536000, immutable`.
+A replaced or reset stylesheet is not deleted at once, because a page that was loaded a moment ago still asks for it: it
+stays available for 24 hours and the cleanup removes it then. At most 5 old stylesheets are kept, the oldest go first.
+nginx has to hand names it has no file for to `index.php`, see [nginx.conf.example](nginx.conf.example).
 
 ## Public download URLs
 

@@ -344,13 +344,11 @@ func (c *Client) GetCustom(ctx context.Context, name string) (content []byte, cu
 	return content, resp.Header.Get("X-Customized") == "true", err
 }
 
-// PutCustom replaces one of the customizable files (PUT /api/v1/custom/{name}) and returns the number of lines in use.
-func (c *Client) PutCustom(ctx context.Context, name string, content []byte) (int, error) {
-	var out struct {
-		Lines int `json:"lines"`
-	}
+// PutCustom replaces one of the customizable files (PUT /api/v1/custom/{name}).
+func (c *Client) PutCustom(ctx context.Context, name string, content []byte) (*CustomResult, error) {
+	var out CustomResult
 	err := c.do(ctx, http.MethodPut, "/api/v1/custom/"+url.PathEscape(name), bytes.NewReader(content), int64(len(content)), "text/plain; charset=utf-8", nil, &out)
-	return out.Lines, err
+	return &out, err
 }
 
 // ResetCustom goes back to the built-in defaults (DELETE /api/v1/custom/{name}).

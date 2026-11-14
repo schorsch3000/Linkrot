@@ -24,8 +24,10 @@ server {
     }
 
     # stylesheet and script of the pages: release builds name them after their content (page.<hash>.css), so a cached
-    # copy is never stale and can be kept forever
+    # copy is never stale and can be kept forever. A name that is not a file here (user.<hash>.css, the stylesheet a host
+    # uploaded with `lr custom put css`) goes to index.php, which sends it with the same caching headers.
     location /assets/ {
+        try_files $uri /index.php$is_args$args;
         add_header Cache-Control "public, max-age=31536000, immutable";
         add_header X-Content-Type-Options nosniff always;
     }
