@@ -236,3 +236,24 @@ func TestSettingsAreReadWithGetAndChangedWithPatch(t *testing.T) {
 		t.Errorf("patch %+v %s", patch, patch.body)
 	}
 }
+
+func TestCustomFilesUseGetPutAndDelete(t *testing.T) {
+	c, seen := newRecordingServer(t, 200, `{"name":"taglines","customized":true,"lines":3}`)
+
+	if lines, err := c.PutCustom(context.Background(), "taglines", []byte("a\nb\nc\n")); err != nil || lines != 3 {
+		t.Fatalf("%d, %v", lines, err)
+	}
+	if err := c.ResetCustom(context.Background(), "taglines"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.GetCustom(context.Background(), "taglines"); err != nil {
+		t.Fatal(err)
+	}
+	put, del, get := (*seen)[0], (*seen)[1], (*seen)[2]
+	if put.method != "PUT" || put.path != "/api/v1/custom/taglines" || put.contentType != "text/plain; charset=utf-8" || string(put.body) != "a\nb\nc\n" || put.auth != "Bearer lr_tok" {
+		t.Errorf("put %+v", put)
+	}
+	if del.method != "DELETE" || del.path != "/api/v1/custom/taglines" || get.method != "GET" || get.path != "/api/v1/custom/taglines" {
+		t.Errorf("delete %+v get %+v", del, get)
+	}
+}

@@ -39,6 +39,8 @@ type FakeServer struct {
 	HealthCalls int
 	// Settings are the settings of the host; nil means all on.
 	Settings map[string]bool
+	// Custom holds the uploaded customizable files by name; a missing one downloads as built-in lines.
+	Custom map[string]string
 	// Quota is reported by GET /api/v1/files when set.
 	Quota *api.Quota
 }
@@ -164,6 +166,8 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, answer)
 	case path == "/api/v1/settings" && (r.Method == http.MethodGet || r.Method == http.MethodPatch):
 		s.settings(w, r)
+	case strings.HasPrefix(path, "/api/v1/custom/"):
+		s.custom(w, r, strings.TrimPrefix(path, "/api/v1/custom/"))
 	case path == "/api/v1/cleanup" && r.Method == http.MethodPost:
 		writeJSON(w, 200, map[string]any{"ran": true, "rows_deleted": 0, "files_deleted": 0})
 	case strings.HasPrefix(path, "/api/v1/files/"):
@@ -416,4 +420,41 @@ func (s *FakeServer) settings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, 200, map[string]any{"settings": s.Settings})
+}
+
+func (s *FakeServer) custom(w http.ResponseWriter, r *http.Request, name string) {
+	known := false
+	for _, n := range api.CustomNames {
+		known = known || n == name
+	}
+	if !known {
+		writeError(w, 404, api.CodeNotFound, "unknown file", nil)
+		return
+	}
+	if s.Custom == nil {
+		s.Custom = map[string]string{}
+	}
+	switch r.Method {
+	case http.MethodGet:
+		content, customized := s.Custom[name]
+		if !customized {
+			content = "built-in 1\nbuilt-in 2\n"
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Customized", fmt.Sprint(customized))
+		_, _ = io.WriteString(w, content)
+	case http.MethodPut:
+		body, _ := io.ReadAll(r.Body)
+		if strings.TrimSpace(string(body)) == "" {
+			writeError(w, 400, "invalid_request", "the file has no usable line", nil)
+			return
+		}
+		s.Custom[name] = string(body)
+		writeJSON(w, 200, map[string]any{"name": name, "customized": true, "lines": strings.Count(string(body), "\n")})
+	case http.MethodDelete:
+		delete(s.Custom, name)
+		w.WriteHeader(204)
+	default:
+		writeError(w, 405, "invalid_request", "method not allowed", nil)
+	}
 }

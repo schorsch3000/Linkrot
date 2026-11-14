@@ -129,3 +129,6 @@ var SettingKeys = []string{
 	"show_curl_line",
 	"show_hash_line",
 }
+
+// CustomNames are the files a host can replace with `custom put`.
+var CustomNames = []string{"taglines", "headerlines"}

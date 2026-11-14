@@ -204,6 +204,28 @@ changes nothing.
 
 The "From a terminal" section of the download page disappears when all three lines are off.
 
+### `GET|PUT|DELETE /custom/{name}` - files that replace the built-in lines
+
+Need a token. `name` is `taglines` (the footer line of the pages, one per line) or `headerlines` (the `X-Rot` header of
+downloads, one per line). The bodies are plain text, not JSON.
+
+- `GET` returns the file. As long as nothing was uploaded it returns the built-in lines and writes nothing, so a later
+  release that adds lines reaches every host that did not replace them. The header `X-Customized: true|false` says which.
+- `PUT` replaces the file with the request body and answers `{"name", "customized": true, "lines": n}`. Empty lines are
+  skipped, spaces around a line are dropped and a repeated line counts once. The file is used instead of the built-in
+  lines, which stay unused until a reset. Refused with `400 invalid_request` (the message names the lines): invalid
+  UTF-8, control characters, a line longer than the limit, no usable line at all, and for `headerlines` anything but
+  printable ASCII (a header value must not contain line breaks). Refused with `413 payload_too_large`: too many bytes
+  or too many lines. A refused upload changes nothing.
+- `DELETE` removes the file, back to the built-in lines (`204`, also if there was nothing to remove).
+
+| name | bytes | lines | characters per line |
+| --- | --- | --- | --- |
+| `taglines` | 64 KB | 2000 | 200 |
+| `headerlines` | 16 KB | 500 | 120 |
+
+`show_taglines` off still switches both off: custom lines are only used while it is on.
+
 ## Public download URLs
 
 No authentication.

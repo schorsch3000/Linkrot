@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Linkrot;
 
 use Closure;
+use Linkrot\Api\CustomController;
 use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
 use Linkrot\Api\HealthController;
@@ -16,6 +17,7 @@ use Linkrot\Auth\Authenticator;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
 use Linkrot\Auth\TokenStore;
+use Linkrot\Custom\CustomStore;
 use Linkrot\Files\Cleanup;
 use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRepository;
@@ -79,10 +81,20 @@ final class App
         $this->router->add('PATCH', '/api/v1/settings', $this->authed(
             static fn(Request $request, array $params): Response => new SettingsController($settings())->update($request),
         ));
+        $custom = new CustomStore($this->dataDir . '/custom');
+        $this->router->add('GET', '/api/v1/custom/{name}', $this->authed(
+            static fn(Request $request, array $params): Response => new CustomController($custom)->show($params['name']),
+        ));
+        $this->router->add('PUT', '/api/v1/custom/{name}', $this->authed(
+            static fn(Request $request, array $params): Response => new CustomController($custom)->put($request, $params['name']),
+        ));
+        $this->router->add('DELETE', '/api/v1/custom/{name}', $this->authed(
+            static fn(Request $request, array $params): Response => new CustomController($custom)->reset($params['name']),
+        ));
         foreach (['GET', 'HEAD'] as $method) {
-            $this->router->add($method, '/', static fn(): Response => new HomeController($settings())->index());
+            $this->router->add($method, '/', static fn(): Response => new HomeController($settings(), $custom)->index());
         }
-        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $settings());
+        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $settings(), $custom);
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
         foreach (['GET', 'HEAD'] as $method) {

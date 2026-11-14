@@ -78,9 +78,12 @@ final class HeaderTaglines
         '?1; fresh=?0',
     ];
 
-    public static function pick(string $seed): string
+    /** @param list<string>|null $lines the lines the host uploaded; null: the built-in ones */
+    public static function pick(string $seed, ?array $lines = null): string
     {
-        return self::LINES[crc32($seed) % count(self::LINES)];
+        $lines ??= self::LINES;
+
+        return $lines[crc32($seed) % count($lines)];
     }
 
     /** @return list<string> */

@@ -382,6 +382,31 @@ func lifecycle(t *testing.T, s *stack) {
 	}
 	s.must(t, "config", "set", "title", "on", "curl-line", "on", "taglines", "on", "startpage", "on")
 
+	// custom files: built-in lines first, then replaced, visible on the page and in the header, then reset
+	if out := s.must(t, "custom", "get", "taglines"); !strings.Contains(out, "Aging like milk.") {
+		t.Fatalf("built-in taglines:\n%s", out)
+	}
+	mine := filepath.Join(t.TempDir(), "mine.txt")
+	if err := os.WriteFile(mine, []byte("Only mine.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.must(t, "custom", "put", "taglines", mine)
+	if _, body := get(t, newURL, nil); !strings.Contains(string(body), "<footer>Only mine.</footer>") {
+		t.Fatalf("custom tagline missing: %s", body)
+	}
+	if err := os.WriteFile(mine, []byte("mine=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.must(t, "custom", "put", "headerlines", mine)
+	if r, _ := get(t, s.baseURL+"/dl/"+file.ID+"/x", nil); r.Header.Get("X-Rot") != "mine=1" && !s.nginx {
+		t.Fatalf("custom header line: %q", r.Header.Get("X-Rot"))
+	}
+	s.must(t, "custom", "reset", "taglines")
+	s.must(t, "custom", "reset", "headerlines")
+	if _, body := get(t, newURL, nil); strings.Contains(string(body), "Only mine.") {
+		t.Fatalf("tagline after reset: %s", body)
+	}
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

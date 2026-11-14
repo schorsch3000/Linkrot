@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Linkrot\Api;
 
+use Linkrot\Custom\CustomStore;
+use Linkrot\Custom\Kind;
 use Linkrot\Http\Response;
 use Linkrot\SettingsStore;
 use Linkrot\Web\Page;
@@ -11,7 +13,7 @@ use Linkrot\Web\Page;
 /** `/`: a small page about linkrot itself. Public, shows nothing about the files or the data of this instance. */
 final readonly class HomeController
 {
-    public function __construct(private SettingsStore $settings) {}
+    public function __construct(private SettingsStore $settings, private CustomStore $custom) {}
 
     public function index(): Response
     {
@@ -32,6 +34,6 @@ final readonly class HomeController
             'X-Content-Type-Options' => 'nosniff',
             'Referrer-Policy' => 'no-referrer',
             'Cache-Control' => 'no-store',
-        ], Page::home($settings));
+        ], Page::home($settings, $this->custom->lines(Kind::Taglines)));
     }
 }

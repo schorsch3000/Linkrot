@@ -11,7 +11,8 @@ use Linkrot\Settings;
 /** HTML of the public pages: plain, no JavaScript, no external resources, light and dark. */
 final class Page
 {
-    public static function file(FileRecord $file, string $baseUrl, Settings $settings = new Settings()): string
+    /** @param list<string>|null $taglines the footer lines the host uploaded; null: the built-in ones */
+    public static function file(FileRecord $file, string $baseUrl, Settings $settings = new Settings(), ?array $taglines = null): string
     {
         $kind = FileKind::fromName($file->name);
         $extension = FileKind::extension($file->name);
@@ -54,11 +55,12 @@ final class Page
             </article>
             HTML;
 
-        return self::document($file->name, $body, $settings, self::tagline($file->id), true);
+        return self::document($file->name, $body, $settings, self::tagline($file->id, $taglines), true);
     }
 
     /** The about page at `/`. No script, no copy buttons: only static text and one link to the project. */
-    public static function home(Settings $settings = new Settings()): string
+    /** @param list<string>|null $taglines */
+    public static function home(Settings $settings = new Settings(), ?array $taglines = null): string
     {
         $chain = self::CHAIN_LARGE;
         $project = self::e(self::PROJECT_URL);
@@ -79,10 +81,11 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Links that rot', $body, $settings, self::taglines()[0]);
+        return self::document('Links that rot', $body, $settings, ($taglines ?? self::taglines())[0]);
     }
 
-    public static function notFound(Settings $settings = new Settings()): string
+    /** @param list<string>|null $taglines */
+    public static function notFound(Settings $settings = new Settings(), ?array $taglines = null): string
     {
         $body = <<<'HTML'
             <article class="card gone">
@@ -94,7 +97,7 @@ final class Page
             </article>
             HTML;
 
-        return self::document('Not found', $body, $settings, 'Told you it was rotting.');
+        return self::document('Not found', $body, $settings, $taglines === null ? 'Told you it was rotting.' : self::tagline('not-found', $taglines));
     }
 
     /**
@@ -122,9 +125,10 @@ final class Page
         return "default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'";
     }
 
-    public static function tagline(string $seed): string
+    /** @param list<string>|null $taglines */
+    public static function tagline(string $seed, ?array $taglines = null): string
     {
-        $taglines = self::taglines();
+        $taglines ??= self::taglines();
 
         return $taglines[crc32($seed) % count($taglines)];
     }

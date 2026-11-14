@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/schorsch3000/Linkrot/internal/api"
 	"github.com/schorsch3000/Linkrot/internal/clip"
 )
 
@@ -95,6 +96,15 @@ func (a *App) registerCompletions(root *cobra.Command) {
 				return completeFlags(cmd, toComplete)
 			}
 			_ = c.RegisterFlagCompletionFunc("copy", completeFixed(clip.Clipboard, clip.Primary, clip.OSC52))
+		case "custom":
+			for _, sub := range c.Commands() {
+				sub.ValidArgsFunction = func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+					if len(args) == 0 {
+						return append([]string{}, api.CustomNames...), cobra.ShellCompDirectiveNoFileComp
+					}
+					return nil, cobra.ShellCompDirectiveDefault
+				}
+			}
 		case "config", "ls", "cleanup":
 			c.ValidArgsFunction = onlyFlags
 		}

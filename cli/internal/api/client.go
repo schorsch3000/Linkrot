@@ -323,3 +323,37 @@ func (c *Client) UpdateSettings(ctx context.Context, changes map[string]bool) (m
 	}
 	return out.Settings, nil
 }
+
+// GetCustom downloads one of the customizable files (GET /api/v1/custom/{name}): what the host uploaded, or the built-in
+// defaults. customized tells which.
+func (c *Client) GetCustom(ctx context.Context, name string) (content []byte, customized bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+"/api/v1/custom/"+url.PathEscape(name), nil)
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		return nil, false, decodeError(resp)
+	}
+	content, err = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return content, resp.Header.Get("X-Customized") == "true", err
+}
+
+// PutCustom replaces one of the customizable files (PUT /api/v1/custom/{name}) and returns the number of lines in use.
+func (c *Client) PutCustom(ctx context.Context, name string, content []byte) (int, error) {
+	var out struct {
+		Lines int `json:"lines"`
+	}
+	err := c.do(ctx, http.MethodPut, "/api/v1/custom/"+url.PathEscape(name), bytes.NewReader(content), int64(len(content)), "text/plain; charset=utf-8", nil, &out)
+	return out.Lines, err
+}
+
+// ResetCustom goes back to the built-in defaults (DELETE /api/v1/custom/{name}).
+func (c *Client) ResetCustom(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/custom/"+url.PathEscape(name), nil, 0, "", nil, nil)
+}

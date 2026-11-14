@@ -117,6 +117,19 @@ The settings are `show_taglines`, `show_startpage`, `show_title`, `show_linkrot_
 
 The config file is `$XDG_CONFIG_HOME/linkrot/config.toml` (default `~/.config/linkrot/config.toml`) with mode `0600`; `$LINKROT_CONFIG` overrides the path. The directory is fixed and does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
 
+### `custom`
+
+Files of your server that you can replace with your own, see [API.md](API.md#getputdelete-customname---files-that-replace-the-built-in-lines):
+
+```
+custom get <file> [-o path]   print the file (the built-in lines as long as you did not replace it), or write it to a path
+custom put <file> <path|->    replace the file with the content of a file (- is standard input)
+custom reset <file>           go back to the built-in lines
+```
+
+`<file>` is `taglines` (one footer tagline per line) or `headerlines` (one `X-Rot` header line per line, printable ASCII
+only). A good way to start: `lr custom get taglines -o taglines.txt`, edit, `lr custom put taglines taglines.txt`.
+
 ### `completion bash|zsh|fish`
 
 Prints a completion script. Subcommands and flags complete statically. For `rm`, `set`, `info` and `down` the ids are
