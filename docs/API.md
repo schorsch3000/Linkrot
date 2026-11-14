@@ -238,6 +238,47 @@ A replaced or reset stylesheet is not deleted at once, because a page that was l
 stays available for 24 hours and the cleanup removes it then. At most 5 old stylesheets are kept, the oldest go first.
 nginx has to hand names it has no file for to `index.php`, see [nginx.conf.example](nginx.conf.example).
 
+### `GET /pages`, `GET|PUT|DELETE /pages/{name}`, `GET /page-template` - static pages
+
+Need a token. A host can have up to 20 pages, each a Markdown file of at most 64 KB. Every published page is linked in
+the footer of every page of the host (not on an empty start page, which is not a page). `{name}` is 1 to 40 characters
+of `a-z`, `0-9` and `-`, not at the start or end, and is the URL: `/page/{name}`.
+
+A file may start with a head between two lines of `---`, one `key: value` per line (not YAML: no lists, nothing
+multi-line; empty lines and lines starting with `#` are ignored). All keys are optional, an unknown or repeated key is
+an error:
+
+| key | meaning | default |
+| --- | --- | --- |
+| `title` | headline of the page and title of the browser tab, up to 100 characters | the name |
+| `link` | text of the link in the footer, up to 40 characters | the title |
+| `order` | the links are sorted by this whole number (-9999 to 9999), lowest first, then by text | `100` |
+| `published` | `false`: a draft, neither reachable (`404`) nor linked | `true` |
+| `lang` | language of the page, `en`, `de`, `de-AT`, ... | `en` |
+
+The Markdown is strict. Allowed: the usual CommonMark, tables, strikethrough, and URLs that become links. Refused with
+`400 invalid_request`, the message names the lines: **any raw HTML**, links other than `https`, `http`, `mailto`, `tel`
+or a path on this server (so no `javascript:`), images other than `https`, `data:image/png|gif|jpeg|webp;base64,...`
+or a path on this server, a mistake in the head, invalid UTF-8 or NUL bytes. Over 64 KB is `413 too_large`, the 21st
+page `400`. Headings are moved down one level (the title is the `h1`). External links get
+`rel="nofollow noopener noreferrer"`, images `loading="lazy"` and `referrerpolicy="no-referrer"`. The body of a page has
+the classes `custompage` and `custompage_<name>` for the custom stylesheet.
+
+- `GET /pages` lists the pages in the order of the footer: `{"pages": [{"slug", "title", "link", "order", "published",
+  "lang", "url", "updated_at"}]}`.
+- `PUT /pages/{name}` takes the Markdown as the body, checks it, renders it once and stores both. Answers the entry of
+  the list. Replaces a page of the same name. A refused upload changes nothing.
+- `GET /pages/{name}` returns the file exactly as it was uploaded (`text/markdown`), byte for byte, so it can be edited
+  and uploaded again. `?format=html` returns the rendered body instead, also of a draft (for a preview).
+- `DELETE /pages/{name}` removes the page and its original (`204`, also if there was none).
+- `GET /page-template` returns a page to start from: every key of the head, and dummy content with a list, a table and a
+  quote. It is a draft (`published: false`), so uploading it unchanged does not put dummy text in every footer.
+
+`GET /page/{name}` is public: the page in the style of the site, with the strict CSP of the other pages except that images
+may come from any `https` address and from `data:` URLs (`img-src 'self' https: data:`), still no script. Cached with an
+`ETag` and `Cache-Control: no-cache`, so a repeat visit is a `304` and a change is visible at once. A draft and an
+unknown name are the same `404`.
+
 ## Public download URLs
 
 No authentication.
@@ -247,6 +288,7 @@ No authentication.
   fetch the file from a terminal. A wrong `{name}` gets a `302` to the canonical URL.
 - `GET /dl/{id}/{name}` - the download itself (`attachment`, original filename, size, `X-Accel-Redirect`, `Range`
   supported, and an `X-Rot` header unless `show_taglines` is off). `{name}` is not checked.
+- `GET /page/{name}` - a published static page of the host, see [above](#get-pages-getputdelete-pagesname-get-page-template---static-pages).
 - `GET /assets/user.<hash>.css` - the custom stylesheet of the host, see [above](#getputdelete-customname---files-that-replace-the-built-in-look).
 
 Unknown, expired, exhausted or incomplete files answer `404` in the same way for all of these cases.

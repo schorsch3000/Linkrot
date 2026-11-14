@@ -6,6 +6,7 @@ namespace Linkrot\Web;
 
 use Linkrot\FileName;
 use Linkrot\Files\FileRecord;
+use Linkrot\Pages\PageMeta;
 use Linkrot\Settings;
 
 /** HTML of the public pages: plain, no JavaScript, no external resources, light and dark. */
@@ -82,6 +83,23 @@ final class Page
         return self::document('Links that rot', $body, $look, ($look->taglines ?? self::taglines())[0]);
     }
 
+    /** A page of the host (Markdown rendered at upload): the title is the headline, the body comes from the cache. */
+    public static function staticPage(PageMeta $page, string $body, Appearance $look = new Appearance()): string
+    {
+        $title = self::e($page->title);
+        $card = <<<HTML
+            <article class="card doc">
+            <h1 class="name">$title</h1>
+            <div class="doc-body">
+            $body
+            </div>
+            </article>
+            HTML;
+
+        // hooks for the stylesheet of the host: every page of the host, and this one (the slug is a-z, 0-9 and -)
+        return self::document($page->title, $card, $look, self::tagline('page-' . $page->slug, $look->taglines), false, $page->lang, 'custompage custompage_' . $page->slug);
+    }
+
     public static function notFound(Appearance $look = new Appearance()): string
     {
         $body = <<<'HTML'
@@ -116,6 +134,15 @@ final class Page
         return $taglines;
     }
 
+    /**
+     * Content-Security-Policy of the pages of a host: like the static one, but images may come from any https address and
+     * from `data:` URLs, because the Markdown of a page can have them. Still no script and nothing else.
+     */
+    public static function pageContentSecurityPolicy(): string
+    {
+        return str_replace("img-src 'self'", "img-src 'self' https: data:", self::staticContentSecurityPolicy());
+    }
+
     /** Content-Security-Policy of pages without a script (about, not found): the stylesheet and the favicon, from this origin. */
     public static function staticContentSecurityPolicy(): string
     {
@@ -130,18 +157,20 @@ final class Page
         return $taglines[crc32($seed) % count($taglines)];
     }
 
-    private static function document(string $title, string $body, Appearance $look, string $tagline, bool $withScript = false): string
+    private static function document(string $title, string $body, Appearance $look, string $tagline, bool $withScript = false, string $lang = 'en', string $bodyClass = ''): string
     {
         $script = $withScript ? '<script src="' . Assets::url('page.js') . '" defer></script>' : '';
         $title = self::e($title . ' · linkrot');
         $footer = $look->settings->showTaglines ? '<footer>' . self::e($tagline) . '</footer>' : '';
         $brand = $look->settings->showTitle ? '<header class="brand"><a href="/">' . self::CHAIN . '<span class="word">link<span class="rot">rot</span></span></a></header>' : '';
         $css = Assets::url('page.css');
+        $nav = self::pageLinks($look->pages, $lang);
+        $bodyTag = $bodyClass === '' ? '<body>' : '<body class="' . self::e($bodyClass) . '">';
         $userCss = $look->cssHref === null ? '' : '<link rel="stylesheet" href="' . self::e($look->cssHref) . '">';
 
         return <<<HTML
             <!doctype html>
-            <html lang="en">
+            <html lang="$lang">
             <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -154,10 +183,11 @@ final class Page
             <link rel="stylesheet" href="$css">
             $userCss
             </head>
-            <body>
+            $bodyTag
             <main>
             $brand
             $body
+            $nav
             $footer
             </main>
             $script
@@ -165,6 +195,22 @@ final class Page
             </html>
 
             HTML;
+    }
+
+    /**
+     * The links to the published pages, the same on every page.
+     *
+     * @param list<PageMeta> $pages
+     */
+    private static function pageLinks(array $pages, string $documentLang): string
+    {
+        if ($pages === []) {
+            return '';
+        }
+        $links = array_map(static fn(PageMeta $page): string => '<a href="/page/' . self::e($page->slug) . '"'
+            . ($page->lang === $documentLang ? '' : ' lang="' . self::e($page->lang) . '"') . '>' . self::e($page->link) . '</a>', $pages);
+
+        return '<nav class="pages" aria-label="Pages">' . implode('', $links) . '</nav>';
     }
 
     /** The commands to fetch the file; each line has its own setting, without any line there is no section. */

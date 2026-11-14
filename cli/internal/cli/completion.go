@@ -45,6 +45,30 @@ func (a *App) completeIDs(maxArgs int) func(*cobra.Command, []string, string) ([
 	}
 }
 
+// completePages completes the names of the pages of the host, live, like the ids of the files (title as description).
+func (a *App) completePages(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if strings.HasPrefix(toComplete, "-") {
+		return completeFlags(cmd, toComplete)
+	}
+	client, err := a.client()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	ctx, cancel := context.WithTimeout(cmd.Context(), completionTimeout)
+	defer cancel()
+	pages, err := client.Pages(ctx)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	var out []string
+	for _, p := range pages {
+		if strings.HasPrefix(p.Slug, toComplete) && !contains(args, p.Slug) {
+			out = append(out, p.Slug+"\t"+p.Title)
+		}
+	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeFlags offers the flags of a command that has no positional arguments to complete, so that
 // `lr config <TAB>` suggests --server and --token (cobra itself only lists flags after a `-` was typed).
 // Flags that were already given are left out.
@@ -103,6 +127,22 @@ func (a *App) registerCompletions(root *cobra.Command) {
 						return append([]string{}, api.CustomNames...), cobra.ShellCompDirectiveNoFileComp
 					}
 					return nil, cobra.ShellCompDirectiveDefault
+				}
+			}
+		case "page":
+			for _, sub := range c.Commands() {
+				switch sub.Name() {
+				case "get", "rm":
+					sub.ValidArgsFunction = a.completePages
+				case "put":
+					sub.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+						if len(args) == 0 {
+							return nil, cobra.ShellCompDirectiveDefault // the file to upload
+						}
+						return completeFlags(cmd, toComplete)
+					}
+				default:
+					sub.ValidArgsFunction = onlyFlags
 				}
 			}
 		case "config", "ls", "cleanup":

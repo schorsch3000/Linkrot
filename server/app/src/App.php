@@ -10,6 +10,8 @@ use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
 use Linkrot\Api\HealthController;
 use Linkrot\Api\HomeController;
+use Linkrot\Api\PageController;
+use Linkrot\Api\PagesController;
 use Linkrot\Api\SettingsController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
@@ -26,6 +28,8 @@ use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
 use Linkrot\Http\Router;
+use Linkrot\Pages\PageRenderer;
+use Linkrot\Pages\PageStore;
 use Linkrot\Web\AppearanceStore;
 use PDO;
 use Throwable;
@@ -85,7 +89,17 @@ final class App
         ));
         $custom = new CustomStore($this->dataDir . '/custom');
         $css = $this->css();
-        $appearance = fn(): AppearanceStore => new AppearanceStore($settings(), $custom, $css);
+        $pages = new PageStore($this->dataDir . '/pages', new PageRenderer($this->host), $this->clock);
+        $appearance = fn(): AppearanceStore => new AppearanceStore($settings(), $custom, $css, $pages);
+        $pagesApi = fn(): PagesController => new PagesController($this->config, $pages);
+        $this->router->add('GET', '/api/v1/pages', $this->authed(static fn(Request $request, array $params): Response => $pagesApi()->list()));
+        $this->router->add('GET', '/api/v1/page-template', $this->authed(static fn(Request $request, array $params): Response => $pagesApi()->template()));
+        $this->router->add('GET', '/api/v1/pages/{slug}', $this->authed(static fn(Request $request, array $params): Response => $pagesApi()->show($request, $params['slug'])));
+        $this->router->add('PUT', '/api/v1/pages/{slug}', $this->authed(static fn(Request $request, array $params): Response => $pagesApi()->put($request, $params['slug'])));
+        $this->router->add('DELETE', '/api/v1/pages/{slug}', $this->authed(static fn(Request $request, array $params): Response => $pagesApi()->delete($params['slug'])));
+        foreach (['GET', 'HEAD'] as $method) {
+            $this->router->add($method, '/page/{slug}', static fn(Request $request, array $params): Response => new PageController($pages, $appearance())->show($request, $params['slug']));
+        }
         $this->router->add('GET', '/api/v1/custom/{name}', $this->authed(
             static fn(Request $request, array $params): Response => new CustomController($custom, $css)->show($params['name']),
         ));

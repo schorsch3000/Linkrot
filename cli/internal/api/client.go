@@ -324,24 +324,33 @@ func (c *Client) UpdateSettings(ctx context.Context, changes map[string]bool) (m
 	return out.Settings, nil
 }
 
-// GetCustom downloads one of the customizable files (GET /api/v1/custom/{name}): what the host uploaded, or the built-in
-// defaults. customized tells which.
-func (c *Client) GetCustom(ctx context.Context, name string) (content []byte, customized bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+"/api/v1/custom/"+url.PathEscape(name), nil)
+// getRaw fetches a text answer (not JSON) of the API.
+func (c *Client) getRaw(ctx context.Context, path string) ([]byte, http.Header, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, nil)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
-		return nil, false, decodeError(resp)
+		return nil, nil, decodeError(resp)
 	}
-	content, err = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	return content, resp.Header.Get("X-Customized") == "true", err
+	content, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	return content, resp.Header, err
+}
+
+// GetCustom downloads one of the customizable files (GET /api/v1/custom/{name}): what the host uploaded, or the built-in
+// defaults. customized tells which.
+func (c *Client) GetCustom(ctx context.Context, name string) (content []byte, customized bool, err error) {
+	content, header, err := c.getRaw(ctx, "/api/v1/custom/"+url.PathEscape(name))
+	if err != nil {
+		return nil, false, err
+	}
+	return content, header.Get("X-Customized") == "true", nil
 }
 
 // PutCustom replaces one of the customizable files (PUT /api/v1/custom/{name}).
@@ -354,4 +363,43 @@ func (c *Client) PutCustom(ctx context.Context, name string, content []byte) (*C
 // ResetCustom goes back to the built-in defaults (DELETE /api/v1/custom/{name}).
 func (c *Client) ResetCustom(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/custom/"+url.PathEscape(name), nil, 0, "", nil, nil)
+}
+
+// Pages lists the static pages of the host in the order of the footer (GET /api/v1/pages).
+func (c *Client) Pages(ctx context.Context) ([]Page, error) {
+	var out struct {
+		Pages []Page `json:"pages"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/pages", nil, 0, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Pages, nil
+}
+
+// GetPage downloads the Markdown of a page exactly as it was uploaded, or with html its rendered body.
+func (c *Client) GetPage(ctx context.Context, slug string, html bool) ([]byte, error) {
+	path := "/api/v1/pages/" + url.PathEscape(slug)
+	if html {
+		path += "?format=html"
+	}
+	content, _, err := c.getRaw(ctx, path)
+	return content, err
+}
+
+// PutPage uploads a page (PUT /api/v1/pages/{slug}); the server renders it and refuses what is not allowed.
+func (c *Client) PutPage(ctx context.Context, slug string, content []byte) (*Page, error) {
+	var out Page
+	err := c.do(ctx, http.MethodPut, "/api/v1/pages/"+url.PathEscape(slug), bytes.NewReader(content), int64(len(content)), "text/markdown; charset=utf-8", nil, &out)
+	return &out, err
+}
+
+// DeletePage removes a page; a page that is not there is fine.
+func (c *Client) DeletePage(ctx context.Context, slug string) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/pages/"+url.PathEscape(slug), nil, 0, "", nil, nil)
+}
+
+// PageTemplate downloads a page to start from: every key of the frontmatter and some dummy content.
+func (c *Client) PageTemplate(ctx context.Context) ([]byte, error) {
+	content, _, err := c.getRaw(ctx, "/api/v1/page-template")
+	return content, err
 }

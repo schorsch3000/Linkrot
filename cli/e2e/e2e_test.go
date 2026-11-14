@@ -426,6 +426,36 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("user css still linked after the reset: %s", body)
 	}
 
+	// static pages: a draft is not reachable, a published page is, linked in the footer of the other pages
+	pageFile := filepath.Join(t.TempDir(), "Imprint.md")
+	if err := os.WriteFile(pageFile, []byte("---\ntitle: Imprint\nlang: de\n---\n# Hello\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out := s.must(t, "page", "put", pageFile); !strings.Contains(out, "imprint: published") {
+		t.Fatalf("page put:\n%s", out)
+	}
+	if r, body := get(t, s.baseURL+"/page/imprint", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<h2>Hello</h2>") ||
+		!strings.Contains(string(body), "<table>") || !strings.Contains(string(body), `<body class="custompage custompage_imprint">`) ||
+		!strings.Contains(r.Header.Get("Content-Security-Policy"), "img-src 'self' https: data:") {
+		t.Fatalf("page: %d %v %s", r.StatusCode, r.Header, body)
+	}
+	if _, body := get(t, newURL, nil); !strings.Contains(string(body), `<a href="/page/imprint" lang="de">Imprint</a>`) {
+		t.Fatalf("footer link missing: %s", body)
+	}
+	if out := s.must(t, "page", "get", "imprint"); !strings.HasPrefix(out, "---\ntitle: Imprint") {
+		t.Fatalf("page get:\n%s", out)
+	}
+	if out := s.must(t, "page", "ls"); !strings.Contains(out, "imprint") {
+		t.Fatalf("page ls:\n%s", out)
+	}
+	s.must(t, "page", "rm", "imprint")
+	if r, _ := get(t, s.baseURL+"/page/imprint", nil); r.StatusCode != 404 {
+		t.Fatalf("page after rm: %d", r.StatusCode)
+	}
+	if _, body := get(t, newURL, nil); strings.Contains(string(body), "/page/imprint") {
+		t.Fatalf("footer link after rm: %s", body)
+	}
+
 	// the favicon is a static file; nginx serves it in production, php -S does it here
 	if r, body := get(t, s.baseURL+"/favicon.svg", nil); r.StatusCode != 200 || !strings.Contains(string(body), "<svg") || !strings.Contains(r.Header.Get("Content-Type"), "svg") {
 		t.Fatalf("favicon: %d %q", r.StatusCode, r.Header.Get("Content-Type"))

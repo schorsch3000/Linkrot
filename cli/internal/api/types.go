@@ -139,3 +139,15 @@ type CustomResult struct {
 	Lines int    `json:"lines"`
 	URL   string `json:"url"`
 }
+
+// Page is one static page of the host, as `GET /api/v1/pages` lists it.
+type Page struct {
+	Slug      string `json:"slug"`
+	Title     string `json:"title"`
+	Link      string `json:"link"`
+	Order     int    `json:"order"`
+	Published bool   `json:"published"`
+	Lang      string `json:"lang"`
+	URL       string `json:"url"`
+	UpdatedAt int64  `json:"updated_at"`
+}

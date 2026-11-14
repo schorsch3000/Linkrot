@@ -71,7 +71,11 @@ abstract class AppTestCase extends TestCase
         $headers += $auth ? ['authorization' => 'Bearer ' . $this->token] : [];
         $headers += ['content-length' => (string) strlen($body)];
 
-        return $this->app->handle(new Request($method, $path, $headers, [], ['REMOTE_ADDR' => '192.0.2.1'], $stream));
+        [$path, $queryString] = array_pad(explode('?', $path, 2), 2, '');
+        parse_str($queryString, $query);
+        /** @var array<string, string> $query */
+
+        return $this->app->handle(new Request($method, $path, $headers, $query, ['REMOTE_ADDR' => '192.0.2.1'], $stream));
     }
 
     /**

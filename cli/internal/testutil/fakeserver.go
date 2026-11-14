@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,8 @@ type FakeServer struct {
 	Settings map[string]bool
 	// Custom holds the uploaded customizable files by name; a missing one downloads as built-in lines.
 	Custom map[string]string
+	// Pages holds the uploaded pages by name (the raw Markdown).
+	Pages map[string]string
 	// Quota is reported by GET /api/v1/files when set.
 	Quota *api.Quota
 }
@@ -166,6 +169,9 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, answer)
 	case path == "/api/v1/settings" && (r.Method == http.MethodGet || r.Method == http.MethodPatch):
 		s.settings(w, r)
+	case path == "/api/v1/pages" && r.Method == http.MethodGet, path == "/api/v1/page-template" && r.Method == http.MethodGet,
+		strings.HasPrefix(path, "/api/v1/pages/"):
+		s.pages(w, r, path)
 	case strings.HasPrefix(path, "/api/v1/custom/"):
 		s.custom(w, r, strings.TrimPrefix(path, "/api/v1/custom/"))
 	case path == "/api/v1/cleanup" && r.Method == http.MethodPost:
@@ -463,5 +469,69 @@ func (s *FakeServer) custom(w http.ResponseWriter, r *http.Request, name string)
 		w.WriteHeader(204)
 	default:
 		writeError(w, 405, "invalid_request", "method not allowed", nil)
+	}
+}
+
+func (s *FakeServer) pages(w http.ResponseWriter, r *http.Request, path string) {
+	if s.Pages == nil {
+		s.Pages = map[string]string{}
+	}
+	text := func(content string) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		_, _ = io.WriteString(w, content)
+	}
+	meta := func(slug string) api.Page {
+		p := api.Page{Slug: slug, Title: slug, Link: slug, Order: 100, Published: true, Lang: "en", URL: s.URL + "/page/" + slug}
+		for _, line := range strings.Split(s.Pages[slug], "\n") {
+			if t, ok := strings.CutPrefix(line, "title: "); ok {
+				p.Title, p.Link = t, t
+			}
+			if line == "published: false" {
+				p.Published = false
+			}
+		}
+		return p
+	}
+	switch path {
+	case "/api/v1/page-template":
+		text("---\ntitle: Template\npublished: false\n---\nDummy.\n")
+	case "/api/v1/pages":
+		list := []api.Page{}
+		names := make([]string, 0, len(s.Pages))
+		for name := range s.Pages {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			list = append(list, meta(name))
+		}
+		writeJSON(w, 200, map[string]any{"pages": list})
+	default:
+		slug := strings.TrimPrefix(path, "/api/v1/pages/")
+		switch r.Method {
+		case http.MethodGet:
+			content, ok := s.Pages[slug]
+			if !ok {
+				writeError(w, 404, api.CodeNotFound, "no such page", nil)
+				return
+			}
+			if r.URL.Query().Get("format") == "html" {
+				content = "<p>rendered</p>"
+			}
+			text(content)
+		case http.MethodPut:
+			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(body), "<script") {
+				writeError(w, 400, "invalid_request", "line 1: raw HTML is not allowed, use Markdown", nil)
+				return
+			}
+			s.Pages[slug] = string(body)
+			writeJSON(w, 200, meta(slug))
+		case http.MethodDelete:
+			delete(s.Pages, slug)
+			w.WriteHeader(204)
+		default:
+			writeError(w, 405, "invalid_request", "method not allowed", nil)
+		}
 	}
 }

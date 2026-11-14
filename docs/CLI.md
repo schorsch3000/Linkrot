@@ -8,7 +8,8 @@ Conventions:
 
 - the **result** (URL, ids, JSON) goes to **stdout**; progress, hints and errors go to **stderr**, so output can be piped
 - every command that talks to the server (`up`, `ls`, `info`, `set`, `rm`, `cleanup`, `down`, `config get`, `config set`,
-  `custom get`, `custom put`, `custom reset`) first asks `GET /health`.
+  `custom get`, `custom put`, `custom reset`, `page ls`, `page get`, `page put`, `page rm`, `page template`) first asks
+  `GET /health`.
   Warnings are printed on stderr in yellow and the command goes on; an error is printed in red and stops the command
   with exit code 1, since there is no working server. A server that has no health endpoint (404) is not an error
 - colors (`ls`, `info`, errors, progress bar) are used per stream only if it is a terminal. `NO_COLOR` (any
@@ -134,11 +135,31 @@ taglines.txt`, edit, `lr custom put taglines taglines.txt`. For `css`, `get` giv
 the starting point; after `put` the pages link `/assets/user.<hash>.css`. An old stylesheet stays reachable for a day, so
 pages that are open right now keep their look.
 
+### `page`
+
+Static pages that are linked in the footer of every page of your server, for an imprint, a privacy notice and the like. A
+page is a Markdown file; see [API.md](API.md#get-pages-getputdelete-pagesname-get-page-template---static-pages) for the
+head (`title`, `link`, `order`, `published`, `lang`) and what the strict Markdown allows (no raw HTML).
+
+```
+page template [-o path]       print a page to start from: every key of the head, some dummy content (a draft)
+page put <path|-> [--name n]  upload a Markdown file; replaces the page of the same name
+page ls [--json]              list the pages in the order of the footer; drafts are marked
+page get <name> [-o path] [--html]   print the file exactly as you uploaded it; --html: the rendered body, also of a draft
+page rm <name>...             delete pages (the original is deleted too, download it first)
+```
+
+The name of a page, which is its URL (`/page/<name>`), is made from the file name: `Imprint.md` becomes `imprint`. `--name`
+chooses it, and is needed for standard input. The server checks and renders the file when you upload it and refuses it
+with the offending lines if it contains raw HTML, a link or image that is not allowed or a mistake in the head; nothing
+changes then. A start: `lr page template -o imprint.md`, edit, `lr page put imprint.md`; the template is a draft until you
+set `published: true`.
+
 ### `completion bash|zsh|fish`
 
 Prints a completion script. Subcommands and flags complete statically. For `rm`, `set`, `info` and `down` the ids are
 completed live from the server (name as description) with a 2 second timeout; the lowercase start of every id makes
-prefix completion pleasant. `config set` completes the setting names and `on`/`off`, `custom` the file names.
+prefix completion pleasant. `config set` completes the setting names and `on`/`off`, `custom` the file names, `page get` and `page rm` the names of your pages.
 
 ## Exit codes
 

@@ -26,7 +26,8 @@ and not worry about cleaning up later.
   host is `https://<host>`, nothing to configure.
 - **Customizable per host, through the API only.** Six on/off settings (taglines, start page, headline, and the three
   command lines of the download page) and three files (taglines, `X-Rot` header lines, a stylesheet) change how the
-  public pages look. `lr config` and `lr custom` manage them; there is still no admin UI.
+  public pages look, and up to 20 Markdown pages (an imprint, a privacy notice) are linked in the footer of every page.
+  `lr config`, `lr custom` and `lr page` manage them; there is still no admin UI.
 - **Resumable uploads.** Files are uploaded in small chunks (default 32 MiB) that are individually verified, so
   a lost connection costs at most one chunk.
 - **Downloads are guarded.** Files never live in the public folder; PHP decides, nginx sends (`X-Accel-Redirect`).
@@ -44,7 +45,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for 
 contains it.
 
 The dependencies keep their own licenses, all compatible with the GPL: `bacon/bacon-qr-code` (BSD-2-Clause),
-`dasprid/enum` (BSD-2-Clause), `spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
+`dasprid/enum` (BSD-2-Clause), `league/commonmark` and `league/config` (BSD-3-Clause), `dflydev/dot-access-data` (MIT),
+`nette/schema` and `nette/utils` (BSD-3-Clause or GPL), `psr/event-dispatcher` and the `symfony` polyfill and contracts (MIT), `spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
 (MIT), `inconshreveable/mousetrap` (Apache-2.0). Development tools are not shipped.
 
 ## Documentation
@@ -52,8 +54,8 @@ The dependencies keep their own licenses, all compatible with the GPL: `bacon/ba
 | Document | Content |
 | --- | --- |
 | [docs/SERVER.md](docs/SERVER.md) | server architecture, layout, tenants, data model, cleanup, locking, rate limiting, appearance (settings and custom files), security, configuration, `lr-auth` |
-| [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, public URLs, errors |
-| [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, ...), flags, config file, exit codes, completion |
+| [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, static pages, public URLs, errors |
+| [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, `page`, ...), flags, config file, exit codes, completion |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |
@@ -81,6 +83,7 @@ Makefile           delegates to server/ and cli/
 | Public URL | `https://<host>` from `global-config.php`; plain `http://` with the request's port only for `localhost` and `127.x` (development). No `base_url` setting |
 | Settings | six booleans per host, all on by default, stored in the host's database, changed with `lr config set` (see [API.md](docs/API.md#get-settings-patch-settings---the-look-of-the-public-pages)) |
 | Custom files | `taglines`, `headerlines` and `css` per host, replaced with `lr custom put`; the built-in version is served but never written to disk until an upload; a replaced stylesheet stays reachable for a day (see [API.md](docs/API.md#getputdelete-customname---files-that-replace-the-built-in-look)) |
+| Static pages | Markdown with a small strict head (`title`, `link`, `order`, `published`, `lang`), rendered once at upload with `league/commonmark`, no raw HTML, https and data images; the original is kept and downloadable; linked in the footer of every page (see [API.md](docs/API.md#get-pages-getputdelete-pagesname-get-page-template---static-pages)) |
 | Cleanup | lazy, on requests, guarded by `flock`; also triggerable with `linkrot cleanup` |
 | Rate limiting | own limiter on failed authentication, stored in APCu, keyed by hashed client IP |
 | Tokens | only hashes stored; named per device; `lr-auth get\|del\|ls` |

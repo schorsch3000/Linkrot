@@ -172,6 +172,9 @@ final readonly class CssStore
              *
              * The first block is the light scheme, the second one the dark scheme (used when the visitor's system is
              * dark). To always use one scheme: delete the other block and set color-scheme to light or dark.
+             *
+             * The pages you upload with `lr page put` have <body class="custompage custompage_<name>">, so you can style
+             * all of them (.custompage) or just one (.custompage_imprint).
              */
             :root {
               color-scheme: light dark;

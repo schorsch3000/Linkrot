@@ -6,8 +6,8 @@ dependencies are PHP extensions only (all of them declared in `composer.json` un
 
 There is no user management. The server consists of
 
-- public URLs: the about page `/`, the download pages and downloads (`/file/...`, `/dl/...`) and the stylesheet of a
-  host (`/assets/user.<hash>.css`)
+- public URLs: the about page `/`, the download pages and downloads (`/file/...`, `/dl/...`), the static pages of a host
+  (`/page/<name>`) and its stylesheet (`/assets/user.<hash>.css`)
 - a token-guarded HTTP API under `/api/v1` (see [API.md](API.md)), which also changes the look of the public pages
   per host ([Appearance](#appearance))
 - the CLI script `lr-auth` to manage tokens
@@ -31,6 +31,8 @@ app_data/<host>/cleanup.lock         lock file for its cleanup
 app_data/<host>/custom/              what the host replaced through the API (only exists after an upload):
                                      taglines.txt, headerlines.txt, user.<hash>.css, css.json (which stylesheet is
                                      current, which ones were retired when), css.lock
+app_data/<host>/pages/               its static pages (only exists after an upload): <name>.md (the original), <name>.html
+                                     (rendered body), index.json (title, link, order, ... of all), pages.lock
 ```
 
 ### Tenants
@@ -234,6 +236,32 @@ whole "From a terminal" section when all three are off.
 - a replaced or reset stylesheet is retired (`custom/css.json`: current hash, retired hashes with the time), not
   deleted: pages that were loaded a moment ago still ask for it. At most 5 are kept; the cleanup removes the others
   after 24 hours. Changes of that file are serialized with `custom/css.lock`
+
+### Static pages
+
+A host can upload Markdown pages (`lr page`, [API.md](API.md#get-pages-getputdelete-pagesname-get-page-template---static-pages)),
+mainly for an imprint. Every published page is linked in the footer of every page of the host (`<nav class="pages">`,
+sorted by `order`, then link text); the empty start page of `show_startpage` off is not a page and has no footer.
+
+- **Upload.** `PageStore::put` checks the size, UTF-8 and the slug, parses the head (`Frontmatter`: `title`, `link`,
+  `order`, `published`, `lang`; a deliberately tiny format, not YAML), and renders the Markdown with `league/commonmark`
+  (`PageRenderer`) once. It writes `<name>.html`, then `<name>.md` (the upload, byte for byte: `get` returns it
+  unchanged), then `index.json`, under `pages/pages.lock`; files are written atomically (temp file and rename).
+- **Strict.** The renderer refuses what it would otherwise have to guess about: raw HTML (also stripped by the library as
+  a second line of defense), links with a scheme other than https, http, mailto and tel, images other than https,
+  `data:image/png|gif|jpeg|webp;base64` and paths on the server, and `//host` URLs. The error names the line. Nesting is
+  limited. External links get `rel="nofollow noopener noreferrer"`, images `loading="lazy"` and `referrerpolicy="no-referrer"`,
+  headings move down one level. Tables, strikethrough and autolinks are on.
+- **Serving.** A request only reads `index.json` (for the footer) and the `.html` of the page, never the Markdown, and does
+  no Markdown work. `/page/<name>` is a normal page of the site (the custom stylesheet and taglines apply), with the
+  `custompage` and `custompage_<name>` classes on `<body>`, and with the CSP of the other pages except `img-src 'self'
+  https: data:`. The `ETag` is a hash of the whole page, because the footer links and the look of the host are part of it.
+  A draft and an unknown name are the same 404.
+- **Cache is disposable.** `.md` is the truth. If `index.json` is missing or damaged, or was made by an older
+  `PageRenderer::VERSION` (raised whenever the output for the same Markdown can change, for example with a library update),
+  the next request renders every page again from its `.md`. A page the stricter rules no longer accept stays downloadable
+  and listed, as a draft.
+- **Limits.** 20 pages, 64 KB each, title 100 and link text 40 characters.
 
 ## Cleanup
 
