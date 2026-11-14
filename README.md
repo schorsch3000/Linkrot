@@ -21,6 +21,12 @@ and not worry about cleaning up later.
   not found even if the cleanup has not yet physically removed them.
 - **No scheduler.** The server is a classic PHP request/response application without cronjob. Cleanup runs lazily,
   piggybacking on incoming requests (see [docs/SERVER.md](docs/SERVER.md)).
+- **One installation, many hosts.** Every hostname listed in `app_data/global-config.php` is a tenant of its own:
+  own tokens, files, database, quota and cleanup (see [docs/SERVER.md](docs/SERVER.md#tenants)). The share URL of a
+  host is `https://<host>`, nothing to configure.
+- **Customizable per host, through the API only.** Six on/off settings (taglines, start page, headline, and the three
+  command lines of the download page) and three files (taglines, `X-Rot` header lines, a stylesheet) change how the
+  public pages look. `lr config` and `lr custom` manage them; there is still no admin UI.
 - **Resumable uploads.** Files are uploaded in small chunks (default 32 MiB) that are individually verified, so
   a lost connection costs at most one chunk.
 - **Downloads are guarded.** Files never live in the public folder; PHP decides, nginx sends (`X-Accel-Redirect`).
@@ -45,9 +51,9 @@ The dependencies keep their own licenses, all compatible with the GPL: `bacon/ba
 
 | Document | Content |
 | --- | --- |
-| [docs/SERVER.md](docs/SERVER.md) | server architecture, layout, data model, cleanup, locking, rate limiting, security, configuration, `lr-auth` |
-| [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, public download URLs, errors |
-| [docs/CLI.md](docs/CLI.md) | CLI commands, flags, config file, exit codes, completion |
+| [docs/SERVER.md](docs/SERVER.md) | server architecture, layout, tenants, data model, cleanup, locking, rate limiting, appearance (settings and custom files), security, configuration, `lr-auth` |
+| [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, public URLs, errors |
+| [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, ...), flags, config file, exit codes, completion |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |
@@ -72,6 +78,9 @@ Makefile           delegates to server/ and cli/
 | Duplicate uploads | refused; the existing file is reported |
 | Expiry | `rm-after` counts from upload completion (`up`) or from now (`set`); capped by a mandatory server-side maximum |
 | Download limit | optional `--uses n`; exhausted files count as expired |
+| Public URL | `https://<host>` from `global-config.php`; plain `http://` with the request's port only for `localhost` and `127.x` (development). No `base_url` setting |
+| Settings | six booleans per host, all on by default, stored in the host's database, changed with `lr config set` (see [API.md](docs/API.md#get-settings-patch-settings---the-look-of-the-public-pages)) |
+| Custom files | `taglines`, `headerlines` and `css` per host, replaced with `lr custom put`; the built-in version is served but never written to disk until an upload; a replaced stylesheet stays reachable for a day (see [API.md](docs/API.md#getputdelete-customname---files-that-replace-the-built-in-look)) |
 | Cleanup | lazy, on requests, guarded by `flock`; also triggerable with `linkrot cleanup` |
 | Rate limiting | own limiter on failed authentication, stored in APCu, keyed by hashed client IP |
 | Tokens | only hashes stored; named per device; `lr-auth get\|del\|ls` |

@@ -6,8 +6,10 @@ dependencies are PHP extensions only (all of them declared in `composer.json` un
 
 There is no user management. The server consists of
 
-- public download URLs (`/file/...`, `/dl/...`)
-- a token-guarded HTTP API under `/api/v1` (see [API.md](API.md))
+- public URLs: the about page `/`, the download pages and downloads (`/file/...`, `/dl/...`) and the stylesheet of a
+  host (`/assets/user.<hash>.css`)
+- a token-guarded HTTP API under `/api/v1` (see [API.md](API.md)), which also changes the look of the public pages
+  per host ([Appearance](#appearance))
 - the CLI script `lr-auth` to manage tokens
 
 ## Deployment layout
@@ -107,7 +109,8 @@ All times are UTC unix seconds.
 | `hash` | sha256 of the token; the token itself is never stored |
 | `created_at`, `last_used_at` | `last_used_at` is updated at most once per hour to avoid a write per request |
 
-`meta`: key/value, holds `last_cleanup` (the last run that finished, drives the interval), `last_cleanup_ok` (the last run
+`meta`: key/value, holds the settings of the host (`setting.<name>` with `1` or `0`, one row per setting that was ever
+changed, see [Appearance](#appearance)), `last_cleanup` (the last run that finished, drives the interval), `last_cleanup_ok` (the last run
 that finished without any error) and `last_cleanup_error` (JSON with time and message of the last failed run or run that
 could not remove a file; the next clean run drops it). The health endpoint reports them ([API.md](API.md)).
 
@@ -171,21 +174,24 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
 
 - `GET /`: a small page about linkrot itself, in the style of the download pages: what it is, three steps, and a button
   to the project on GitHub. Static text only: no script, no commands and nothing about the files or the configuration of
-  the instance.
-- `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`. No expiry shown. If `{name}` does
+  the instance. With `show_startpage` off it is an empty page (`200`, empty body). Never cached (`Cache-Control:
+  no-store`), so a changed setting is visible at once.
+- `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`, and a "From a terminal" section with the `linkrot down` command, the curl command and the SHA-256 (each with a copy button; each line and, without any line, the whole section can be switched off, see [Appearance](#appearance)). No expiry shown. If `{name}` does
   not match the stored name, answer `302` to the canonical URL. Everything is HTML-escaped and the page is served
   with a strict CSP (`default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'`:
   stylesheet and script come from this origin only, `htdocs/assets/page.css` and `page.js`, there is no inline script and
-  no inline style element; the style attribute is allowed for the icon colour only). A release build renames the assets
+  no inline style element; the style attribute is allowed for the icon colour only; the custom stylesheet of a host is
+  also from this origin, so the policy needs no change). A release build renames the assets
   after their content (`page.<hash>.css`, mapping in `app/assets.php`, `scripts/build-assets.sh`), so nginx can cache
   them forever, see [nginx.conf.example](nginx.conf.example). Viewing the page never consumes a use, so
   chat link previews are harmless.
 - `GET /dl/{id}/{name}`: the actual download. The name segment is not checked (the stored name is always used in
   the headers). Headers: `Content-Disposition: attachment` (always enforced), `Content-Type:
   application/octet-stream`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, and
-  `X-Accel-Redirect: /_files/<id>`. nginx adds `Content-Length` and handles `Range`.
+  `X-Accel-Redirect: /_files/<host>/files/<id>`. nginx adds `Content-Length` and handles `Range`.
   For the nerds there is also `X-Rot: <line>`, a tagline in the shape of header parameters (`ripe; mold=low; ...`).
-  A file always gets the same line. nginx drops it unless the `/_files/` location passes it on with
+  A file always gets the same line, from the built-in list or from the `headerlines` file of the host; with
+  `show_taglines` off there is no `X-Rot` header at all. nginx drops it unless the `/_files/` location passes it on with
   `add_header X-Rot $upstream_http_x_rot always;` (in [nginx.conf.example](nginx.conf.example)); without that line
   the header is just missing.
 - A file is only served if it is `ready`, not past `expires_at` and not exhausted. A file that is past its time
@@ -197,6 +203,37 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   unlinking before nginx has opened the file would break the download that just consumed the last use.
 - Config switch `download_mode = xaccel|php`. `php` streams the file from PHP; it exists for development and
   end-to-end tests with `php -S` and must not be used in production.
+
+## Appearance
+
+What a host can change about its public pages, through the API (`lr config`, `lr custom`; details and limits in
+[API.md](API.md)). Nothing here is in `config.php`, because the users of a host change it, not the operator.
+
+**Settings** are six booleans, all `true` until changed: `show_taglines`, `show_startpage`, `show_title`,
+`show_linkrot_line`, `show_curl_line`, `show_hash_line`. They are rows `setting.<name>` in the `meta` table of the host
+(`app/src/Settings.php`, `SettingsStore.php`), so there is no schema change, and are read on every page request.
+`show_taglines` covers the footer of every page and the `X-Rot` header; `show_title` the headline with the logo on
+every page; `show_startpage` the page at `/`; the three line settings the commands of the download page, which loses its
+whole "From a terminal" section when all three are off.
+
+**Custom files** are `taglines` (footer lines, one per line), `headerlines` (the `X-Rot` lines) and `css`, in
+`app_data/<host>/custom/`:
+
+- the built-in version is only served, never written: `GET` returns the built-in lines (or, for `css`, a starter file
+  with the color variables) as long as nothing was uploaded, so a release that adds taglines reaches every host that
+  did not replace them. A reset deletes the file
+- an upload is validated (UTF-8, control characters, line and byte limits; header lines must be printable ASCII because
+  they become a header value) and replaces the file atomically (temp file and rename). A refused upload changes nothing
+- the taglines and header lines of a host replace the built-in ones completely; a file picks its line by
+  `crc32(id) % count`, so it keeps its line as long as the list does not change. With `show_taglines` off neither is used
+- the stylesheet is linked after the built-in one: `<link rel="stylesheet" href="/assets/user.<hash>.css">`, the hash
+  being the first 16 hex characters of the sha256 of the content. `GET /assets/user.<hash>.css` is public and served by PHP
+  from the host's folder with `Cache-Control: public, max-age=31536000, immutable` (nginx hands names it has no file for
+  to `index.php`, see [nginx.conf.example](nginx.conf.example)). A host can only reach its own files, and only names
+  matching `user.<16 hex>.css`
+- a replaced or reset stylesheet is retired (`custom/css.json`: current hash, retired hashes with the time), not
+  deleted: pages that were loaded a moment ago still ask for it. At most 5 are kept; the cleanup removes the others
+  after 24 hours. Changes of that file are serialized with `custom/css.lock`
 
 ## Cleanup
 
@@ -228,7 +265,8 @@ Independently of the cleanup, a request that touches an expired file treats it a
 
 ## Authentication
 
-- API requests carry `Authorization: Bearer <token>`. Everything except `/file/` and `/dl/` requires it.
+- API requests carry `Authorization: Bearer <token>`. Everything under `/api/v1` requires it; the public URLs do not:
+  `/`, `/file/`, `/dl/` and the stylesheet of a host (`/assets/user.<hash>.css`).
 - Tokens are 32 random bytes, encoded as `lr_` + base64url. The server stores only `sha256(token)` and looks the
   token up by hash, so there is nothing to compare in a timing-sensitive way.
 - `last_used_at` is bumped at most once per hour.
@@ -262,8 +300,7 @@ authentication itself:
 
 ## Configuration
 
-`app_data/<host>/config.php` returns an array which is merged over the defaults (`return [];` is valid). The public URL of a host, used for share links, is not configured: it is `https://<host>` with the host from `global-config.php`. Only `localhost` and `127.x` hosts get `http://` plus the port of the request (development). A leftover `base_url` key makes the config invalid.
-
+`app_data/<host>/config.php` returns an array which is merged over the defaults (`return [];` is valid). The public URL of a host, used for share links, is not configured: it is `https://<host>` with the host from `global-config.php`. Only `localhost` and `127.x` hosts get `http://` plus the port of the request (development). A leftover `base_url` key makes the config invalid. The settings and custom files that the users of a host change through the API are not in this file, see [Appearance](#appearance).
 
 | key | default | meaning |
 | --- | --- | --- |
@@ -292,3 +329,6 @@ are rejected with `400`, not silently clamped.
 - rate limiting only counts failed authentication; guessing ids is mitigated by 90 bits of entropy and the nginx limit
 - SQLite is used in WAL mode; all statements are prepared
 - the data directory is outside of the document root
+- the custom stylesheet is same-origin CSS from the token holder of the host. The page CSP (`default-src 'none'`,
+  `style-src 'self'`) keeps it from loading anything from elsewhere, and a stylesheet cannot run script; it can change how
+  the pages of that host look, nothing else

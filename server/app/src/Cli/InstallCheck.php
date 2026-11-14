@@ -10,7 +10,7 @@ use Throwable;
 
 /**
  * The end-to-end check of `app/install.sh`: with a temporary token, ask the health endpoint, upload a small file
- * through the public base_url, open its page, download it and check the headers that only the web server can get right.
+ * through the public URL (https://<host>), open its page, download it and check the headers that only the web server can get right.
  * The token and the file are removed again, whatever happens.
  */
 final readonly class InstallCheck
@@ -119,11 +119,21 @@ final readonly class InstallCheck
         }
         $this->say('download: ok, the bytes match');
 
-        return $this->downloadHeaders($headers);
+        return $this->downloadHeaders($headers, $this->xRotExpected($auth));
+    }
+
+    /** A host that switched the taglines off (`show_taglines`) sends no X-Rot header, so there is nothing to check. */
+    /** @param array<string, string> $auth */
+    private function xRotExpected(array $auth): bool
+    {
+        [$status, , $body] = ($this->http)('GET', '/api/v1/settings', $auth, '');
+        $settings = json_decode($body, true);
+
+        return !($status === 200 && is_array($settings) && ($settings['settings']['show_taglines'] ?? true) === false);
     }
 
     /** @param array<string, string> $headers lower-case names */
-    private function downloadHeaders(array $headers): bool
+    private function downloadHeaders(array $headers, bool $xRotExpected): bool
     {
         $problems = [];
         if (!str_starts_with($headers['content-disposition'] ?? '', 'attachment')) {
@@ -132,14 +142,14 @@ final readonly class InstallCheck
         if (strtolower($headers['x-content-type-options'] ?? '') !== 'nosniff') {
             $problems[] = 'X-Content-Type-Options: nosniff is missing (add_header in the /_files/ location, docs/nginx.conf.example)';
         }
-        if (($headers['x-rot'] ?? '') === '') {
+        if ($xRotExpected && ($headers['x-rot'] ?? '') === '') {
             $problems[] = 'the X-Rot header is missing (nginx drops it unless the /_files/ location has `add_header X-Rot $upstream_http_x_rot always;`, docs/nginx.conf.example)';
         }
         foreach ($problems as $problem) {
             $this->fail($problem);
         }
         if ($problems === []) {
-            $this->say('download headers: ok, X-Rot: ' . $headers['x-rot']);
+            $this->say('download headers: ok, ' . ($xRotExpected ? 'X-Rot: ' . $headers['x-rot'] : 'no X-Rot, the taglines are switched off (show_taglines)'));
         }
 
         return $problems === [];

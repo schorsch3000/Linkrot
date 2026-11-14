@@ -48,7 +48,7 @@ final readonly class CustomController
             try {
                 $hash = $this->css->put($body === false ? '' : $body);
             } catch (InvalidCustomFile $e) {
-                return Response::error($e->status, $e->status === 413 ? 'payload_too_large' : 'invalid_request', $e->getMessage());
+                return Response::error($e->status, $e->status === 413 ? 'too_large' : 'invalid_request', $e->getMessage());
             }
 
             return Response::json(['name' => self::CSS, 'customized' => true, 'url' => $this->css->href(), 'hash' => $hash]);
@@ -61,7 +61,7 @@ final readonly class CustomController
         try {
             $lines = $this->store->put($kind, $body === false ? '' : $body);
         } catch (InvalidCustomFile $e) {
-            return Response::error($e->status, $e->status === 413 ? 'payload_too_large' : 'invalid_request', $e->getMessage());
+            return Response::error($e->status, $e->status === 413 ? 'too_large' : 'invalid_request', $e->getMessage());
         }
 
         return Response::json(['name' => $kind->value, 'customized' => true, 'lines' => $lines]);

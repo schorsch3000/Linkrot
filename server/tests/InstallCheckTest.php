@@ -90,6 +90,15 @@ final class InstallCheckTest extends AppTestCase
         self::assertSame(0, $this->files());
     }
 
+    public function testAHostWithoutTaglinesIsNotFailedForTheMissingXRot(): void
+    {
+        $this->request('PATCH', '/api/v1/settings', json: ['show_taglines' => false]);
+
+        self::assertTrue($this->check($this->nginx(forwardsXRot: false)), implode("\n", $this->lines));
+
+        self::assertContains('ok: download headers: ok, no X-Rot, the taglines are switched off (show_taglines)', $this->lines);
+    }
+
     public function testReplacesALeftoverTestToken(): void
     {
         $tokens = new TokenStore($this->app->db());

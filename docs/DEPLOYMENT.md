@@ -34,7 +34,8 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    Once the config is valid it also checks the installation end to end (`app/bin/check-install`): with a temporary token
    named `test-install-check` it asks the health endpoint, uploads a small file through `https://<host>`, opens its page,
    downloads it and checks the headers (`Content-Disposition: attachment`, `nosniff`, and `X-Rot`, which only arrives
-   if the `/_files/` location of nginx passes it on, see [nginx.conf.example](nginx.conf.example)). The token and the
+   if the `/_files/` location of nginx passes it on, see [nginx.conf.example](nginx.conf.example); a host that switched
+   its taglines off with `lr config set taglines off` sends no `X-Rot`, and the check does not ask for it). The token and the
    file are removed again, also when the check fails, and an old test token left by an interrupted run is replaced. A
    failed check makes `install.sh` exit with 1. Run it as the user php-fpm runs as, after nginx is configured. On a host
    that cannot reach its own public URL, use `install.sh --no-network-check`.
@@ -101,7 +102,9 @@ It checks the signature and the file's digest and fails for a file that was chan
 
 Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `app/install.sh` again) and leave
 `app_data/` alone. `install.sh` migrates the database schema; the server itself only checks the version and answers
-`503 schema_outdated` until `install.sh` has run. Restart php-fpm (or reload opcache)
+`503 schema_outdated` until `install.sh` has run. A new release can also need a change of the nginx block: the
+`try_files` line of the `/assets/` location (step 5 above) is required for custom stylesheets since the release that
+introduced `lr custom put css`; compare your block with [nginx.conf.example](nginx.conf.example). Restart php-fpm (or reload opcache)
 afterwards; this also resets the failed-login counters in APCu.
 
 ## CLI

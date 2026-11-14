@@ -7,7 +7,8 @@ so it works under any name.
 Conventions:
 
 - the **result** (URL, ids, JSON) goes to **stdout**; progress, hints and errors go to **stderr**, so output can be piped
-- every command that talks to the server (`up`, `ls`, `info`, `set`, `rm`, `cleanup`, `down`) first asks `GET /health`.
+- every command that talks to the server (`up`, `ls`, `info`, `set`, `rm`, `cleanup`, `down`, `config get`, `config set`,
+  `custom get`, `custom put`, `custom reset`) first asks `GET /health`.
   Warnings are printed on stderr in yellow and the command goes on; an error is printed in red and stops the command
   with exit code 1, since there is no working server. A server that has no health endpoint (404) is not an error
 - colors (`ls`, `info`, errors, progress bar) are used per stream only if it is a terminal. `NO_COLOR` (any
@@ -137,7 +138,7 @@ pages that are open right now keep their look.
 
 Prints a completion script. Subcommands and flags complete statically. For `rm`, `set`, `info` and `down` the ids are
 completed live from the server (name as description) with a 2 second timeout; the lowercase start of every id makes
-prefix completion pleasant.
+prefix completion pleasant. `config set` completes the setting names and `on`/`off`, `custom` the file names.
 
 ## Exit codes
 

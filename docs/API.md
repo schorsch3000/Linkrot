@@ -173,7 +173,7 @@ Needs a token. Always `200` with the worst level of all checks and the checks th
 
 ```json
 {"status": "warn", "checks": [
-  {"name": "database", "level": "ok",   "message": "schema version 2"},
+  {"name": "database", "level": "ok",   "message": "schema version 3"},
   {"name": "storage",  "level": "ok",   "message": "data and files directory are writable"},
   {"name": "disk",     "level": "ok",   "message": "212.4 GiB free of 458.0 GiB"},
   {"name": "cleanup",  "level": "warn", "message": "the cleanup has not run yet"}
@@ -215,7 +215,7 @@ downloads, one per line) or `css` (see below). The bodies are plain text, not JS
   skipped, spaces around a line are dropped and a repeated line counts once. The file is used instead of the built-in
   lines, which stay unused until a reset. Refused with `400 invalid_request` (the message names the lines): invalid
   UTF-8, control characters, a line longer than the limit, no usable line at all, and for `headerlines` anything but
-  printable ASCII (a header value must not contain line breaks). Refused with `413 payload_too_large`: too many bytes
+  printable ASCII (a header value must not contain line breaks). Refused with `413 too_large`: too many bytes
   or too many lines. A refused upload changes nothing.
 - `DELETE` removes the file, back to the built-in lines (`204`, also if there was nothing to remove).
 
@@ -242,10 +242,12 @@ nginx has to hand names it has no file for to `index.php`, see [nginx.conf.examp
 
 No authentication.
 
-- `GET /file/{id}/{name}` - HTML page with filename, size and a download button. A wrong `{name}` gets a `302` to
-  the canonical URL.
+- `GET /` - the about page of linkrot (an empty page if `show_startpage` is off). Never cached.
+- `GET /file/{id}/{name}` - HTML page with filename, size, a download button and, unless switched off, the commands to
+  fetch the file from a terminal. A wrong `{name}` gets a `302` to the canonical URL.
 - `GET /dl/{id}/{name}` - the download itself (`attachment`, original filename, size, `X-Accel-Redirect`, `Range`
-  supported). `{name}` is not checked.
+  supported, and an `X-Rot` header unless `show_taglines` is off). `{name}` is not checked.
+- `GET /assets/user.<hash>.css` - the custom stylesheet of the host, see [above](#getputdelete-customname---files-that-replace-the-built-in-look).
 
 Unknown, expired, exhausted or incomplete files answer `404` in the same way for all of these cases.
 

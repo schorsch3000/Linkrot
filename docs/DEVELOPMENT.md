@@ -12,7 +12,8 @@ server/
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
   htdocs/index.php   front controller
-  htdocs/assets/     page.css and page.js of the pages (a release build renames them after their content)
+  htdocs/assets/     page.css and page.js of the pages (a release build renames them after their content); the
+                         custom stylesheets of the hosts are not here but in app_data/<host>/custom/
   app_data/              local dev data (gitignored), `make run` enrolls `localhost`
   tests/
 cli/
