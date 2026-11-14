@@ -33,7 +33,7 @@ try {
         return;
     }
     $dataDir = $dataRoot . '/' . $host;
-    $app = new App(Config::load($dataDir . '/config.php'), $dataDir, $host);
+    $app = new App(Config::load($dataDir . '/config.php', Config::baseUrlFor($host, $request->headers['host'] ?? null)), $dataDir, $host);
 } catch (Throwable $e) {
     error_log('linkrot: ' . $e->getMessage());
     http_response_code(500);

@@ -49,13 +49,13 @@ out="$("$root/app/install.sh" --add-host "$host" --no-network-check 2>&1)" || { 
 [ "$(grep -c "'$host'" "$root/app_data/global-config.php")" = 1 ] || { echo "host listed twice" >&2; exit 1; }
 if "$root/app/install.sh" --add-host '../etc' --no-network-check >/dev/null 2>&1; then echo "a path as host was accepted" >&2; exit 1; fi
 
-printf "<?php return ['base_url' => 'https://lr.example'];\n" >"$hd/config.php"
+printf "<?php return [];\n" >"$hd/config.php"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 grep -q "is valid" <<<"$out" || { echo "valid config not accepted:" >&2; echo "$out" >&2; exit 1; }
 
-printf "<?php return ['base_url' => 'lr.example'];\n" >"$hd/config.php"
+printf "<?php return ['base_url' => 'https://lr.example'];\n" >"$hd/config.php"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
-grep -q "base_url must be an https URL" <<<"$out" || { echo "invalid config not reported:" >&2; echo "$out" >&2; exit 1; }
+grep -q "base_url is gone" <<<"$out" || { echo "invalid config not reported:" >&2; echo "$out" >&2; exit 1; }
 
 chmod 750 "$hd/files"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
@@ -64,9 +64,10 @@ chmod 755 "$hd/files"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 ! grep -q "not searchable" <<<"$out" || { echo "false alarm for an open files directory" >&2; exit 1; }
 
-# End to end for real: php -S serves the unpacked release, install.sh does the whole round trip through base_url.
+# End to end for real: php -S serves the unpacked release, install.sh does the whole round trip through https://<host> (loopback: http plus the port in LINKROT_AUTHORITY).
 port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-printf "<?php return ['base_url' => 'http://127.0.0.1:%s', 'download_mode' => 'php'];\n" "$port" >"$hd/config.php"
+printf "<?php return ['download_mode' => 'php'];\n" >"$hd/config.php"
+export LINKROT_AUTHORITY="127.0.0.1:$port"
 LINKROT_DATA="$root/app_data" php -d apc.enable_cli=1 -S "127.0.0.1:$port" -t "$root/htdocs" "$root/htdocs/index.php" >"$root/server.log" 2>&1 &
 server=$!
 trap 'kill "$server" 2>/dev/null || true; rm -rf "$root"' EXIT

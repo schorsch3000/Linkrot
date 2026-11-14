@@ -32,10 +32,10 @@ final readonly class Config
         public int $quota = 0,
     ) {
         if (!preg_match('~^https?://[^/\s]+(/\S*)?$~', $baseUrl)) {
-            throw new InvalidArgumentException('config: base_url must be an https URL');
+            throw new InvalidArgumentException('config: base URL must be an https URL');
         }
         if (!$this->isSecureOrLoopback($baseUrl)) {
-            throw new InvalidArgumentException('config: base_url must use https (http is only allowed for localhost)');
+            throw new InvalidArgumentException('config: base URL must use https (http is only allowed for localhost)');
         }
         if ($chunkSize < 1) {
             throw new InvalidArgumentException('config: chunk_size must be positive');
@@ -66,33 +66,50 @@ final readonly class Config
     }
 
     /**
-     * @param array<array-key, mixed> $values keys are the snake_case names documented in docs/SERVER.md
+     * The public URL of a tenant: https://<host>. Only loopback hosts (development) get plain http and, if the request
+     * came in on a port, that port, so links work on http://localhost:8080.
+     *
+     * @param string $authority Host header of the request (with port) if there is one
      */
-    public static function fromArray(array $values): self
+    public static function baseUrlFor(string $host, ?string $authority = null): string
+    {
+        $loopback = $host === 'localhost' || str_starts_with($host, '127.');
+        if (!$loopback) {
+            return 'https://' . $host;
+        }
+        $authority = strtolower(trim((string) $authority));
+
+        return 'http://' . (Tenants::normalize($authority) === $host ? $authority : $host);
+    }
+
+    /**
+     * @param array<array-key, mixed> $values keys are the snake_case names documented in docs/SERVER.md
+     * @param string $baseUrl see baseUrlFor()
+     */
+    public static function fromArray(array $values, string $baseUrl): self
     {
         $known = [
-            'base_url', 'chunk_size', 'max_file_size', 'default_rm_after', 'max_rm_after', 'default_uses',
+            'chunk_size', 'max_file_size', 'default_rm_after', 'max_rm_after', 'default_uses',
             'cleanup_interval', 'upload_timeout', 'orphan_row_timeout', 'rate_limit_attempts',
             'rate_limit_window', 'download_mode', 'quota',
         ];
+        if (array_key_exists('base_url', $values)) {
+            throw new InvalidArgumentException('config: base_url is gone, the share links are built from the host in global-config.php: remove it');
+        }
         $unknown = array_diff(array_map(strval(...), array_keys($values)), $known);
         if ($unknown !== []) {
             throw new InvalidArgumentException('config: unknown keys: ' . implode(', ', $unknown));
         }
-        if (!array_key_exists('base_url', $values)) {
-            throw new InvalidArgumentException('config: base_url is required');
-        }
-
         $chunkSize = $values['chunk_size'] ?? null;
         if (is_int($chunkSize) && ($chunkSize < self::MIN_CHUNK_SIZE || $chunkSize > self::MAX_CHUNK_SIZE)) {
             throw new InvalidArgumentException('config: chunk_size must be within 10-100 MB');
         }
 
-        $defaults = new self('http://localhost');
+        $defaults = new self($baseUrl);
         $mode = $values['download_mode'] ?? $defaults->downloadMode->value;
 
         return new self(
-            baseUrl: self::string($values, 'base_url', ''),
+            baseUrl: $baseUrl,
             chunkSize: self::int($values, 'chunk_size', $defaults->chunkSize),
             maxFileSize: self::int($values, 'max_file_size', $defaults->maxFileSize),
             defaultRmAfter: self::string($values, 'default_rm_after', $defaults->defaultRmAfter),
@@ -110,7 +127,7 @@ final readonly class Config
         );
     }
 
-    public static function load(string $file): self
+    public static function load(string $file, string $baseUrl): self
     {
         if (!is_file($file)) {
             throw new InvalidArgumentException("config: file not found: $file");
@@ -120,7 +137,7 @@ final readonly class Config
             throw new InvalidArgumentException("config: $file must return an array");
         }
 
-        return self::fromArray($values);
+        return self::fromArray($values, $baseUrl);
     }
 
     /**

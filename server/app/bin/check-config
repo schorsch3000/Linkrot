@@ -9,18 +9,19 @@ require __DIR__ . '/../vendor/autoload.php';
 
 /*
  * Loads the configuration the way the server does and reports the first problem.
- * usage: check-config [path/to/config.php]   (default: config.php of the tenant $LINKROT_HOST in $LINKROT_DATA or ../../app_data)
+ * usage: check-config [path/to/config.php]  (an explicit file is checked for host localhost)   (default: config.php of the tenant $LINKROT_HOST in $LINKROT_DATA or ../../app_data)
  */
 if (isset($argv[1])) {
     $file = $argv[1];
 } else {
     require __DIR__ . '/_tenant.php';
 
-    $file = linkrotTenant('check-config')[2] . '/config.php';
+    [, $host, $dir] = linkrotTenant('check-config');
+    $file = $dir . '/config.php';
 }
 
 try {
-    Config::load($file);
+    Config::load($file, Config::baseUrlFor($host ?? 'localhost'));
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . "\n");
     exit(1);

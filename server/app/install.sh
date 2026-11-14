@@ -3,7 +3,7 @@
 # every upgrade.
 # usage: install.sh [--add-host <hostname>]... [--no-network-check]
 #   --add-host          enroll a host (a tenant): lists it in app_data/global-config.php and creates its data folder
-#   --no-network-check  skip the round trip through base_url (offline installs, a host that cannot reach itself)
+#   --no-network-check  skip the round trip through https://<host> (offline installs, a host that cannot reach itself)
 set -euo pipefail
 
 network_check=1
@@ -107,9 +107,7 @@ check_host() {
  Create $config, readable by the user php-fpm runs as:
 
      <?php
-     return [
-         'base_url' => 'https://$host',   // public URL, used for the share links
-     ];
+     return [];   // all defaults; the share links are https://$host
 
  The folder $dir/files must exist and be writable by that user too.
  All options: docs/SERVER.md (Configuration)
@@ -144,14 +142,14 @@ MSG
 	fi
 
 	# End to end: a temporary token (test-install-check, removed again) does health, upload, page, download and checks
-	# the headers through the public base_url. A failure makes install.sh fail.
+	# the headers through the public URL. A failure makes install.sh fail.
 	if ! LINKROT_HOST="$host" bin/check-install; then
 		cat >&2 <<MSG
 
 ================================================================================
  FAILED: the end-to-end check for $host did not pass, see the lines above.
  The installation itself is done. Fix the cause and run install.sh again; if this host cannot reach its own
- base_url (hairpin NAT, no DNS), run install.sh --no-network-check.
+ public URL (hairpin NAT, no DNS), run install.sh --no-network-check.
 ================================================================================
 
 MSG

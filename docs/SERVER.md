@@ -256,11 +256,11 @@ authentication itself:
 
 ## Configuration
 
-`app_data/<host>/config.php` returns an array which is merged over the defaults:
+`app_data/<host>/config.php` returns an array which is merged over the defaults (`return [];` is valid). The public URL of a host, used for share links, is not configured: it is `https://<host>` with the host from `global-config.php`. Only `localhost` and `127.x` hosts get `http://` plus the port of the request (development). A leftover `base_url` key makes the config invalid.
+
 
 | key | default | meaning |
 | --- | --- | --- |
-| `base_url` | (required) | public URL used to build share links. Must be `https://`; plain `http://` is only accepted for `localhost` and loopback addresses (development). Anything else makes the server answer "misconfigured" and `check-config` fail |
 | `chunk_size` | 32 MiB | must be within 10-100 MB |
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
 | `quota` | 0 (unlimited) | most data this host may hold at once, as a size: `100`, `100b`, `100kb`, `100mb`, `100gb`, `1tb` (decimal units, case does not matter) or an integer (bytes). Counts every live file and running upload (a sized upload with its full size from the start, a streaming one with what it has received); expired files the cleanup has not removed yet do not count. Uploads over it are refused with `507 quota_exceeded`. Concurrent creates can overshoot it by what they reserve in the same moment |

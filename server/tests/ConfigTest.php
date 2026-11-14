@@ -13,7 +13,7 @@ final class ConfigTest extends TestCase
 {
     public function testDefaults(): void
     {
-        $config = Config::fromArray(['base_url' => 'https://linkrot.example']);
+        $config = Config::fromArray([], 'https://linkrot.example');
 
         self::assertSame(32 * 1024 * 1024, $config->chunkSize);
         self::assertSame('1w', $config->defaultRmAfter);
@@ -25,50 +25,44 @@ final class ConfigTest extends TestCase
     public function testOverrides(): void
     {
         $config = Config::fromArray([
-            'base_url' => 'http://localhost:8080',
             'download_mode' => 'php',
             'default_uses' => 3,
             'max_rm_after' => '1000y',
-        ]);
+        ], 'http://localhost:8080');
 
         self::assertSame(DownloadMode::Php, $config->downloadMode);
         self::assertSame(3, $config->defaultUses);
         self::assertSame('1000y', $config->maxRmAfter);
     }
 
-    /** @return iterable<string, array{string}> */
-    public static function allowed(): iterable
+    /** @return iterable<string, array{string, ?string, string}> host, Host header, expected base URL */
+    public static function baseUrls(): iterable
     {
-        yield 'https' => ['https://linkrot.example'];
-        yield 'https with port and path' => ['https://linkrot.example:8443/lr'];
-        yield 'localhost' => ['http://localhost'];
-        yield 'localhost with port' => ['http://localhost:8080'];
-        yield 'loopback' => ['http://127.0.0.1:8080'];
-        yield 'loopback range' => ['http://127.1.2.3'];
-        yield 'ipv6 loopback' => ['http://[::1]:8080'];
+        yield 'https' => ['linkrot.example', null, 'https://linkrot.example'];
+        yield 'a port of the request is not used' => ['linkrot.example', 'linkrot.example:8443', 'https://linkrot.example'];
+        yield 'localhost' => ['localhost', null, 'http://localhost'];
+        yield 'localhost with port' => ['localhost', 'localhost:8080', 'http://localhost:8080'];
+        yield 'loopback with port' => ['127.0.0.1', '127.0.0.1:8080', 'http://127.0.0.1:8080'];
+        yield 'header of another host is not used' => ['localhost', 'evil.example:8080', 'http://localhost'];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('allowed')]
-    public function testAllowedBaseUrls(string $url): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('baseUrls')]
+    public function testBaseUrlIsBuiltFromTheHost(string $host, ?string $authority, string $expected): void
     {
-        self::assertSame($url, Config::fromArray(['base_url' => $url])->baseUrl);
+        self::assertSame($expected, Config::baseUrlFor($host, $authority));
+        self::assertSame($expected, Config::fromArray([], Config::baseUrlFor($host, $authority))->baseUrl);
     }
 
     /** @return iterable<string, array{array<string, mixed>}> */
     public static function invalid(): iterable
     {
-        yield 'missing base_url' => [[]];
-        yield 'bad base_url' => [['base_url' => 'ftp://x']];
-        yield 'plain http' => [['base_url' => 'http://linkrot.example']];
-        yield 'plain http on a lan address' => [['base_url' => 'http://192.168.1.10:8080']];
-        yield 'plain http, localhost only in the userinfo' => [['base_url' => 'http://localhost@evil.example']];
-        yield 'plain http, localhost as a prefix' => [['base_url' => 'http://localhost.evil.example']];
-        yield 'unknown key' => [['base_url' => 'https://x', 'nope' => 1]];
-        yield 'chunk too small' => [['base_url' => 'https://x', 'chunk_size' => 1024]];
-        yield 'chunk too big' => [['base_url' => 'https://x', 'chunk_size' => 200_000_000]];
-        yield 'bad mode' => [['base_url' => 'https://x', 'download_mode' => 'sendfile']];
-        yield 'uses zero' => [['base_url' => 'https://x', 'default_uses' => 0]];
-        yield 'wrong type' => [['base_url' => 'https://x', 'chunk_size' => '32']];
+        yield 'base_url is gone' => [['base_url' => 'https://x']];
+        yield 'unknown key' => [['nope' => 1]];
+        yield 'chunk too small' => [['chunk_size' => 1024]];
+        yield 'chunk too big' => [['chunk_size' => 200_000_000]];
+        yield 'bad mode' => [['download_mode' => 'sendfile']];
+        yield 'uses zero' => [['default_uses' => 0]];
+        yield 'wrong type' => [['chunk_size' => '32']];
     }
 
     /** @param array<string, mixed> $values */
@@ -76,15 +70,15 @@ final class ConfigTest extends TestCase
     public function testInvalid(array $values): void
     {
         $this->expectException(InvalidArgumentException::class);
-        Config::fromArray($values);
+        Config::fromArray($values, 'https://x');
     }
 
     public function testLoadReadsAPhpFile(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'linkrot-config-') ?: self::fail('tempnam');
-        file_put_contents($file, "<?php return ['base_url' => 'https://lr.example', 'default_uses' => 2];\n");
+        file_put_contents($file, "<?php return ['default_uses' => 2];\n");
         try {
-            $config = Config::load($file);
+            $config = Config::load($file, 'https://lr.example');
 
             self::assertSame('https://lr.example', $config->baseUrl);
             self::assertSame(2, $config->defaultUses);
@@ -96,7 +90,7 @@ final class ConfigTest extends TestCase
     public function testLoadReportsAMissingFileAndAFileThatReturnsNoArray(): void
     {
         try {
-            Config::load('/nonexistent/linkrot/config.php');
+            Config::load('/nonexistent/linkrot/config.php', 'https://lr.example');
             self::fail('a missing file must be reported');
         } catch (InvalidArgumentException $e) {
             self::assertStringContainsString('file not found', $e->getMessage());
@@ -107,7 +101,7 @@ final class ConfigTest extends TestCase
         try {
             $this->expectException(InvalidArgumentException::class);
             $this->expectExceptionMessage('must return an array');
-            Config::load($file);
+            Config::load($file, 'https://lr.example');
         } finally {
             unlink($file);
         }
@@ -116,9 +110,9 @@ final class ConfigTest extends TestCase
     /** @return iterable<string, array{array<string, mixed>}> */
     public static function outOfRange(): iterable
     {
-        yield 'negative max file size' => [['base_url' => 'https://x', 'max_file_size' => -1]];
-        yield 'rate limit attempts zero' => [['base_url' => 'https://x', 'rate_limit_attempts' => 0]];
-        yield 'rate limit window zero' => [['base_url' => 'https://x', 'rate_limit_window' => 0]];
+        yield 'negative max file size' => [['max_file_size' => -1]];
+        yield 'rate limit attempts zero' => [['rate_limit_attempts' => 0]];
+        yield 'rate limit window zero' => [['rate_limit_window' => 0]];
     }
 
     /** @param array<string, mixed> $values */
@@ -126,6 +120,6 @@ final class ConfigTest extends TestCase
     public function testOutOfRangeValues(array $values): void
     {
         $this->expectException(InvalidArgumentException::class);
-        Config::fromArray($values);
+        Config::fromArray($values, 'https://x');
     }
 }

@@ -59,12 +59,12 @@ final class QuotaTest extends AppTestCase
 
     public function testConfig(): void
     {
-        self::assertSame(0, Config::fromArray(['base_url' => 'https://x.example'])->quota);
-        self::assertSame(100_000_000_000, Config::fromArray(['base_url' => 'https://x.example', 'quota' => '100gb'])->quota);
-        self::assertSame(5000, Config::fromArray(['base_url' => 'https://x.example', 'quota' => 5000])->quota);
+        self::assertSame(0, Config::fromArray([], 'https://x.example')->quota);
+        self::assertSame(100_000_000_000, Config::fromArray(['quota' => '100gb'], 'https://x.example')->quota);
+        self::assertSame(5000, Config::fromArray(['quota' => 5000], 'https://x.example')->quota);
         foreach (['12 parsecs', -1, 1.5, true] as $bad) {
             try {
-                Config::fromArray(['base_url' => 'https://x.example', 'quota' => $bad]);
+                Config::fromArray(['quota' => $bad], 'https://x.example');
                 self::fail('quota ' . var_export($bad, true) . ' was accepted');
             } catch (InvalidArgumentException) {
                 $this->addToAssertionCount(1);

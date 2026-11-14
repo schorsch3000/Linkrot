@@ -131,7 +131,7 @@ func newStack(t *testing.T, withNginx bool) *stack {
 	if withNginx {
 		mode = "xaccel"
 	}
-	phpConfig := fmt.Sprintf("<?php return ['base_url' => %q, 'download_mode' => %q];\n", baseURL, mode)
+	phpConfig := fmt.Sprintf("<?php return ['download_mode' => %q];\n", mode)
 	if err := os.WriteFile(filepath.Join(data, "config.php"), []byte(phpConfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ http {
   server {
     listen 127.0.0.1:%[2]d;
     client_max_body_size 40m;
-    location / { proxy_pass http://127.0.0.1:%[3]d; proxy_request_buffering on; }
+    location / { proxy_set_header Host $http_host; proxy_pass http://127.0.0.1:%[3]d; proxy_request_buffering on; }
     location /_files/ {
       internal;
       add_header X-Content-Type-Options nosniff always;
