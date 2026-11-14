@@ -128,6 +128,7 @@ func execEditor(argv []string, in io.Reader, out, errw io.Writer) error {
 type console struct {
 	mu      sync.Mutex
 	w       io.Writer
+	quiet   bool // -q: info() prints nothing; what went wrong is still printed
 	holding bool
 	held    []string
 }
@@ -141,6 +142,13 @@ func (c *console) printf(format string, args ...any) {
 		return
 	}
 	_, _ = fmt.Fprintln(c.w, line)
+}
+
+// info is for what is going on; printf is for what went wrong, and always prints.
+func (c *console) info(format string, args ...any) {
+	if !c.quiet {
+		c.printf(format, args...)
+	}
 }
 
 func (c *console) hold() {
@@ -215,7 +223,7 @@ func (u *uploader) sync(ctx context.Context) bool {
 		return false
 	}
 	u.sent = hashOf(content)
-	u.out.printf("%s uploaded: %s", u.a.now().Format("15:04:05"), result)
+	u.out.info("%s uploaded: %s", u.a.now().Format("15:04:05"), result)
 	return true
 }
 
@@ -301,9 +309,9 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 		return err
 	}
 
-	out := &console{w: a.Err}
+	out := &console{w: a.Err, quiet: a.Quiet}
 	if note != "" {
-		out.printf("%s: %s", a.Name, note)
+		out.info("%s: %s", a.Name, note)
 	}
 	u := &uploader{a: a, c: c, spec: spec, path: path, out: out, sent: hashOf(content)}
 
@@ -339,7 +347,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 
 	argv := append(append([]string{}, editor...), path)
 	for {
-		out.printf("%s: editing %s in %s (%s)", a.Name, spec.label, strings.Join(editor, " "), path)
+		out.info("%s: editing %s in %s (%s)", a.Name, spec.label, strings.Join(editor, " "), path)
 		out.hold()
 		runErr := runEditor(argv, a.stdin(), a.Out, a.Err)
 		out.release()
@@ -355,7 +363,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 		if once {
 			content, _ := os.ReadFile(path) //nolint:gosec // our own temp file
 			if hashOf(content) == u.sent {
-				out.printf("%s: no changes", a.Name)
+				out.info("%s: no changes", a.Name)
 				return nil
 			}
 			if u.sync(ctx) {
@@ -363,7 +371,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 			}
 			out.printf("%s: press Enter to open the editor again, Ctrl+C to give up (the file is kept)", a.Name)
 		} else {
-			out.printf("%s: watching %s; every save is uploaded. Press Enter to open the editor again, Ctrl+C to stop.", a.Name, spec.label)
+			out.info("%s: watching %s; every save is uploaded. Press Enter to open the editor again, Ctrl+C to stop.", a.Name, spec.label)
 		}
 
 		switch waitForEnterOrStop(a.stdin(), sigs) {
@@ -371,7 +379,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 			continue
 		default:
 			stopWatching()
-			out.printf("") // the terminal shows ^C on the line
+			out.info("") // the terminal shows ^C on the line
 			if once {
 				keep = true
 				out.printf("%s: gave up; your file is kept at %s", a.Name, path)
@@ -385,7 +393,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 				out.printf("%s: stopped, but the last version was not uploaded; your file is kept at %s", a.Name, path)
 				return errors.New("the last version was not uploaded")
 			}
-			out.printf("%s: stopped, nothing left to upload", a.Name)
+			out.info("%s: stopped, nothing left to upload", a.Name)
 			return nil
 		}
 	}

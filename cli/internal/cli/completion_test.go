@@ -75,10 +75,10 @@ func TestConfigCompletesItsFlags(t *testing.T) {
 	e := newEnv(t)
 
 	got := flagNamesOf(e.completions("config", ""))
-	if strings.Join(got, " ") != "get set --server --token" {
+	if strings.Join(got, " ") != "get set --quiet --server --token" {
 		t.Fatalf("config: %v", got)
 	}
-	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--token" {
+	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--quiet --token" {
 		t.Fatalf("flags that are already given are not offered again: %v", got)
 	}
 	if got := flagNamesOf(e.completions("config", "--t")); strings.Join(got, " ") != "--token" {
@@ -101,7 +101,7 @@ func TestFlagsAreOfferedWhereNoArgumentsAreLeft(t *testing.T) {
 			t.Errorf("%s: no flags offered", name)
 		}
 	}
-	if got := strings.Join(flagNamesOf(e.completions("set", id, "")), " "); got != "--mv --rm-after --uses --json" && got != "--json --mv --rm-after --uses" {
+	if got := strings.Join(flagNamesOf(e.completions("set", id, "")), " "); got != "--mv --quiet --rm-after --uses --json" && got != "--json --mv --quiet --rm-after --uses" {
 		t.Errorf("set flags: %q", got)
 	}
 	// the file to upload and the download target stay with the shell's file completion

@@ -41,19 +41,22 @@ func (a *App) downCommand() *cobra.Command {
 						bar.Finish()
 					}
 				}
-				path, err := download.Download(ctx, c, id, target, download.Options{
-					OnProgress: func(done, total int64) {
+				opts := download.Options{
+					Sleep: a.Sleep,
+				}
+				if !a.Quiet {
+					opts.OnProgress = func(done, total int64) {
 						if bar == nil {
 							bar = progress.New(a.Err, "downloading", total)
 						}
 						bar.Set(done)
-					},
-					OnRetry: func(err error, wait time.Duration) {
+					}
+					opts.OnRetry = func(err error, wait time.Duration) {
 						finish()
 						_, _ = fmt.Fprintf(a.Err, "%s %v; retrying in %s\n", a.errPaint().Paint(color.Yellow, a.Name+":"), err, wait)
-					},
-					Sleep: a.Sleep,
-				})
+					}
+				}
+				path, err := download.Download(ctx, c, id, target, opts)
 				finish()
 				if errors.Is(err, context.Canceled) {
 					return errors.New("interrupted; run the same command again to resume")

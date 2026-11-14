@@ -81,7 +81,7 @@ func (a *App) lsCommand() *cobra.Command {
 				if err := writeTable(a.Out, pt, rows); err != nil {
 					return err
 				}
-				if quota != nil {
+				if quota != nil && !a.Quiet {
 					text, style := quotaText(*quota)
 					_, err = fmt.Fprintln(a.Out, pt.Paint(style, text))
 				}
@@ -209,8 +209,8 @@ func (a *App) setCommand() *cobra.Command {
 				if asJSON {
 					return a.printJSON(f)
 				}
-				if f.URL == "" {
-					return nil // still uploading, there is no URL yet
+				if f.URL == "" || a.Quiet {
+					return nil // still uploading, there is no URL yet; or nothing but errors was asked for
 				}
 				_, err = fmt.Fprintln(a.Out, f.URL)
 				return err
@@ -258,6 +258,9 @@ func (a *App) cleanupCommand() *cobra.Command {
 				r, err := c.Cleanup(ctx)
 				if err != nil {
 					return err
+				}
+				if a.Quiet {
+					return nil
 				}
 				if !r.Ran {
 					_, err = fmt.Fprintln(a.Out, "another cleanup is running, nothing done")

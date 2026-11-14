@@ -155,6 +155,9 @@ func (a *App) writeOrPrint(out string, content []byte, what string) error {
 	if err := os.WriteFile(out, content, 0o600); err != nil {
 		return err
 	}
+	if a.Quiet {
+		return nil
+	}
 	_, err := fmt.Fprintf(a.Out, "%s: wrote %s\n", what, out)
 	return err
 }
@@ -201,6 +204,9 @@ func (a *App) pagePut() *cobra.Command {
 				p, err := c.PutPage(ctx, slug, content)
 				if err != nil {
 					return err
+				}
+				if a.Quiet {
+					return nil
 				}
 				state := "published"
 				if !p.Published {

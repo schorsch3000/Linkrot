@@ -28,6 +28,9 @@ func (a *App) preflight(ctx context.Context, c *api.Client) error {
 		line := fmt.Sprintf("%s: server %s: %s", a.Name, check.Name, check.Message)
 		switch check.Level {
 		case api.LevelWarn:
+			if a.Quiet {
+				continue
+			}
 			_, _ = fmt.Fprintln(a.Err, p.Paint(color.Yellow, a.Name+": warning: server "+check.Name+": "+check.Message))
 		case api.LevelError:
 			failed = true

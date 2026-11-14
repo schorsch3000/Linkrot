@@ -12,6 +12,14 @@ Conventions:
   `GET /health`.
   Warnings are printed on stderr in yellow and the command goes on; an error is printed in red and stops the command
   with exit code 1, since there is no working server. A server that has no health endpoint (404) is not an error
+- **`-q`, `--quiet`** (every command, before or after the command name) keeps only errors and the result a command exists
+  to produce: no progress bar, no retry notices, no server warnings, no confirmations, no hints.
+  `up -q` prints just the URL, and nothing at all with `--copy` (the URL is on the clipboard); `down -q` just the path.
+  `ls`, `info`, `config`, `config get`, `custom get`, `page ls`, `page get` and `page template` still print what they were asked for
+  (`ls` without the quota line). `set`, `rm`, `cleanup`, `config set`, `custom put|reset`, `page put|rm` and the `-o` of the `get`s
+  print nothing. `--json` output is printed, because it was asked for. Errors always are, including the message of a
+  duplicate upload (exit code 3, URL on stdout) and the notes of `edit` about an upload that failed; the prompts and
+  status lines of `edit` are not. Health problems that stop a command are errors; health warnings are not shown
 - colors (`ls`, `info`, errors, progress bar) are used per stream only if it is a terminal. `NO_COLOR` (any
   non-empty value) or `TERM=dumb` turns them off, `CLICOLOR_FORCE=1` turns them on even when piped. JSON output and
   bare URLs are never colored

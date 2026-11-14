@@ -101,7 +101,7 @@ func (a *App) settingsCommands() []*cobra.Command {
 			}
 			return a.withClient(cmd, func(ctx context.Context, c *api.Client) error {
 				settings, err := c.UpdateSettings(ctx, changes)
-				if err != nil {
+				if err != nil || a.Quiet {
 					return err
 				}
 				return a.printSettings(settings)

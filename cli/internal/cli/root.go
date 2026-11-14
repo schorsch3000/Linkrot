@@ -47,6 +47,10 @@ type App struct {
 	EditPoll    time.Duration
 	EditSignals <-chan os.Signal
 
+	// Quiet (-q): no progress, no confirmations, no hints and no warnings; only errors and the result a command exists to
+	// produce (the URL of `up`, the path of `down`, what `ls`, `info` and the `get`s print).
+	Quiet bool
+
 	uploading bool
 }
 
@@ -124,6 +128,7 @@ func (a *App) NewRoot() *cobra.Command {
 		Args:          cobra.ArbitraryArgs,
 		RunE:          func(cmd *cobra.Command, args []string) error { return noArgs(cmd, args) },
 	}
+	root.PersistentFlags().BoolVarP(&a.Quiet, "quiet", "q", false, "print nothing but errors and the result: no progress, no confirmations, no warnings")
 	root.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	root.SetOut(a.Out)
 	root.SetErr(a.Err)

@@ -74,6 +74,9 @@ func (a *App) customGet() *cobra.Command {
 				if err := os.WriteFile(out, content, 0o600); err != nil {
 					return err
 				}
+				if a.Quiet {
+					return nil
+				}
 				what := "the built-in version"
 				if customized {
 					what = "your file"
@@ -120,6 +123,9 @@ func (a *App) customPut() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if a.Quiet {
+					return nil
+				}
 				if res.URL != "" {
 					_, err = fmt.Fprintf(a.Out, "%s: in use as %s\n", name, res.URL)
 				} else {
@@ -144,6 +150,9 @@ func (a *App) customReset() *cobra.Command {
 			return a.withClient(cmd, func(ctx context.Context, c *api.Client) error {
 				if err := c.ResetCustom(ctx, name); err != nil {
 					return err
+				}
+				if a.Quiet {
+					return nil
 				}
 				_, err := fmt.Fprintf(a.Out, "%s: back to the built-in version\n", name)
 				return err

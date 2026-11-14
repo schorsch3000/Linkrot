@@ -102,22 +102,24 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 			bar.Finish()
 		}
 	}
-	opts.OnHash = func(done, total int64) {
-		if bar == nil {
-			bar = progress.New(a.Err, "hashing  ", total)
+	if !a.Quiet {
+		opts.OnHash = func(done, total int64) {
+			if bar == nil {
+				bar = progress.New(a.Err, "hashing  ", total)
+			}
+			bar.Set(done)
 		}
-		bar.Set(done)
-	}
-	opts.OnProgress = func(done, total int64) {
-		if bar == nil || !a.uploading {
+		opts.OnProgress = func(done, total int64) {
+			if bar == nil || !a.uploading {
+				finish()
+				bar, a.uploading = progress.New(a.Err, "uploading", total), true
+			}
+			bar.Set(done)
+		}
+		opts.OnRetry = func(err error, wait time.Duration) {
 			finish()
-			bar, a.uploading = progress.New(a.Err, "uploading", total), true
+			_, _ = fmt.Fprintf(a.Err, "%s %v; retrying in %s\n", a.errPaint().Paint(color.Yellow, a.Name+":"), err, wait)
 		}
-		bar.Set(done)
-	}
-	opts.OnRetry = func(err error, wait time.Duration) {
-		finish()
-		_, _ = fmt.Fprintf(a.Err, "%s %v; retrying in %s\n", a.errPaint().Paint(color.Yellow, a.Name+":"), err, wait)
 	}
 	opts.Sleep = a.Sleep
 
@@ -127,7 +129,7 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 	var dup *upload.DuplicateError
 	switch {
 	case errors.As(err, &dup):
-		if perr := a.printResult(dup.URL, dup.ID, true, nil, asJSON); perr != nil {
+		if perr := a.printResult(dup.URL, dup.ID, true, nil, asJSON, doCopy); perr != nil {
 			return perr
 		}
 		a.copyURL(doCopy, copySel, dup.URL)
@@ -137,15 +139,18 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 	case err != nil:
 		return err
 	}
-	if err := a.printResult(file.URL, file.ID, false, file, asJSON); err != nil {
+	if err := a.printResult(file.URL, file.ID, false, file, asJSON, doCopy); err != nil {
 		return err
 	}
 	a.copyURL(doCopy, copySel, file.URL)
 	return nil
 }
 
-func (a *App) printResult(url, id string, duplicate bool, file *api.File, asJSON bool) error {
+func (a *App) printResult(url, id string, duplicate bool, file *api.File, asJSON, copied bool) error {
 	if !asJSON {
+		if a.Quiet && copied {
+			return nil // the URL is on the clipboard, that was the point
+		}
 		_, err := fmt.Fprintln(a.Out, url)
 		return err
 	}

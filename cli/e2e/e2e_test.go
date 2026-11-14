@@ -463,6 +463,15 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("footer link after rm: %s", body)
 	}
 
+	// -q: confirmations are gone, the work is done
+	if out := s.must(t, "-q", "page", "put", pageFile); out != "" {
+		t.Fatalf("-q page put printed %q", out)
+	}
+	if out := s.must(t, "-q", "page", "ls"); !strings.Contains(out, "imprint") {
+		t.Fatalf("-q page ls lost its result: %q", out)
+	}
+	s.must(t, "-q", "page", "rm", "imprint")
+
 	// a page that replaces the start page: shown at /, not in the footer; gone again after the rm
 	welcome := filepath.Join(t.TempDir(), "welcome.md")
 	if err := os.WriteFile(welcome, []byte("---\ntitle: Welcome\nreplaces_startpage: true\n---\nOur own start page.\n"), 0o600); err != nil {
