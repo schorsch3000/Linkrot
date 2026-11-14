@@ -72,6 +72,75 @@ final class CleanupTest extends AppTestCase
         self::assertFileExists($this->path($fresh));
     }
 
+    private function staleUpload(string $sha = 'a'): string
+    {
+        $id = $this->call('POST', '/api/v1/files', ['name' => 'a', 'size' => 5, 'sha256' => str_repeat($sha, 64)])[1]['id'];
+        self::assertIsString($id);
+        $this->now += 86400 + 1;
+
+        return $id;
+    }
+
+    public function testAStaleUploadThatAChunkIsWritingIsLeftAloneUntilTheNextRun(): void
+    {
+        $id = $this->staleUpload();
+        $writer = fopen($this->path($id), 'r+b') ?: self::fail('open');
+        self::assertTrue(flock($writer, LOCK_EX | LOCK_NB), 'the test plays the chunk that holds the lock');
+
+        $result = $this->cleanup();
+
+        self::assertSame(0, $result['rows_deleted']);
+        self::assertSame(1, $this->rows());
+        self::assertFileExists($this->path($id), 'the file is not unlinked under a running writer');
+
+        flock($writer, LOCK_UN);
+        fclose($writer);
+        $result = $this->cleanup();
+
+        self::assertSame(1, $result['rows_deleted']);
+        self::assertSame(1, $result['files_deleted']);
+        self::assertSame(0, $this->rows());
+        self::assertFileDoesNotExist($this->path($id));
+    }
+
+    public function testOnlyTheLockedUploadIsSkipped(): void
+    {
+        $locked = $this->staleUpload('a');
+        $free = $this->call('POST', '/api/v1/files', ['name' => 'b', 'size' => 5, 'sha256' => str_repeat('b', 64)])[1]['id'];
+        self::assertIsString($free);
+        Database::query($this->app->db(), 'UPDATE files SET updated_at = updated_at - 100000 WHERE id = ' . $this->app->db()->quote($free));
+        $writer = fopen($this->path($locked), 'r+b') ?: self::fail('open');
+        flock($writer, LOCK_EX | LOCK_NB);
+
+        $result = $this->cleanup();
+
+        self::assertSame(1, $result['rows_deleted']);
+        self::assertFileExists($this->path($locked));
+        self::assertFileDoesNotExist($this->path($free));
+        flock($writer, LOCK_UN);
+        fclose($writer);
+    }
+
+    public function testAResumedUploadIsNotStaleAnyMoreAndSurvivesTheCleanup(): void
+    {
+        $id = $this->staleUpload();
+        [$status, $body] = $this->call('POST', '/api/v1/files', ['name' => 'a', 'size' => 5, 'sha256' => str_repeat('a', 64)]);
+        self::assertSame(200, $status);
+        self::assertSame($id, $body['id']);
+
+        self::assertSame(0, $this->cleanup()['rows_deleted']);
+        self::assertFileExists($this->path($id));
+    }
+
+    public function testAStaleUploadWithoutADataFileIsStillRemoved(): void
+    {
+        $id = $this->staleUpload();
+        unlink($this->path($id));
+
+        self::assertSame(1, $this->cleanup()['rows_deleted']);
+        self::assertSame(0, $this->rows());
+    }
+
     public function testRemovesRowsWithoutDataFileAfterTimeout(): void
     {
         $id = $this->upload('one');

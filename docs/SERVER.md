@@ -281,8 +281,15 @@ Cleanup does three steps in this order:
 
 1. **Database first, one quick transaction.** Delete rows that are
    - `ready` and past `expires_at`, or with `uses_left = 0`
-   - `uploading` with `updated_at` older than `upload_timeout` (default 1d)
    - without a data file and older than `orphan_row_timeout` (default 1h)
+
+   Then, one by one, the **stale uploads**: `uploading` with `updated_at` older than `upload_timeout` (default 1d). A chunk
+   or seal that is writing holds the `flock` of the data file, and removing the file under it would let it write into
+   nothing, so the cleanup takes that lock first (`LOCK_NB`): a locked upload is left for the next run. With the lock held
+   the row is checked again, because a resume (a create request for the same file refreshes `updated_at`) may have touched
+   it since it was listed, and then row and file are removed together. A resume or a chunk that still loses the race finds
+   its `UPDATE` changing no row: a resume starts a new upload (`201`), a chunk gets `404`, neither claims success for an
+   upload that is gone.
 2. **Then files.** Delete every file in `app_data/<host>/files/` that is unknown to the database. Files younger than a short
    grace period are skipped so an upload that is just being created is never touched. Data files of the rows removed
    in step 1 are removed as part of this.

@@ -95,14 +95,15 @@ final readonly class Cleanup
         foreach ($ids as $id) {
             $this->tally($this->unlink($id), $filesDeleted, $failed);
         }
+        $rows = count($ids) + $this->deleteStaleUploads($now, Duration::parse($this->config->uploadTimeout), $filesDeleted, $failed);
         $this->deleteUnknownFiles($now, $orphanTimeout, $filesDeleted, $failed);
         [$cssRemoved, $cssFailed] = $this->css?->removeExpired() ?? [0, 0];
         $filesDeleted += $cssRemoved;
         $failed += $cssFailed;
 
-        error_log(sprintf('linkrot cleanup: %d rows, %d files removed, %d failed', count($ids), $filesDeleted, $failed));
+        error_log(sprintf('linkrot cleanup: %d rows, %d files removed, %d failed', $rows, $filesDeleted, $failed));
 
-        return new CleanupResult(count($ids), $filesDeleted, $failed);
+        return new CleanupResult($rows, $filesDeleted, $failed);
     }
 
     /**
@@ -123,10 +124,9 @@ final readonly class Cleanup
         $this->pdo->exec('BEGIN IMMEDIATE');
         try {
             $select = $this->pdo->prepare(
-                "SELECT id FROM files WHERE (status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :now) OR uses_left = 0))
-                    OR (status = 'uploading' AND updated_at < :stale)",
+                "SELECT id FROM files WHERE status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :now) OR uses_left = 0)",
             );
-            $select->execute(['now' => $now, 'stale' => $now - Duration::parse($this->config->uploadTimeout)]);
+            $select->execute(['now' => $now]);
             $ids = array_values(array_unique([...array_map(strval(...), $select->fetchAll(PDO::FETCH_COLUMN)), ...$orphans]));
             $delete = $this->pdo->prepare('DELETE FROM files WHERE id = ?');
             foreach ($ids as $id) {
@@ -139,6 +139,46 @@ final readonly class Cleanup
         }
 
         return $ids;
+    }
+
+    /**
+     * Uploads without activity for `upload_timeout`, one by one: a chunk (or seal) that is writing right now holds the
+     * `flock` of the data file, and unlinking the file under it would let it write into nothing and report success. So the
+     * lock is taken first, a locked upload is left for the next run, and with the lock held the row is checked again (a
+     * resume may have refreshed it since it was listed) and deleted together with its file.
+     *
+     * @return int rows deleted
+     */
+    private function deleteStaleUploads(int $now, int $timeout, int &$deleted, int &$failed): int
+    {
+        $stale = $this->pdo->prepare("SELECT id FROM files WHERE status = 'uploading' AND updated_at < ?");
+        $stale->execute([$now - $timeout]);
+        $rows = 0;
+        foreach ($stale->fetchAll(PDO::FETCH_COLUMN) as $id) {
+            if (!is_string($id)) {
+                continue;
+            }
+            $path = $this->filesDir . '/' . $id;
+            $handle = @fopen($path, 'r+b'); // false: there is no data file, so nothing can be writing
+            try {
+                if ($handle !== false && !flock($handle, LOCK_EX | LOCK_NB)) {
+                    continue;
+                }
+                $delete = $this->pdo->prepare("DELETE FROM files WHERE id = ? AND status = 'uploading' AND updated_at < ?");
+                $delete->execute([$id, $now - $timeout]);
+                if ($delete->rowCount() === 1) {
+                    ++$rows;
+                    $this->tally($this->unlink($id), $deleted, $failed);
+                }
+            } finally {
+                if ($handle !== false) {
+                    flock($handle, LOCK_UN);
+                    fclose($handle);
+                }
+            }
+        }
+
+        return $rows;
     }
 
     /** Files that no row refers to. Young files are left alone, an upload may just be starting. */

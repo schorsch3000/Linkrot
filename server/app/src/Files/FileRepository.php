@@ -45,11 +45,18 @@ final readonly class FileRepository
         return $delete->rowCount() === 1;
     }
 
-    /** Metadata of an incomplete upload that is being resumed with a new create request. */
-    public function updateUploadMetadata(string $id, string $name, int $rmAfter, ?int $usesLeft, int $now): void
+    /**
+     * Metadata of an incomplete upload that is being resumed with a new create request. This also refreshes `updated_at`,
+     * which keeps the cleanup away.
+     *
+     * @return bool false if the row is gone (the cleanup removed the stale upload just now)
+     */
+    public function updateUploadMetadata(string $id, string $name, int $rmAfter, ?int $usesLeft, int $now): bool
     {
-        $this->pdo->prepare('UPDATE files SET name = ?, rm_after = ?, uses_left = ?, updated_at = ? WHERE id = ?')
-            ->execute([$name, $rmAfter, $usesLeft, $now, $id]);
+        $update = $this->pdo->prepare('UPDATE files SET name = ?, rm_after = ?, uses_left = ?, updated_at = ? WHERE id = ?');
+        $update->execute([$name, $rmAfter, $usesLeft, $now, $id]);
+
+        return $update->rowCount() === 1;
     }
 
     public function updateMetadata(string $id, string $name, int $rmAfter, ?int $expiresAt, ?int $usesLeft, int $now): void
@@ -67,8 +74,12 @@ final readonly class FileRepository
         return $update->rowCount() === 1;
     }
 
-    /** Moves the offset and stores the running whole-file hash that belongs to it, in one statement. */
-    public function setOffset(string $id, int $offset, int $now, ?string $hashState = null): void
+    /**
+     * Moves the offset and stores the running whole-file hash that belongs to it, in one statement.
+     *
+     * @return bool false if the row is gone (the cleanup removed the upload while the chunk was written)
+     */
+    public function setOffset(string $id, int $offset, int $now, ?string $hashState = null): bool
     {
         $update = $this->pdo->prepare('UPDATE files SET upload_offset = ?, updated_at = ?, hash_state = ? WHERE id = ?');
         $update->bindValue(1, $offset, PDO::PARAM_INT);
@@ -76,6 +87,8 @@ final readonly class FileRepository
         $update->bindValue(3, $hashState, $hashState === null ? PDO::PARAM_NULL : PDO::PARAM_LOB);
         $update->bindValue(4, $id);
         $update->execute();
+
+        return $update->rowCount() === 1;
     }
 
     /** The serialized running hash of the bytes before upload_offset, null if there is none (yet). */

@@ -78,7 +78,11 @@ final readonly class UploadController
             $existing = null;
         }
         if ($existing instanceof \Linkrot\Files\FileRecord) {
-            return $this->resumeOrRefuse($existing, $name, $size, $rmAfter, $uses, $now);
+            $answer = $this->resumeOrRefuse($existing, $name, $size, $rmAfter, $uses, $now);
+            if ($answer instanceof Response) {
+                return $answer;
+            }
+            // the stale upload was removed by the cleanup while we looked at it: there is nothing to resume, start a new one
         }
 
         if ($size + $this->files->outstandingBytes() > $this->store->freeSpace()) {
@@ -355,7 +359,9 @@ final readonly class UploadController
         $now = ($this->clock)();
         $newOffset = $file->uploadOffset + $length;
         if ($file->size === null || $newOffset < $file->size) {
-            $this->files->setOffset($file->id, $newOffset, $now, serialize($fileHash));
+            if (!$this->files->setOffset($file->id, $newOffset, $now, serialize($fileHash))) {
+                return $this->notFound(); // the cleanup removed this upload while the chunk was written
+            }
 
             return Response::json(['offset' => $newOffset]);
         }
@@ -424,7 +430,8 @@ final readonly class UploadController
         return $this->invalid('request body is shorter than announced');
     }
 
-    private function resumeOrRefuse(FileRecord $existing, string $name, int $size, int $rmAfter, ?int $uses, int $now): Response
+    /** @return Response|null null if the incomplete upload is gone, so nothing can be resumed */
+    private function resumeOrRefuse(FileRecord $existing, string $name, int $size, int $rmAfter, ?int $uses, int $now): ?Response
     {
         if ($existing->isReady()) {
             return Response::error(409, 'duplicate', 'this file already exists', [
@@ -435,7 +442,9 @@ final readonly class UploadController
         if ($existing->size !== $size) {
             return $this->invalid('a different size was announced for this sha256');
         }
-        $this->files->updateUploadMetadata($existing->id, $name, $rmAfter, $uses, $now);
+        if (!$this->files->updateUploadMetadata($existing->id, $name, $rmAfter, $uses, $now)) {
+            return null;
+        }
         $file = $this->files->find($existing->id) ?? $existing;
 
         return Response::json($file->toArray($this->config->baseUrl) + ['chunk_size' => $this->config->chunkSize]);
@@ -452,7 +461,10 @@ final readonly class UploadController
                 // A concurrent create of the same file won the race, or the id collided.
                 $winner = $this->files->findBySha256($sha256);
                 if ($winner instanceof \Linkrot\Files\FileRecord) {
-                    return $this->resumeOrRefuse($winner, $name, $size, $rmAfter, $uses, $now);
+                    $answer = $this->resumeOrRefuse($winner, $name, $size, $rmAfter, $uses, $now);
+                    if ($answer instanceof Response) {
+                        return $answer;
+                    }
                 }
                 if ($attempt === 4) {
                     throw $e;
