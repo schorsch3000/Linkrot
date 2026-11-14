@@ -29,11 +29,14 @@ final readonly class FileController
     /** GET /api/v1/files */
     public function list(): Response
     {
+        $now = ($this->clock)();
+
         return Response::json([
             'files' => array_map(
                 fn(FileRecord $file): array => $file->toArray($this->config->baseUrl),
-                $this->files->listLive(($this->clock)()),
+                $this->files->listLive($now),
             ),
+            'quota' => ['used' => $this->files->usedBytes($now), 'limit' => $this->config->quota > 0 ? $this->config->quota : null],
         ]);
     }
 

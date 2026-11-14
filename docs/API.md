@@ -65,6 +65,7 @@ Request:
 | `400` | invalid name/size/hash/duration, or same sha256 with a different size, or `rm_after` over the cap | error |
 | `413 too_large` | over `max_file_size` | error |
 | `507 insufficient_storage` | not enough disk space | error |
+| `507 quota_exceeded` | the file would take the host over its `quota` | error |
 
 ### Streaming uploads
 
@@ -93,8 +94,8 @@ client                                  server
 
 Chunks of a streaming upload use the same request as above, with these differences: a chunk has 1 to `chunk_size`
 bytes, only the last chunk may be shorter (the offset of every chunk must be a multiple of `chunk_size`, `400`
-otherwise), and a chunk that would take the file over `max_file_size` is answered `413 too_large` and deletes the
-upload. A chunk never completes the upload. The server keeps the running sha256 as it does for normal uploads.
+otherwise), and a chunk that would take the file over `max_file_size` is answered `413 too_large`, one that would take
+the host over its `quota` `507 quota_exceeded`; both delete the upload. A chunk never completes the upload. The server keeps the running sha256 as it does for normal uploads.
 
 ### `POST /files/{id}/seal` - complete a streaming upload
 
@@ -144,8 +145,8 @@ Body: the chunk bytes immediately followed by the raw 32 byte sha256 digest of e
 
 ### `GET /files` - list
 
-Returns `{ "files": [ <file object>, ... ] }`, newest first, including incomplete uploads (`status: uploading`).
-Expired files are not listed. The CLI uses this to resolve id prefixes and for shell completion.
+Returns `{ "files": [ <file object>, ... ], "quota": { "used": <bytes>, "limit": <bytes or null> } }`, newest first, including incomplete uploads (`status: uploading`).
+Expired files are not listed. `used` is what the live files and running uploads occupy, `limit` the host's `quota` (`null` if there is none). The CLI uses this to resolve id prefixes, for shell completion and to show the quota below `ls`.
 
 ### `PATCH /files/{id}` - change metadata
 

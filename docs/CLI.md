@@ -66,7 +66,10 @@ resent), and the sha256 and size of everything are sent in a final `seal` reques
 
 ### `ls [--json]`
 
-Lists all files with id, name, size, expiry, remaining uses, status (incomplete uploads included) and URL.
+Lists all files with id, name, size, expiry, remaining uses, status (incomplete uploads included) and URL. Below the table a line shows the quota of the server, e.g.
+`Quota: 12.3 GB of 100.0 GB used (12%)` (yellow from 90%, red when full; `no limit` if the host has none; omitted by
+servers that do not report it). Decimal units, as the server's `quota` is configured. `--json` prints the plain list of
+files without it.
 
 ### `info <id> [--json]`
 

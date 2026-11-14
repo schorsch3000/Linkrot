@@ -113,6 +113,21 @@ final readonly class FileRepository
         return array_values(array_map(FileRecord::fromRow(...), $statement->fetchAll()));
     }
 
+    /**
+     * Bytes the live files occupy or have reserved, for the quota: a sized upload counts with its full size from the
+     * start (that is what it will take), a streaming one with what it has received so far. Expired or used up files
+     * that the cleanup has not removed yet do not count.
+     */
+    public function usedBytes(int $now): int
+    {
+        $statement = $this->pdo->prepare(
+            "SELECT COALESCE(SUM(COALESCE(size, upload_offset)), 0) FROM files WHERE status = 'uploading' OR ((expires_at IS NULL OR expires_at > ?) AND (uses_left IS NULL OR uses_left > 0))",
+        );
+        $statement->execute([$now]);
+
+        return (int) $statement->fetchColumn();
+    }
+
     /** Bytes that running uploads still have to receive; used for the disk space check. */
     public function outstandingBytes(): int
     {

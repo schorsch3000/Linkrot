@@ -22,6 +22,13 @@ type File struct {
 	ChunkSize   int64  `json:"chunk_size,omitempty"`
 }
 
+// Quota is the storage quota of the server: what the live files and running uploads occupy, and the limit
+// (nil if the host has none).
+type Quota struct {
+	Used  int64  `json:"used"`
+	Limit *int64 `json:"limit"`
+}
+
 // Status values of File.
 const (
 	StatusUploading = "uploading"

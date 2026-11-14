@@ -53,6 +53,40 @@ func statusText(f api.File) string {
 
 func sizeText(n int64) string { return progress.FormatBytes(n) }
 
+// decimalBytes formats like the quota is configured (1 kb = 1000 bytes), so that "100gb" reads as 100 GB.
+func decimalBytes(n int64) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d B", n)
+	}
+	value, exp := float64(n), 0
+	for value >= 1000 && exp < 4 {
+		value /= 1000
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", value, "KMGT"[exp-1])
+}
+
+// quotaText is the line below `ls`; the style warns when the quota is nearly used up.
+func quotaText(q api.Quota) (string, color.Style) {
+	if q.Limit == nil {
+		return "Quota: " + decimalBytes(q.Used) + " used, no limit", color.Dim
+	}
+	limit := *q.Limit
+	text := fmt.Sprintf("Quota: %s of %s used", decimalBytes(q.Used), decimalBytes(limit))
+	if limit <= 0 {
+		return text, color.Dim
+	}
+	percent := q.Used * 100 / limit
+	text += fmt.Sprintf(" (%d%%)", percent)
+	switch {
+	case percent >= 100:
+		return text, color.Red
+	case percent >= 90:
+		return text, color.Yellow
+	}
+	return text, color.Dim
+}
+
 // cell is one table cell; style is applied after padding so alignment ignores escape codes.
 type cell struct {
 	text  string

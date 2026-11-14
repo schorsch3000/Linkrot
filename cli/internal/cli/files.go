@@ -46,7 +46,7 @@ func (a *App) lsCommand() *cobra.Command {
 		Args:  usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.withClient(cmd, func(ctx context.Context, c *api.Client) error {
-				files, err := c.List(ctx)
+				files, quota, err := c.ListWithQuota(ctx)
 				if err != nil {
 					return err
 				}
@@ -78,11 +78,18 @@ func (a *App) lsCommand() *cobra.Command {
 						{f.URL, color.Cyan},
 					})
 				}
-				return writeTable(a.Out, pt, rows)
+				if err := writeTable(a.Out, pt, rows); err != nil {
+					return err
+				}
+				if quota != nil {
+					text, style := quotaText(*quota)
+					_, err = fmt.Fprintln(a.Out, pt.Paint(style, text))
+				}
+				return err
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "print the files as JSON")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the files as JSON (without the quota)")
 	return cmd
 }
 

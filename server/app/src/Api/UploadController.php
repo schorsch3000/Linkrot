@@ -84,6 +84,9 @@ final readonly class UploadController
         if ($size + $this->files->outstandingBytes() > $this->store->freeSpace()) {
             return Response::error(507, 'insufficient_storage', 'not enough disk space');
         }
+        if ($this->overQuota($size, $now)) {
+            return $this->quotaExceeded();
+        }
 
         return $this->insert($name, $size, $sha256, $rmAfter, $uses, $now);
     }
@@ -108,10 +111,24 @@ final readonly class UploadController
             return Response::error(507, 'insufficient_storage', 'not enough disk space');
         }
         $now = ($this->clock)();
+        if ($this->overQuota(1, $now)) {
+            return $this->quotaExceeded();
+        }
         $id = $this->insertRecord(new FileRecord(FileId::generate(), $name, null, null, FileStatus::Uploading, 0, $now, $now, null, $rmAfter, null, $uses));
         $created = $this->files->find($id);
 
         return Response::json(($created ?? throw new \LogicException('stream upload vanished'))->toArray($this->config->baseUrl) + ['chunk_size' => $this->config->chunkSize], 201);
+    }
+
+    /** Would `$additional` more bytes take this host over its quota? */
+    private function overQuota(int $additional, int $now): bool
+    {
+        return $this->config->quota > 0 && $this->files->usedBytes($now) + $additional > $this->config->quota;
+    }
+
+    private function quotaExceeded(): Response
+    {
+        return Response::error(507, 'quota_exceeded', 'the storage quota of this server is used up, remove files or wait until they expire');
     }
 
     /** Inserts the row and creates the (empty) data file; a failing data file takes the row with it. */
@@ -296,6 +313,12 @@ final readonly class UploadController
             $this->catalog->remove($file->id);
 
             return Response::error(413, 'too_large', 'file is larger than the allowed ' . $this->config->maxFileSize . ' bytes');
+        }
+        // the bytes received so far are part of the usage already
+        if ($this->overQuota($length, ($this->clock)())) {
+            $this->catalog->remove($file->id);
+
+            return $this->quotaExceeded();
         }
 
         return null;

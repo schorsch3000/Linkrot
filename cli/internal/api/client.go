@@ -94,13 +94,20 @@ func (c *Client) Get(ctx context.Context, id string) (*File, error) {
 
 // List returns all live files, newest first.
 func (c *Client) List(ctx context.Context) ([]File, error) {
+	files, _, err := c.ListWithQuota(ctx)
+	return files, err
+}
+
+// ListWithQuota returns all live files and the quota of the server (nil for a server that does not report it).
+func (c *Client) ListWithQuota(ctx context.Context) ([]File, *Quota, error) {
 	var out struct {
 		Files []File `json:"files"`
+		Quota *Quota `json:"quota"`
 	}
 	if err := c.do(ctx, http.MethodGet, "/api/v1/files", nil, 0, "", nil, &out); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out.Files, nil
+	return out.Files, out.Quota, nil
 }
 
 // Patch changes metadata. Only non-nil members are sent; Uses may be set to null with ClearUses.

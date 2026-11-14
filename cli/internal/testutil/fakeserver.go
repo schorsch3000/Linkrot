@@ -37,6 +37,8 @@ type FakeServer struct {
 	// Health is the answer of GET /api/v1/health; the zero value is a healthy server. HealthCalls counts the requests.
 	Health      *api.Health
 	HealthCalls int
+	// Quota is reported by GET /api/v1/files when set.
+	Quota *api.Quota
 }
 
 type fakeFile struct {
@@ -153,7 +155,11 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 				list = append(list, f.File)
 			}
 		}
-		writeJSON(w, 200, map[string]any{"files": list})
+		answer := map[string]any{"files": list}
+		if s.Quota != nil {
+			answer["quota"] = s.Quota
+		}
+		writeJSON(w, 200, answer)
 	case path == "/api/v1/cleanup" && r.Method == http.MethodPost:
 		writeJSON(w, 200, map[string]any{"ran": true, "rows_deleted": 0, "files_deleted": 0})
 	case strings.HasPrefix(path, "/api/v1/files/"):

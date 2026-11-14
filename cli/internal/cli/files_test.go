@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/schorsch3000/Linkrot/internal/api"
+	"github.com/schorsch3000/Linkrot/internal/color"
 	"github.com/schorsch3000/Linkrot/internal/config"
 )
 
@@ -53,6 +54,46 @@ func TestLs(t *testing.T) {
 	if !strings.Contains(lines[2], "a.txt") || !strings.Contains(lines[2], "4 B") || !strings.Contains(lines[2], "7d") ||
 		!strings.Contains(lines[2], "ready") || !strings.Contains(lines[2], e.server.URL+"/file/") {
 		t.Errorf("ready line: %s", lines[2])
+	}
+}
+
+func TestLsShowsTheQuotaBelowTheTable(t *testing.T) {
+	limit := int64(100_000_000_000)
+	e := newEnv(t)
+	e.server.Add("a.txt", []byte("aaaa"))
+	e.server.Quota = &api.Quota{Used: 12_300_000_000, Limit: &limit}
+
+	code, out, errs := e.runAt("ls")
+
+	if code != 0 || errs != "" {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 || lines[2] != "Quota: 12.3 GB of 100.0 GB used (12%)" {
+		t.Fatalf("output:\n%s", out)
+	}
+	if _, out, _ := e.runAt("ls", "--json"); strings.Contains(out, "Quota") || !strings.HasPrefix(strings.TrimSpace(out), "[") {
+		t.Fatalf("json must stay a plain list: %s", out)
+	}
+}
+
+func TestQuotaText(t *testing.T) {
+	limit := int64(1000)
+	zero := int64(0)
+	for _, tc := range []struct {
+		q     api.Quota
+		text  string
+		style color.Style
+	}{
+		{api.Quota{Used: 5}, "Quota: 5 B used, no limit", color.Dim},
+		{api.Quota{Used: 500, Limit: &limit}, "Quota: 500 B of 1.0 KB used (50%)", color.Dim},
+		{api.Quota{Used: 900, Limit: &limit}, "Quota: 900 B of 1.0 KB used (90%)", color.Yellow},
+		{api.Quota{Used: 1000, Limit: &limit}, "Quota: 1.0 KB of 1.0 KB used (100%)", color.Red},
+		{api.Quota{Used: 7, Limit: &zero}, "Quota: 7 B of 0 B used", color.Dim},
+	} {
+		if text, style := quotaText(tc.q); text != tc.text || style != tc.style {
+			t.Errorf("%+v: got %q %q, want %q %q", tc.q, text, style, tc.text, tc.style)
+		}
 	}
 }
 

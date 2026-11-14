@@ -121,7 +121,7 @@ could not remove a file; the next clean run drops it). The health endpoint repor
 Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
 
 1. **Create.** The client sends name, size, sha256 and optional `rm_after` / `uses`. The server
-   - rejects files over `max_file_size` and files for which `disk_free_space` is insufficient
+   - rejects files over `max_file_size`, files that would take the host over its `quota` (`507 quota_exceeded`) and files for which `disk_free_space` is insufficient
    - looks up the sha256. Expired-but-uncleaned matches are deleted first. A live match with status `uploading`
      is a **resume**: same id, current offset, metadata updated from the new request. A live match with status
      `ready` is **refused** with `409 duplicate` carrying the id and URL of the existing file
@@ -263,6 +263,7 @@ authentication itself:
 | `base_url` | (required) | public URL used to build share links. Must be `https://`; plain `http://` is only accepted for `localhost` and loopback addresses (development). Anything else makes the server answer "misconfigured" and `check-config` fail |
 | `chunk_size` | 32 MiB | must be within 10-100 MB |
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
+| `quota` | 0 (unlimited) | most data this host may hold at once, as a size: `100`, `100b`, `100kb`, `100mb`, `100gb`, `1tb` (decimal units, case does not matter) or an integer (bytes). Counts every live file and running upload (a sized upload with its full size from the start, a streaming one with what it has received); expired files the cleanup has not removed yet do not count. Uploads over it are refused with `507 quota_exceeded`. Concurrent creates can overshoot it by what they reserve in the same moment |
 | `default_rm_after` | `1w` | lifetime if the client does not ask for one |
 | `max_rm_after` | `1y` | **mandatory cap** for any requested lifetime; can be set to e.g. `1000y`, that is an explicit decision, not a default |
 | `default_uses` | unlimited | download limit if the client does not ask for one |

@@ -29,6 +29,7 @@ final readonly class Config
         public int $rateLimitAttempts = 10,
         public int $rateLimitWindow = 900,
         public DownloadMode $downloadMode = DownloadMode::Xaccel,
+        public int $quota = 0,
     ) {
         if (!preg_match('~^https?://[^/\s]+(/\S*)?$~', $baseUrl)) {
             throw new InvalidArgumentException('config: base_url must be an https URL');
@@ -38,6 +39,9 @@ final readonly class Config
         }
         if ($chunkSize < 1) {
             throw new InvalidArgumentException('config: chunk_size must be positive');
+        }
+        if ($quota < 0) {
+            throw new InvalidArgumentException('config: quota must not be negative');
         }
         if ($maxFileSize < 0 || $rateLimitAttempts < 1 || $rateLimitWindow < 1) {
             throw new InvalidArgumentException('config: max_file_size, rate_limit_* out of range');
@@ -69,7 +73,7 @@ final readonly class Config
         $known = [
             'base_url', 'chunk_size', 'max_file_size', 'default_rm_after', 'max_rm_after', 'default_uses',
             'cleanup_interval', 'upload_timeout', 'orphan_row_timeout', 'rate_limit_attempts',
-            'rate_limit_window', 'download_mode',
+            'rate_limit_window', 'download_mode', 'quota',
         ];
         $unknown = array_diff(array_map(strval(...), array_keys($values)), $known);
         if ($unknown !== []) {
@@ -102,6 +106,7 @@ final readonly class Config
             downloadMode: is_string($mode)
                 ? (DownloadMode::tryFrom($mode) ?? throw new InvalidArgumentException('config: download_mode must be xaccel or php'))
                 : throw new InvalidArgumentException('config: download_mode must be xaccel or php'),
+            quota: self::quota($values),
         );
     }
 
@@ -116,6 +121,27 @@ final readonly class Config
         }
 
         return self::fromArray($values);
+    }
+
+    /**
+     * The upload quota in bytes: a size string like "100gb" or "1tb", or an integer (bytes). 0 is unlimited.
+     *
+     * @param array<array-key, mixed> $values
+     */
+    private static function quota(array $values): int
+    {
+        $value = $values['quota'] ?? 0;
+        if (is_int($value)) {
+            return $value;
+        }
+        if (!is_string($value)) {
+            throw new InvalidArgumentException('config: quota must be a size like "100gb" or an integer (bytes)');
+        }
+        try {
+            return ByteSize::parse($value);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException('config: quota: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     /** @param array<array-key, mixed> $values */
