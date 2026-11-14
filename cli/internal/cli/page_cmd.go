@@ -21,6 +21,9 @@ const maxPageFile = 1 << 20
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
+// pageNamePattern is what the server accepts as the name of a page.
+var pageNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
+
 // slugOf is the name of a page in its URL, made from a file name: imprint.md and Imprint_DE.md become imprint and imprint-de.
 func slugOf(path string) string {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -47,7 +50,13 @@ func (a *App) pageCommand() *cobra.Command {
 		Args:    usageArgs(cobra.NoArgs),
 		RunE:    func(cmd *cobra.Command, args []string) error { return noArgs(cmd, args) },
 	}
-	cmd.AddCommand(a.pageLs(), a.pageGet(), a.pagePut(), a.pageRm(), a.pageTemplate())
+	cmd.AddCommand(a.pageLs(), a.pageGet(), a.pagePut(), a.pageRm(), a.pageTemplate(), a.editCommand("edit <name>", "Edit a page in an editor and upload it whenever it is saved",
+		func(name string) (editSpec, error) {
+			if !pageNamePattern.MatchString(name) {
+				return editSpec{}, usageErrorf("%q is not a page name: 1 to 40 characters of a-z, 0-9 and -, not at the start or end", name)
+			}
+			return pageSpec(name), nil
+		}, a.completePages))
 	return cmd
 }
 

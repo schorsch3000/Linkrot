@@ -426,6 +426,13 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("user css still linked after the reset: %s", body)
 	}
 
+	// edit with an editor that is a shell one-liner: the file is the last argument ($0); --once uploads when it exits
+	s.must(t, "custom", "edit", "--once", "taglines", "sh", "-c", `printf 'Edited in an editor.\n' > "$0"`)
+	if _, body := get(t, newURL, nil); !strings.Contains(string(body), "<footer>Edited in an editor.</footer>") {
+		t.Fatalf("edited tagline missing: %s", body)
+	}
+	s.must(t, "custom", "reset", "taglines")
+
 	// static pages: a draft is not reachable, a published page is, linked in the footer of the other pages
 	pageFile := filepath.Join(t.TempDir(), "Imprint.md")
 	if err := os.WriteFile(pageFile, []byte("---\ntitle: Imprint\nlang: de\n---\n# Hello\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"), 0o600); err != nil {

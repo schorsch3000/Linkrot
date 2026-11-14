@@ -27,7 +27,7 @@ and not worry about cleaning up later.
 - **Customizable per host, through the API only.** Six on/off settings (taglines, start page, headline, and the three
   command lines of the download page) and three files (taglines, `X-Rot` header lines, a stylesheet) change how the
   public pages look, and up to 20 Markdown pages (an imprint, a privacy notice) are linked in the footer of every page.
-  `lr config`, `lr custom` and `lr page` manage them; there is still no admin UI.
+  `lr config`, `lr custom` and `lr page` manage them, and `lr page edit` / `lr custom edit` open a file in your editor and upload it on every save; there is still no admin UI.
 - **Resumable uploads.** Files are uploaded in small chunks (default 32 MiB) that are individually verified, so
   a lost connection costs at most one chunk.
 - **Downloads are guarded.** Files never live in the public folder; PHP decides, nginx sends (`X-Accel-Redirect`).

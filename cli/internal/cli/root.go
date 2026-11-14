@@ -40,6 +40,13 @@ type App struct {
 
 	Paint *color.Painter // overrides the color detection; nil detects per stream
 
+	// The editor of `page edit` and `custom edit`; all of them are replaced in tests. nil: the real ones.
+	Getenv      func(string) string
+	LookPath    func(string) (string, error)
+	RunEditor   func(argv []string, in io.Reader, out, errw io.Writer) error
+	EditPoll    time.Duration
+	EditSignals <-chan os.Signal
+
 	uploading bool
 }
 

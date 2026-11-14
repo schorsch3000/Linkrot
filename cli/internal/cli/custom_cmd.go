@@ -38,7 +38,16 @@ func (a *App) customCommand() *cobra.Command {
 		Args:    usageArgs(cobra.NoArgs),
 		RunE:    func(cmd *cobra.Command, args []string) error { return noArgs(cmd, args) },
 	}
-	cmd.AddCommand(a.customGet(), a.customPut(), a.customReset())
+	cmd.AddCommand(a.customGet(), a.customPut(), a.customReset(), a.editCommand("edit <file>", "Edit a file in an editor and upload it whenever it is saved",
+		func(name string) (editSpec, error) {
+			known, err := customName(name)
+			if err != nil {
+				return editSpec{}, err
+			}
+			return customSpec(known), nil
+		}, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+			return append([]string{}, api.CustomNames...), cobra.ShellCompDirectiveNoFileComp
+		}))
 	return cmd
 }
 

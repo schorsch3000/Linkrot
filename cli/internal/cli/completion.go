@@ -122,6 +122,9 @@ func (a *App) registerCompletions(root *cobra.Command) {
 			_ = c.RegisterFlagCompletionFunc("copy", completeFixed(clip.Clipboard, clip.Primary, clip.OSC52))
 		case "custom":
 			for _, sub := range c.Commands() {
+				if sub.Name() == "edit" {
+					continue
+				}
 				sub.ValidArgsFunction = func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 					if len(args) == 0 {
 						return append([]string{}, api.CustomNames...), cobra.ShellCompDirectiveNoFileComp
@@ -134,6 +137,8 @@ func (a *App) registerCompletions(root *cobra.Command) {
 				switch sub.Name() {
 				case "get", "rm":
 					sub.ValidArgsFunction = a.completePages
+				case "edit":
+					// completes the name, the rest is the editor
 				case "put":
 					sub.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 						if len(args) == 0 {

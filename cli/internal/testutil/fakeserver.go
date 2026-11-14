@@ -535,3 +535,19 @@ func (s *FakeServer) pages(w http.ResponseWriter, r *http.Request, path string) 
 		}
 	}
 }
+
+// PageText is the Markdown the server holds for a page, safe to call while the server is serving.
+func (s *FakeServer) PageText(name string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	text, ok := s.Pages[name]
+	return text, ok
+}
+
+// CustomText is the uploaded content of a customizable file, safe to call while the server is serving.
+func (s *FakeServer) CustomText(name string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	text, ok := s.Custom[name]
+	return text, ok
+}

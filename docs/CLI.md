@@ -127,6 +127,7 @@ Files of your server that you can replace with your own, see [API.md](API.md#get
 custom get <file> [-o path]   print the file (the built-in version as long as you did not replace it), or write it to a path
 custom put <file> <path|->    replace the file with the content of a file (- is standard input)
 custom reset <file>           go back to the built-in version
+custom edit [--once] <file> [editor [editor arguments...]]   edit it in an editor, see below
 ```
 
 `<file>` is `taglines` (one footer tagline per line), `headerlines` (one `X-Rot` header line per line, printable ASCII
@@ -154,6 +155,39 @@ chooses it, and is needed for standard input. The server checks and renders the 
 with the offending lines if it contains raw HTML, a link or image that is not allowed or a mistake in the head; nothing
 changes then. A start: `lr page template -o imprint.md`, edit, `lr page put imprint.md`; the template is a draft until you
 set `published: true`.
+
+### `page edit` and `custom edit`
+
+```
+page edit   [--once] <name> [editor [editor arguments...]]
+custom edit [--once] <file> [editor [editor arguments...]]
+```
+
+Downloads the page or file to a temporary file (named `imprint.md`, `user.css`, `taglines.txt`, `headerlines.txt`, so that
+the editor knows the syntax), opens it in an editor and **uploads it whenever you save**, until you press Ctrl+C.
+
+- **The editor** is the program named after the name, started with all the words given and the file as the last
+  argument: `lr custom edit css /my/fancy/editor --fancy -f` runs `/my/fancy/editor --fancy -f <tempfile>`. Without one:
+  `$VISUAL`, then `$EDITOR` (both may carry arguments, `code --wait`), then the first of `vim`, `vi`, `nano`, `pico` that is
+  installed (`notepad` on Windows). `--once` and the other flags of `lr` have to come **before** the name, everything after it
+  belongs to the editor.
+- **Watching.** `lr` stays open and polls the file. A save that then stays unchanged for a moment is uploaded, but only if
+  the content changed. A refused upload (raw HTML in a page, a mistake in the head) is explained with the lines and tried
+  again at the next save. Because the file is watched and not the editor, graphical editors that return at once
+  (`code`, `subl`, `gedit`) work as well. The result of every upload is printed, with the URL of a page or of the new
+  stylesheet.
+- **Full-screen editors** (vim, nano, ...) own the terminal, and anything printed would garble their screen. So while the
+  editor is open nothing is printed; when you quit it, the messages appear, and `lr` stays open: **Enter** opens the editor
+  again, **Ctrl+C** stops. Quit, read what the server said, press Enter, fix it.
+- **Ctrl+C** stops, after one last upload of a save that had not been uploaded yet. If that fails the temporary file is
+  kept and its path printed, and the exit code is 1; otherwise the temporary file is removed.
+- **Starting point.** A page that does not exist yet starts from the template (a draft until it says `published: true`).
+  A custom file that was never replaced starts from the built-in version. Nothing is uploaded before the first change.
+- **`--once`** does not watch: it uploads when the editor exits (the editor has to wait, `code --wait`, a terminal editor
+  does) and ends. If the upload is refused, Enter opens the editor again and Ctrl+C gives up and keeps the file.
+- Two things to know: someone else's change to the same page in the meantime is overwritten (the last upload wins), and a
+  graphical editor started from the same terminal also gets the Ctrl+C that stops `lr` (most launchers detach and do not).
+  Without a terminal an editor has to be named.
 
 ### `completion bash|zsh|fish`
 
