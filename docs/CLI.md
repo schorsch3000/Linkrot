@@ -14,7 +14,8 @@ Conventions:
   with exit code 1, since there is no working server. A server that has no health endpoint (404) is not an error
 - **`-q`, `--quiet`** (every command, before or after the command name) keeps only errors and the result a command exists
   to produce: no progress bar, no retry notices, no server warnings, no confirmations, no hints.
-  `up -q` prints just the URL, and nothing at all with `--copy` (the URL is on the clipboard); `down -q` just the path.
+  `up -q` prints just the URL, and nothing at all with `--copy` once the URL is on the clipboard (if the copy fails the URL is
+  printed after all, next to the warning); `down -q` just the path.
   `ls`, `info`, `config`, `config get`, `custom get`, `page ls`, `page get` and `page template` still print what they were asked for
   (`ls` without the quota line). `set`, `rm`, `cleanup`, `config set`, `custom put|reset`, `page put|rm` and the `-o` of the `get`s
   print nothing. `--json` output is printed, because it was asked for. Errors always are, including the message of a
@@ -266,6 +267,10 @@ are in [SERVER.md](SERVER.md#limits-and-caveats).
   token into such a file when it is a symlink (dotfile managers) unless you pass `--allow-unsafe-file`. On Windows there are
   no such file modes, nothing is checked. `lr config --token` without a value asks on the terminal, the input hidden; it
   needs a terminal and otherwise fails (use `--token -` with the token on stdin).
+- **`--copy` with OSC 52 cannot confirm that anything was copied.** The default selection writes an escape sequence to the
+  terminal, and a terminal that ignores it (tmux without `allow-passthrough`, terminals with OSC 52 switched off) still counts as
+  success, so `up -q --copy` prints nothing and the URL is nowhere. If your terminal might do that, use `--copy=clipboard`
+  (a clipboard tool that fails is noticed) or leave `-q` off.
 - **Tested on Linux.** Release archives are built for Linux, macOS, Windows and FreeBSD, but the tests and the
   end-to-end run in CI are on Linux only. Behaviour that depends on the platform (hard links, file modes, the token
   prompt, the clipboard) is the part to watch on the others.

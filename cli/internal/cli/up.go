@@ -129,10 +129,10 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 	var dup *upload.DuplicateError
 	switch {
 	case errors.As(err, &dup):
-		if perr := a.printResult(dup.URL, dup.ID, true, nil, asJSON, doCopy); perr != nil {
+		copied := a.copyURL(doCopy, copySel, dup.URL)
+		if perr := a.printResult(dup.URL, dup.ID, true, nil, asJSON, copied); perr != nil {
 			return perr
 		}
-		a.copyURL(doCopy, copySel, dup.URL)
 		return withCode(ExitDuplicate, fmt.Errorf("this file already exists on the server (%s), its URL was printed", dup.ID))
 	case errors.Is(err, context.Canceled) && fromStdin:
 		// whether the same data would come again is not known, so there is nothing to continue
@@ -142,13 +142,14 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 	case err != nil:
 		return err
 	}
-	if err := a.printResult(file.URL, file.ID, false, file, asJSON, doCopy); err != nil {
-		return err
-	}
-	a.copyURL(doCopy, copySel, file.URL)
-	return nil
+	copied := a.copyURL(doCopy, copySel, file.URL)
+
+	return a.printResult(file.URL, file.ID, false, file, asJSON, copied)
 }
 
+// printResult prints the result of an upload. copied says that the URL really is on the clipboard (not only that it was
+// asked for): in quiet mode that is the one case in which it is not printed, because the clipboard was the point. If the
+// copy failed the URL is all that is left of the upload.
 func (a *App) printResult(url, id string, duplicate bool, file *api.File, asJSON, copied bool) error {
 	if !asJSON {
 		if a.Quiet && copied {
@@ -166,11 +167,17 @@ func (a *App) printResult(url, id string, duplicate bool, file *api.File, asJSON
 	return enc.Encode(v)
 }
 
-func (a *App) copyURL(doCopy bool, selection, url string) {
+// copyURL copies the URL if that was asked for and reports whether it is on the clipboard now. OSC 52 can only say that
+// the sequence was written: a terminal that ignores it still counts as success.
+func (a *App) copyURL(doCopy bool, selection, url string) bool {
 	if !doCopy {
-		return
+		return false
 	}
 	if err := a.Copy(selection, url); err != nil {
 		_, _ = fmt.Fprintf(a.Err, "%s %v\n", a.errPaint().Paint(color.Yellow, a.Name+": warning:"), fmt.Sprintf("could not copy the URL: %v", err))
+
+		return false
 	}
+
+	return true
 }

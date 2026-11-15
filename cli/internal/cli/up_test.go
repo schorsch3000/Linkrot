@@ -24,7 +24,9 @@ type env struct {
 	t      *testing.T
 	server *testutil.FakeServer
 	copied []string // "selection:text"
-	dir    string
+	// copyErr is what the clipboard answers (nil: it works)
+	copyErr error
+	dir     string
 }
 
 // newEnv starts a fake server and writes a config pointing at it.
@@ -53,7 +55,7 @@ func (e *env) run(args ...string) (code int, stdout, stderr string) {
 	var out, errb bytes.Buffer
 	app := &App{
 		Name: "lr", Out: &out, Err: &errb, ConfigPath: config.Path,
-		Copy:  func(sel, text string) error { e.copied = append(e.copied, sel+":"+text); return nil },
+		Copy:  func(sel, text string) error { e.copied = append(e.copied, sel+":"+text); return e.copyErr },
 		Sleep: func(context.Context, time.Duration) error { return nil },
 	}
 	code = app.Run(args)

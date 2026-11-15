@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +43,53 @@ func TestQuietUpWithCopyPrintsNothingAndCopies(t *testing.T) {
 	}
 	if len(e.copied) != 1 || !strings.HasPrefix(e.copied[0], "clipboard:"+e.server.URL+"/file/") {
 		t.Fatalf("copied %v", e.copied)
+	}
+}
+
+// -q --copy prints nothing because the URL is on the clipboard; if the clipboard fails, it is not, and the URL is all
+// that is left of an upload that may have taken an hour.
+func TestQuietUpWithAFailingCopyStillPrintsTheURL(t *testing.T) {
+	e := newEnv(t)
+	e.copyErr = errors.New("no clipboard tool found")
+
+	code, out, errs := e.run("up", "-q", "--copy=clipboard", e.file("report.txt", content))
+
+	if code != 0 || !strings.HasPrefix(out, e.server.URL+"/file/") || strings.Count(out, "\n") != 1 {
+		t.Fatalf("code %d: stdout %q", code, out)
+	}
+	if !strings.Contains(errs, "could not copy the URL: no clipboard tool found") {
+		t.Fatalf("the reason is gone: %q", errs)
+	}
+}
+
+func TestUpWithAFailingCopyPrintsTheURLAndTheWarning(t *testing.T) {
+	e := newEnv(t)
+	e.copyErr = errors.New("no clipboard tool found")
+
+	code, out, errs := e.run("up", "--copy=clipboard", e.file("report.txt", content))
+
+	if code != 0 || !strings.HasPrefix(out, e.server.URL+"/file/") || !strings.Contains(errs, "could not copy the URL") {
+		t.Fatalf("code %d: stdout %q stderr %q", code, out, errs)
+	}
+}
+
+func TestQuietUpDuplicateWithCopyIsSilentWhenTheCopyWorksAndPrintsTheURLWhenItDoesNot(t *testing.T) {
+	e := newEnv(t)
+	f := e.file("a.txt", content)
+	e.run("up", f)
+
+	code, out, errs := e.run("up", "-q", "--copy=clipboard", f)
+	if code != ExitDuplicate || out != "" || !strings.Contains(errs, "already exists") {
+		t.Fatalf("copy works: code %d: stdout %q stderr %q", code, out, errs)
+	}
+
+	e.copyErr = errors.New("no clipboard tool found")
+	code, out, errs = e.run("up", "-q", "--copy=clipboard", f)
+	if code != ExitDuplicate || !strings.HasPrefix(out, e.server.URL+"/file/") {
+		t.Fatalf("copy fails: code %d: stdout %q stderr %q", code, out, errs)
+	}
+	if !strings.Contains(errs, "could not copy the URL") || !strings.Contains(errs, "already exists") {
+		t.Fatalf("copy fails, stderr %q", errs)
 	}
 }
 
