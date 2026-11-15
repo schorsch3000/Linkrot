@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Installs the production dependencies and checks the setup. Run after unpacking a release, and again after
 # every upgrade.
-# usage: install.sh [--add-host <hostname>]... [--no-network-check]
+# usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check]
 #   --add-host          enroll a host (a tenant): lists it in app_data/global-config.php and creates its data folder
 #   --no-network-check  skip the round trip through https://<host> (offline installs, a host that cannot reach itself)
+#   --no-mail-check     do not offer to verify that mail.from can send mail
 set -euo pipefail
 
 network_check=1
+mail_check=1
 new_hosts=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--no-network-check) network_check=0 ;;
+	--no-mail-check) mail_check=0 ;;
 	--add-host)
 		[ $# -ge 2 ] || {
 			echo "install.sh: --add-host needs a hostname" >&2
@@ -20,7 +23,7 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	*)
-		echo "usage: install.sh [--add-host <hostname>]... [--no-network-check]" >&2
+		echo "usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check]" >&2
 		exit 2
 		;;
 	esac
@@ -90,6 +93,13 @@ for host in "${hosts[@]}"; do
 		LINKROT_HOST="$host" php bin/pages-cache-clear || echo "install.sh: note: could not clear the page cache of $host; remove its pages/index.json and pages/*.html as the php-fpm user if pages look outdated." >&2
 	fi
 done
+
+# Mail (tokens by mail): if global-config.php names a sender, make sure once per sender that it can send. It asks on the
+# terminal for an address to send a code to; without a terminal, or without an answer, it only says what to run.
+# Never fatal: the rest of the installation does not depend on it.
+if [ "$mail_check" = 1 ]; then
+	php bin/check-mail || echo "install.sh: note: mail is not verified, tokens by mail may not work: run app/bin/check-mail (or install.sh --no-mail-check to stop being asked)." >&2
+fi
 
 # One host: the configuration, the files folder, the end-to-end check. Returns 1 if the check failed.
 check_host() {

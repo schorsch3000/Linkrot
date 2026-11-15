@@ -100,7 +100,11 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
 Tokens by mail (`lr auth`, `lr token`, see [SERVER.md](SERVER.md#tokens-by-mail)) need three things: `mail.from` in
 `app_data/global-config.php`, `email` in `config.php` of every host that wants it, and a working MTA for PHP's `mail()`
-(`sendmail_path` in the php-fpm `php.ini`, e.g. `/usr/sbin/sendmail -t -i` with postfix, or msmtp). Try it with
+(`sendmail_path` in the php-fpm `php.ini`, e.g. `/usr/sbin/sendmail -t -i` with postfix, or msmtp). `install.sh` checks it
+for you, once per sender: if `mail.from` is not verified yet it asks (on the terminal) for an address, mails a code to it
+and asks for the code; the sender is then remembered in `app_data/mail-verified.json`, and a changed `mail.from` is
+verified again. Without a terminal, or with an empty answer, it only says what to run: `app/bin/check-mail`. It never makes
+the installation fail; `--no-mail-check` skips it. Try the real thing with
 `lr auth --email <address>` and watch the php-fpm error log for `cannot mail the code`. Without `mail.from` the server
 sends nothing and answers as usual.
 

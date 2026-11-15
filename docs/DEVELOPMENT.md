@@ -8,7 +8,7 @@ Makefile                 runs the same target in server/ and cli/
 server/
   Makefile
   app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/ (`lr-auth`, `migrate`,
-                         `check-config`, `check-install`, `pages-cache-clear`, `hosts`),
+                         `check-config`, `check-install`, `check-mail`, `pages-cache-clear`, `hosts`),
                          composer.json + composer.lock (all used PHP extensions are listed under `require`),
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)

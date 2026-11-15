@@ -1,0 +1,52 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Cli\MailCheck;
+use Linkrot\Mail\SendmailMailer;
+use Linkrot\Tenants;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * Checks that mail.from of global-config.php can really send mail, once per sender (install.sh runs it): mails a code to
+ * an address you name and asks for it. A verified sender is remembered in mail-verified.json next to global-config.php.
+ * Exit code 0: nothing to check or verified; 1: not verified; 2: cannot run.
+ * usage: check-mail   (data directory: $LINKROT_DATA or ../../app_data)
+ */
+$root = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+try {
+    $from = Tenants::load($root . '/' . Tenants::FILE_NAME)->mailFrom;
+} catch (Throwable $e) {
+    fwrite(STDERR, 'check-mail: ' . $e->getMessage() . "\n");
+    exit(2);
+}
+if ($from === null) {
+    echo "check-mail: no mail.from in global-config.php, tokens by mail are off, nothing to check\n";
+    exit(0);
+}
+
+$interactive = stream_isatty(STDIN);
+$check = new MailCheck(
+    $root . '/mail-verified.json',
+    $from,
+    new SendmailMailer($from),
+    static function (string $prompt) use ($interactive): ?string {
+        if (!$interactive) {
+            return null;
+        }
+        fwrite(STDERR, $prompt);
+        $line = fgets(STDIN);
+
+        return $line === false ? null : trim($line);
+    },
+    static function (string $line): void {
+        fwrite(STDERR, "check-mail: $line\n");
+    },
+);
+if (!$interactive && !$check->isVerified()) {
+    fwrite(STDERR, "check-mail: sender $from is not verified and there is no terminal to ask on: run app/bin/check-mail\n");
+    exit(1);
+}
+exit($check->run() ? 0 : 1);

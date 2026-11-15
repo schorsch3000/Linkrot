@@ -61,7 +61,7 @@ list. Any other host, including a malformed one, is answered with `421 Misdirect
 missing is answered with "server misconfigured". `app/bin/hosts` prints the list, `install.sh --add-host <host>`
 enrolls a new host.
 
-The command line tools (`lr-auth`, `check-config`, `check-install`, `migrate`, `pages-cache-clear`) work on the host named in
+The command line tools (`lr-auth`, `check-config`, `check-install`, `check-mail`, `migrate`, `pages-cache-clear`) work on the host named in
 `LINKROT_HOST`. It can be omitted if exactly one host is configured; `migrate` and `pages-cache-clear` without it work on every host.
 
 All folders are owned by the user nginx and php-fpm run as. `lr-auth` is run as that same user, so
