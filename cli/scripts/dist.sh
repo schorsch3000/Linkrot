@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds release archives for all supported platforms into dist/.
-# usage: scripts/dist.sh <version>      (version without the leading v)
+# usage: scripts/dist.sh <version>      (version without the leading v; JOBS=n limits the parallel builds, default: all cores)
 set -euo pipefail
 
 version="${1:?usage: dist.sh <version>}"
@@ -58,7 +58,7 @@ export version mtime
 
 # xargs exits non-zero if any build failed
 # shellcheck disable=SC2016 # $1 is meant to expand in the child shell
-printf '%s\n' "${targets[@]}" | xargs -P "$(nproc)" -I{} bash -c 'set -euo pipefail; build "$1"' _ {}
+printf '%s\n' "${targets[@]}" | xargs -P "${JOBS:-$(nproc)}" -I{} bash -c 'set -euo pipefail; build "$1"' _ {}
 
 (cd dist && sha256sum -- * >SHA256SUMS)
 ls -l dist
