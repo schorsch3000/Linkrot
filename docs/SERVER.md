@@ -59,8 +59,8 @@ list. Any other host, including a malformed one, is answered with `421 Misdirect
 missing is answered with "server misconfigured". `app/bin/hosts` prints the list, `install.sh --add-host <host>`
 enrolls a new host.
 
-The command line tools (`lr-auth`, `check-config`, `check-install`, `migrate`) work on the host named in
-`LINKROT_HOST`. It can be omitted if exactly one host is configured; `migrate` without it migrates every host.
+The command line tools (`lr-auth`, `check-config`, `check-install`, `migrate`, `pages-cache-clear`) work on the host named in
+`LINKROT_HOST`. It can be omitted if exactly one host is configured; `migrate` and `pages-cache-clear` without it work on every host.
 
 All folders are owned by the user nginx and php-fpm run as. `lr-auth` is run as that same user, so
 no special permission handling is needed.
@@ -102,6 +102,7 @@ All times are UTC unix seconds.
 | `rm_after` | requested lifetime in seconds (already capped) |
 | `expires_at` | `completed_at + rm_after`, null while uploading |
 | `uses_left` | remaining downloads, null = unlimited |
+| `last_use_at` | when the last use was counted, null before the first; a resume is free for a while after it, and the cleanup waits after the last use |
 
 `tokens`
 
@@ -153,7 +154,7 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
      by the retry and `422 chunk_hash_mismatch` is returned
    - `fflush` + `fsync`, then advance `offset` and `updated_at` in one statement together with the running hash
      (`files.hash_state`, a serialized `HashContext`), so state and offset can never disagree. If the state is missing
-     or unusable (an upload from before this column existed, a manual edit) it is rebuilt once from the bytes before the
+     or unusable (for example after a manual edit) it is rebuilt once from the bytes before the
      offset
 5. **Completion.** The running hash is finished with the last chunk and compared against the declared sha256, the
    file is not read again, so the last request is as short as any other. Match: status `ready`, `completed_at` and `expires_at` set, response carries the URL. Mismatch: file and
@@ -167,7 +168,7 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
    given sha256, trims the data file to the size (bytes of a rejected chunk may lie behind the offset), and only then
    looks for a duplicate: a ready file with the same sha256 wins and the stream is deleted, an incomplete upload of the
    same bytes is deleted, a stale one is cleaned up. Abandoned streams are removed by the cleanup like other uploads
-   (`upload_timeout` after the last chunk). Schema version 3 made `size` and `sha256` nullable.
+   (`upload_timeout` after the last chunk).
 
 PHP limits are irrelevant because the body is read raw from `php://input` (no multipart) and chunks are small
 (10-100 MB range, default 32 MiB). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.
@@ -191,7 +192,7 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   the headers). Headers: `Content-Disposition: attachment` (always enforced), `Content-Type:
   application/octet-stream`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, and
   `X-Accel-Redirect: /_files/<host>/files/<id>`. nginx adds `Content-Length` and handles `Range`.
-  For the nerds there is also `X-Rot: <line>`, a tagline in the shape of header parameters (`ripe; mold=low; ...`).
+  There is also `X-Rot: <line>`, a tagline in the shape of header parameters (`ripe; mold=low; ...`).
   A file always gets the same line, from the built-in list or from the `headerlines` file of the host; with
   `show_taglines` off there is no `X-Rot` header at all. nginx drops it unless the `/_files/` location passes it on with
   `add_header X-Rot $upstream_http_x_rot always;` (in [nginx.conf.example](nginx.conf.example)); without that line
@@ -201,7 +202,7 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   to the cleanup, `orphan_row_timeout` (default 1h) after the expiry, like for an exhausted file below. PHP answers a
   download with `X-Accel-Redirect` and nginx opens the file a moment later; a request that arrives after the expiry must
   not unlink the file under the download that was authorized just before it.
-- **Uses.** `--uses` is a convenience limit, not access control. A `GET` takes a use; `HEAD` and the `/file`
+- **Uses.** `--uses` is a convenience limit, **not a security feature** and not access control. A `GET` takes a use; `HEAD` and the `/file`
   page do not. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1 WHERE
   uses_left > 0`), so concurrent downloads cannot exceed the limit, and it notes the time in `last_use_at`.
   The continuation of an interrupted download is free: a single range that starts after byte 0 (`bytes=N-` or
@@ -222,7 +223,7 @@ What a host can change about its public pages, through the API (`lr config`, `lr
 
 **Settings** are six booleans, all `true` until changed: `show_taglines`, `show_startpage`, `show_title`,
 `show_linkrot_line`, `show_curl_line`, `show_hash_line`. They are rows `setting.<name>` in the `meta` table of the host
-(`app/src/Settings.php`, `SettingsStore.php`), so there is no schema change, and are read on every page request.
+(`app/src/Settings.php`, `SettingsStore.php`) and are read on every page request.
 `show_taglines` covers the footer of every page and the `X-Rot` header; `show_title` the headline with the logo on
 every page; `show_startpage` the page at `/`; the three line settings the commands of the download page, which loses its
 whole "From a terminal" section when all three are off.
@@ -276,12 +277,12 @@ sorted by `order`, then link text); the empty start page of `show_startpage` off
   that finds the lock taken (another process is making it) or the directory not writable renders in memory for itself
   and logs the reason (`linkrot pages: the cache cannot be made...`), so downloads keep working; only an upload (`PUT`)
   that cannot be stored fails, with a `500`. If the logs keep saying it, fix the permissions of `pages/`: every request
-  then pays for rendering.
+  then pays for rendering. `install.sh` removes the cache of every host (`app/bin/pages-cache-clear`) so that a new release starts clean.
 - **Start page.** A published page with `replaces_startpage: true` (a fifth key of the head, a boolean) is not a footer
   link (`PageStore::footer()` leaves it out) but one of `PageStore::startpage()`: `/` shows these pages, if there are any
   and `show_startpage` is on, instead of the about page, in the order of the footer, in one card split by `<hr>`
-  (`Page::startpage`), with the CSP of the pages. They stay reachable at `/page/<name>`. No pages, no published ones, or the
-  start page off: as before.
+  (`Page::startpage`), with the CSP of the pages. They stay reachable at `/page/<name>`. With no such page, or none that is
+  published, `/` shows the about page, and with the start page off it is empty.
 - **Limits.** 20 pages, 64 KB each, title 100 and link text 40 characters.
 
 ## Cleanup
@@ -324,7 +325,7 @@ away, because the sha256 is unique.
 ## Authentication
 
 - API requests carry `Authorization: Bearer <token>`. Everything under `/api/v1` requires it; the public URLs do not:
-  `/`, `/file/`, `/dl/` and the stylesheet of a host (`/assets/user.<hash>.css`).
+  `/`, `/file/`, `/dl/`, `/page/` and the stylesheet of a host (`/assets/user.<hash>.css`).
 - Tokens are 32 random bytes, encoded as `lr_` + base64url. The server stores only `sha256(token)` and looks the
   token up by hash, so there is nothing to compare in a timing-sensitive way.
 - `last_used_at` is bumped at most once per hour.
@@ -339,8 +340,7 @@ lr-auth del <name>   delete the token of <name>; it can no longer be used
 lr-auth ls           list tokens: name and last used date only
 ```
 
-The raw token cannot be shown again, so `del` takes the name (the original idea was `del <token>`, but only hashes are
-stored).
+Only a hash of a token is stored, so the raw token cannot be shown again and `del` takes the name.
 
 ## Rate limiting
 
@@ -353,7 +353,6 @@ authentication itself:
   (the operator configures nginx `real_ip` if there is a proxy)
 - fixed window: default 10 failed attempts per 15 minutes, configurable, hard limit: further requests get
   `429` with `Retry-After`, valid tokens included, until the window ends
-- the limiter sits behind an interface; tests use an in-memory implementation because APCu is off in the CLI
 - counters are lost when php-fpm restarts, which is accepted
 
 ## Configuration
@@ -366,11 +365,11 @@ authentication itself:
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
 | `quota` | 0 (unlimited) | most data this host may hold at once, as a size: `100`, `100b`, `100kb`, `100mb`, `100gb`, `1tb` (decimal units, case does not matter) or an integer (bytes). Counts every live file and running upload (a sized upload with its full size from the start, a streaming one with what it has received); expired files the cleanup has not removed yet do not count. Uploads over it are refused with `507 quota_exceeded`. Concurrent creates can overshoot it by what they reserve in the same moment |
 | `default_rm_after` | `1w` | lifetime if the client does not ask for one |
-| `max_rm_after` | `1y` | **mandatory cap** for any requested lifetime; can be set to e.g. `1000y`, that is an explicit decision, not a default |
+| `max_rm_after` | `1y` | **mandatory cap** for any requested lifetime; set it to e.g. `1000y` for practically none |
 | `default_uses` | unlimited | download limit if the client does not ask for one |
 | `cleanup_interval` | `8h` | minimum time between lazy cleanups |
 | `upload_timeout` | `1d` | unfinished uploads without activity are removed |
-| `orphan_row_timeout` | `1h` | rows without a data file are removed |
+| `orphan_row_timeout` | `1h` | grace period: rows without a data file are removed after it, expired and used-up files are deleted this long after the expiry or the last use, and the last download of a used-up file can still be resumed inside it |
 | `rate_limit_attempts` / `rate_limit_window` | 10 / 15 min | failed-auth limiter |
 | `download_mode` | `xaccel` | `xaccel` or `php` (development only) |
 

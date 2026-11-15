@@ -24,26 +24,34 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
 
    It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
    --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
-   Afterwards, for every host of `app_data/global-config.php`, it checks `app_data/<host>/config.php`: if the file is
-   missing it prints a prominent notice with what to create (until then every request for that host is answered with
-   "server misconfigured"), and if it exists it is loaded the way the server does, so mistakes show up at deploy time.
-   It also creates the database of every host or migrates it to the schema of this release (`app/bin/migrate`). It removes the cached
-   HTML of the pages of every host (`app/bin/pages-cache-clear`), because a new release may render the same Markdown
-   differently; the Markdown stays and the pages are rendered again by the next request. If that fails (a folder that is
-   not the php-fpm user's) it only says so. Without
-   `global-config.php` it says how to enroll the first host (step 4). The script's exit code is 0 for a missing
-   config, and non-zero if the migration fails.
+   Then, for every host of `app_data/global-config.php`, it
 
-   Once the config is valid it also checks the installation end to end (`app/bin/check-install`): with a temporary token
-   named `test-install-check` it asks the health endpoint, uploads a small file through `https://<host>`, opens its page,
-   downloads it and checks the headers (`Content-Disposition: attachment`, `nosniff`, and `X-Rot`, which only arrives
-   if the `/_files/` location of nginx passes it on, see [nginx.conf.example](nginx.conf.example); a host that switched
-   its taglines off with `lr config set taglines off` sends no `X-Rot`, and the check does not ask for it). It also stores a
-   draft page (`linkrot-install-check`), has it rendered and removes it, which needs `pages/` and the host folder to be
-   writable for the php-fpm user, and it runs the cleanup once, which needs its lock file in the same folder. A failing step does not
-   stop the others. The token, the file and the page are removed again, also when the check fails, and an old test token left by an interrupted run is replaced. A
-   failed check makes `install.sh` exit with 1. Run it as the user php-fpm runs as, after nginx is configured. On a host
-   that cannot reach its own public URL, use `install.sh --no-network-check`.
+   - checks `app_data/<host>/config.php`: if the file is missing it prints a prominent notice with what to create (until
+     then every request for that host is answered with "server misconfigured"), and if it exists it is loaded the way the
+     server does, so mistakes show up at deploy time
+   - creates the database or migrates it to the schema of this release (`app/bin/migrate`)
+   - removes the cached HTML of the pages (`app/bin/pages-cache-clear`), because a new release may render the same
+     Markdown differently; the Markdown stays and the pages are rendered again by the next request. If that fails (a
+     folder that is not the php-fpm user's) it only says so
+
+   Without `global-config.php` it says how to enroll the first host (step 4). The exit code is 0 for a missing config, and
+   non-zero if the migration fails.
+
+   Once the config is valid it also checks the installation end to end (`app/bin/check-install`), with a temporary
+   token named `test-install-check`:
+
+   - it asks the health endpoint, uploads a small file through `https://<host>`, opens its page and downloads it
+   - it checks the headers of the download: `Content-Disposition: attachment`, `nosniff`, and `X-Rot`, which only arrives
+     if the `/_files/` location of nginx passes it on (see [nginx.conf.example](nginx.conf.example)); a host that switched
+     its taglines off with `lr config set taglines off` sends no `X-Rot`, and the check does not ask for it
+   - it stores a draft page (`linkrot-install-check`), has it rendered and removes it, which needs `pages/` and the host
+     folder to be writable for the php-fpm user
+   - it runs the cleanup once, which needs its lock file in the same folder
+
+   A failing step does not stop the others. The token, the file and the page are removed again, also when the check fails,
+   and an old test token left by an interrupted run is replaced. A failed check makes `install.sh` exit with 1. Run it as
+   the user php-fpm runs as, after nginx is configured. On a host that cannot reach its own public URL, use
+   `install.sh --no-network-check`.
 
 4. Enroll a host. `{deployroot}/app_data/` is never touched by a deployment, it and everything in it must belong to the
    user php-fpm runs as (run the script as that user). Every hostname the server answers to is a tenant (see
@@ -80,8 +88,8 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    host in `server_name`, or use one block per host. Hosts that are not in `global-config.php` get `421`. Its `/assets/` location caches the stylesheet and the
    script of the pages forever; that is safe because a release names them after their content, so an upgrade brings new
    names. It also needs `try_files $uri /index.php$is_args$args;`: the stylesheet a host uploads with `lr custom put css`
-   (`/assets/user.<hash>.css`) is not a file of the release, PHP serves it. **Existing installations: add that line to the
-   `/assets/` location**, otherwise the custom stylesheet answers 404 and the pages link a stylesheet that is not there.
+   (`/assets/user.<hash>.css`) is not a file of the release, PHP serves it. Without that line the custom stylesheet answers
+   404 and the pages link a stylesheet that is not there.
 6. Create a token for every device (tokens belong to one host; `LINKROT_HOST` can be omitted with a single host), as the web user. The token is shown once:
 
    ```
@@ -112,9 +120,8 @@ It checks the signature and the file's digest and fails for a file that was chan
 
 Replace `app/` and `htdocs/` (remove the old ones, unpack the new tarball, run `app/install.sh` again) and leave
 `app_data/` alone. `install.sh` migrates the database schema; the server itself only checks the version and answers
-`503 schema_outdated` until `install.sh` has run. A new release can also need a change of the nginx block: the
-`try_files` line of the `/assets/` location (step 5 above) is required for custom stylesheets since the release that
-introduced `lr custom put css`; compare your block with [nginx.conf.example](nginx.conf.example). Restart php-fpm (or reload opcache)
+`503 schema_outdated` until `install.sh` has run. A new release can also need a change of the nginx block: compare yours with
+[nginx.conf.example](nginx.conf.example) after every upgrade. Restart php-fpm (or reload opcache)
 afterwards; this also resets the failed-login counters in APCu.
 
 ## CLI
@@ -127,7 +134,7 @@ install -m 0755 linkrot ~/.local/bin/linkrot
 ln -s linkrot ~/.local/bin/lr          # optional short name, help and completion use the name it is called as
 
 linkrot config --server https://linkrot.example
-linkrot config --token <token from lr-auth>
+linkrot config --token                 # asks for the token from lr-auth, the input is hidden
 ```
 
 Shell completion (replace `linkrot` with `lr` if that is what you call it):

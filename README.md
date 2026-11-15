@@ -80,7 +80,9 @@ uploads it every time you save, so you can refresh the browser and see what you 
   file is verified at the end. A lost connection costs one chunk, not the evening.
 - **Pipes.** `pg_dump db | gzip | lr up --mv db.sql.gz` works; the hash is sent at the end.
 - **Expiry, and a download limit.** Pick a lifetime from `1h` up (the server has a mandatory maximum) and optionally a
-  number of downloads. Expired files act as not found immediately, even before the cleanup removes them.
+  number of downloads. Expired files act as not found immediately, even before the cleanup removes them. The download
+  limit is a convenience for honest clients, **not a security feature**: anyone who has the link can download until it
+  expires, and can copy the file.
 - **Duplicate detection.** The same bytes twice give you the existing link.
 - **Downloads from the terminal**, with resume, verification and a promise never to overwrite your files: `lr down`.
 - **One user, many devices.** Every device has its own token; a lost laptop costs you one `lr-auth del`.
@@ -138,8 +140,8 @@ sudo -u www-data LINKROT_HOST=files.example.com /srv/linkrot/app/bin/lr-auth get
   admin UI, no web upload. The server offers public download links and a token-guarded API. All tokens belong to
   the same (single) user; they exist so each device can have its own token. A compromised token is revoked by
   deleting just that token, nothing else needs rotating.
-- **Links rot.** Every file has an expiry, and optionally a maximum number of downloads. Expired files behave as
-  not found even if the cleanup has not yet physically removed them.
+- **Links rot.** Every file has an expiry, and optionally a maximum number of downloads (a convenience, not a security
+  feature). Expired files behave as not found even if the cleanup has not yet physically removed them.
 - **No scheduler.** The server is a classic PHP request/response application without cronjob. Cleanup runs lazily,
   piggybacking on incoming requests (see [docs/SERVER.md](docs/SERVER.md)).
 - **One installation, many hosts.** Every hostname listed in `app_data/global-config.php` is a tenant of its own:
@@ -176,25 +178,6 @@ docs/              documentation; docs/img the images of this README, docs/showc
 Makefile           delegates to server/ and cli/
 ```
 
-## Decisions at a glance
-
-| Topic | Decision |
-| --- | --- |
-| Public file id | 16 random characters, first 4 lowercase, lookalikes `1 0 l o I O` removed (see [SERVER.md](docs/SERVER.md#identifiers)). No uuid, no sqids. |
-| Upload | sequential chunks, each chunk followed by its own sha256, whole-file sha256 verified at completion |
-| Streaming upload | `lr up` reads stdin when no file is given (refused on a terminal): created without size and hash, same verified chunks, sealed with the sha256 of everything (see [API.md](docs/API.md#streaming-uploads)) |
-| Duplicate uploads | refused; the existing file is reported |
-| Expiry | `rm-after` counts from upload completion (`up`) or from now (`set`); capped by a mandatory server-side maximum |
-| Download limit | optional `--uses n`; exhausted files count as expired |
-| Public URL | `https://<host>` from `global-config.php`; plain `http://` with the request's port only for `localhost` and `127.x` (development). No `base_url` setting |
-| Settings | six booleans per host, all on by default, stored in the host's database, changed with `lr config set` (see [API.md](docs/API.md#get-settings-patch-settings---the-look-of-the-public-pages)) |
-| Custom files | `taglines`, `headerlines` and `css` per host, replaced with `lr custom put`; the built-in version is served but never written to disk until an upload; a replaced stylesheet stays reachable for a day (see [API.md](docs/API.md#getputdelete-customname---files-that-replace-the-built-in-look)) |
-| Static pages | Markdown with a small strict head (`title`, `link`, `order`, `published`, `lang`), rendered once at upload with `league/commonmark`, no raw HTML, https and data images; the original is kept and downloadable; linked in the footer of every page, or, with `replaces_startpage: true`, shown at `/` instead of the about page (see [API.md](docs/API.md#get-pages-getputdelete-pagesname-get-page-template---static-pages)) |
-| Cleanup | lazy, on requests, guarded by `flock`; also triggerable with `linkrot cleanup` |
-| Rate limiting | own limiter on failed authentication, stored in APCu, keyed by hashed client IP |
-| Tokens | only hashes stored; named per device; `lr-auth get\|del\|ls` |
-| Quality gates | phpstan level 7, rector, php-cs-fixer, phpunit; Go: `go vet`, `golangci-lint`, `gofumpt`, `go test`; pre-commit hook runs `make precommit` |
-
 ## License
 
 Copyright (C) 2026 Schorsch3000
@@ -209,4 +192,4 @@ The dependencies keep their own licenses, all compatible with the GPL: `bacon/ba
 `dasprid/enum` (BSD-2-Clause), `league/commonmark` and `league/config` (BSD-3-Clause), `dflydev/dot-access-data` (MIT),
 `nette/schema` and `nette/utils` (BSD-3-Clause or GPL), `psr/event-dispatcher` and the `symfony` polyfill and contracts (MIT),
 `spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
-(MIT), `inconshreveable/mousetrap` (Apache-2.0). Development tools are not shipped.
+(MIT), `inconshreveable/mousetrap` (Apache-2.0), `golang.org/x/term` and `golang.org/x/sys` (BSD-3-Clause). Development tools are not shipped.

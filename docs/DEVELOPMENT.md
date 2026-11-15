@@ -7,7 +7,8 @@ Makefile                 runs the same target in server/ and cli/
 .githooks/pre-commit     runs `make precommit`
 server/
   Makefile
-  app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/lr-auth,
+  app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/ (`lr-auth`, `migrate`,
+                         `check-config`, `check-install`, `pages-cache-clear`, `hosts`),
                          composer.json + composer.lock (all used PHP extensions are listed under `require`),
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
@@ -34,6 +35,9 @@ Client and server each have a Makefile with the usual targets:
 | `install` | install dependencies (`composer install` / `go mod download`, tools) |
 | `build` | server: nothing to compile, assemble the deployable tree in `build/dist`; cli: `go build` into `bin/` |
 | `dist` | release artefacts: server `build/linkrot-server-$(VERSION).tar.gz`, cli `dist/*` for all platforms (`make dist VERSION=1.2.3`) |
+| `dist-test` | server only: unpacks the tarball like a deployment and runs `app/install.sh` on it, also end to end against `php -S` (CI runs it) |
+| `coverage` | server only: the line coverage of `app/src` as text (needs Xdebug or PCOV) |
+| `preview` | server only: sample download pages for every icon type, to open in a browser (`build/preview/index.html`) |
 | `run` | server: `php -S` with `download_mode = php`; cli: `go run` |
 | `test` | phpunit / `go test ./...` |
 | `lint` | static analysis and style checks without modifying files |
@@ -44,8 +48,8 @@ Client and server each have a Makefile with the usual targets:
 | `clean` | remove build artefacts |
 | `precommit` | tests, linting and format check; must pass for a commit |
 
-The root Makefile forwards `install`, `build`, `dist`, `test`, `lint`, `fmt`, `clean`, `precommit` to both parts and has
-`install-hooks`.
+The root Makefile forwards `install`, `build`, `dist`, `test`, `lint`, `audit`, `repro`, `fmt`, `clean` and `precommit` to both parts and
+has `install-hooks` and `showcase`.
 
 ## Tooling
 

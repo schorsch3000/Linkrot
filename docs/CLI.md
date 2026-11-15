@@ -39,7 +39,7 @@ Uploads a file and prints its URL on stdout. Without `<file>` (or with `-`) the 
 | --- | --- |
 | `--rm-after <time>` | delete after `<time>` counted from completion of the upload; default is the server's default |
 | `--mv <newname>` | name on the server; default is the basename of `<file>`, `stdin` when reading stdin |
-| `--uses <n>` | allow only `n` downloads; default is the server's default (unlimited unless configured) |
+| `--uses <n>` | allow only `n` downloads; default is the server's default (unlimited unless configured). A convenience limit, **not a security feature**: anyone with the link can copy the file |
 | `--copy[=<selection>]` | copy the URL; without a value via OSC 52 (works over SSH), with `clipboard` or `primary` via `wl-copy`, `xclip`, `xsel` or `pbcopy`. The `=` form is required because a space would be read as the file argument |
 | `--json` | print the file object as JSON instead of the bare URL |
 
@@ -106,11 +106,11 @@ Downloads a file.
 - otherwise `target` is the file name; its parent directory must exist
 - **never overwrites** a file and **never creates** a directory
 - the data goes to `<name>.<start of the sha256>.part` first (created with `O_EXCL`), is resumed with `Range` if that file exists, is
-  verified against the sha256 and is then moved into place with `link()` + `unlink()` so an existing file can never
-  be replaced. On a filesystem without hard links (FAT, some network or FUSE mounts, Termux) it creates the file with
-  `O_EXCL` instead and copies the data into it, which still never replaces anything but is not atomic: a crash while
-  copying leaves a truncated file, a failed or mismatching copy is removed again and the `.part` is kept. If the final name exists the command fails and says so. Because the hash is in the name, a `<name>.part` that
-  another program wrote is never resumed, appended to or deleted, and the partial data of another version is not continued
+  verified against the sha256 and is then moved into place in a way that fails if the name exists, so an existing file can
+  never be replaced (where hard links are missing it copies instead, see [Limits and caveats](#limits-and-caveats)). If the
+  final name exists the command fails and says so
+- a `<name>.part` that another program wrote is never resumed, appended to or deleted, and the partial data of another
+  version of the file is not continued
 - the server-supplied name is sanitised (`filepath.Base`, `..`, empty names and path separators rejected)
 
 ### `cleanup`
@@ -142,7 +142,7 @@ The settings are `show_taglines`, `show_startpage`, `show_title`, `show_linkrot_
 `show_hash_line`, see [API.md](API.md#get-settings-patch-settings---the-look-of-the-public-pages). All are on by default.
 `show_` and `_`/`-` are optional when typing them: `lr config set curl-line off`.
 
-The config file is `$XDG_CONFIG_HOME/linkrot/config.toml` (default `~/.config/linkrot/config.toml`) with mode `0600`; `$LINKROT_CONFIG` overrides the path. The directory is fixed and does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
+The directory of the config file does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
 
 ### `custom`
 

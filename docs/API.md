@@ -55,7 +55,8 @@ Request:
 { "name": "report.pdf", "size": 1234567, "sha256": "9f86d0...", "rm_after": "2d", "uses": 5 }
 ```
 
-`rm_after` and `uses` are optional; the server defaults apply. `size` >= 0 (a zero byte file is complete right away).
+`rm_after` and `uses` are optional; the server defaults apply. `uses` is a convenience limit, not a security feature (see
+[SERVER.md](SERVER.md#limits-and-caveats)). `size` >= 0 (a zero byte file is complete right away).
 
 | status | meaning | body |
 | --- | --- | --- |
@@ -146,7 +147,7 @@ Body: the chunk bytes immediately followed by the raw 32 byte sha256 digest of e
 ### `GET /files` - list
 
 Returns `{ "files": [ <file object>, ... ], "quota": { "used": <bytes>, "limit": <bytes or null> } }`, newest first, including incomplete uploads (`status: uploading`).
-Expired files are not listed. `used` is what the live files and running uploads occupy, `limit` the host's `quota` (`null` if there is none). The CLI uses this to resolve id prefixes, for shell completion and to show the quota below `ls`.
+Expired and used-up files are not listed. `used` is what the live files and running uploads occupy, `limit` the host's `quota` (`null` if there is none). The CLI uses this to resolve id prefixes, for shell completion and to show the quota below `ls`.
 
 ### `PATCH /files/{id}` - change metadata
 
@@ -173,7 +174,7 @@ Needs a token. Always `200` with the worst level of all checks and the checks th
 
 ```json
 {"status": "warn", "checks": [
-  {"name": "database", "level": "ok",   "message": "schema version 3"},
+  {"name": "database", "level": "ok",   "message": "schema version 4"},
   {"name": "storage",  "level": "ok",   "message": "data and files directory are writable"},
   {"name": "disk",     "level": "ok",   "message": "212.4 GiB free of 458.0 GiB"},
   {"name": "cleanup",  "level": "warn", "message": "the cleanup has not run yet"}
@@ -299,7 +300,8 @@ No authentication.
 - `GET /page/{name}` - a published static page of the host, see [above](#get-pages-getputdelete-pagesname-get-page-template---static-pages).
 - `GET /assets/user.<hash>.css` - the custom stylesheet of the host, see [above](#getputdelete-customname---files-that-replace-the-built-in-look).
 
-Unknown, expired, exhausted or incomplete files answer `404` in the same way for all of these cases.
+Unknown, expired, exhausted or incomplete files answer `404` in the same way for all of these cases. The one exception is
+the continuation of the last download of an exhausted file, see [SERVER.md](SERVER.md#download).
 
 ## Errors
 
@@ -318,8 +320,8 @@ Unknown, expired, exhausted or incomplete files answer `404` in the same way for
 | 413 | `too_large` |
 | 422 | `chunk_hash_mismatch`, `file_hash_mismatch` |
 | 429 | `rate_limited` (`Retry-After` set) |
+| 500 | `internal`, `cleanup_lock` |
 | 503 | `busy` (`Retry-After` set: another process holds the database, try again), `schema_outdated` |
-| 507 | `insufficient_storage` |
-| 500 | `internal` |
+| 507 | `insufficient_storage`, `quota_exceeded` |
 
 Failed authentication counts against the rate limit of the client address (see [SERVER.md](SERVER.md#rate-limiting)).
