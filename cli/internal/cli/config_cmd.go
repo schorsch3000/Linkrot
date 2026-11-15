@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,7 +16,7 @@ func (a *App) configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show or set the server URL and token; get and set change the settings of the server",
-		Example: fmt.Sprintf("  %[1]s config --server https://linkrot.example\n  %[1]s config --token <token>\n  %[1]s config\n  %[1]s config get\n  %[1]s config set taglines off",
+		Example: fmt.Sprintf("  %[1]s config --server https://linkrot.example\n  %[1]s config --token <token>\n  %[1]s config --token - < token-file\n  %[1]s config\n  %[1]s config get\n  %[1]s config set taglines off",
 			a.Name),
 		Args: usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -32,6 +35,11 @@ func (a *App) configCommand() *cobra.Command {
 					}
 				}
 				if cmd.Flags().Changed("token") {
+					if token == "-" {
+						if token, err = readToken(a.stdin()); err != nil {
+							return err
+						}
+					}
 					if token == "" {
 						return usageErrorf("token must not be empty")
 					}
@@ -49,6 +57,15 @@ func (a *App) configCommand() *cobra.Command {
 	}
 	cmd.AddCommand(a.settingsCommands()...)
 	cmd.Flags().StringVar(&server, "server", "", "server URL, e.g. https://linkrot.example")
-	cmd.Flags().StringVar(&token, "token", "", "API token (see lr-auth on the server)")
+	cmd.Flags().StringVar(&token, "token", "", "API token (see lr-auth on the server); `-` reads it from stdin, which keeps it out of the shell history and the process list")
 	return cmd
+}
+
+// readToken takes the first line of r, trimmed.
+func readToken(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(io.LimitReader(r, 4096)).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("read token from stdin: %w", err)
+	}
+	return strings.TrimSpace(line), nil
 }

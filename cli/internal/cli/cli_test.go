@@ -116,3 +116,66 @@ func TestVersionFlag(t *testing.T) {
 		t.Fatalf("code %d, out %q", code, out)
 	}
 }
+
+// The token on the command line shows up in shell history and in ps; "--token -" takes it from stdin instead.
+func TestConfigTokenFromStdin(t *testing.T) {
+	for name, tc := range map[string]struct{ stdin, want string }{
+		"one line":        {"lr_abcdefghijklmnop\n", "lr_abcdefghijklmnop"},
+		"no newline":      {"lr_abcdefghijklmnop", "lr_abcdefghijklmnop"},
+		"crlf and blanks": {"  lr_abcdefghijklmnop \r\n", "lr_abcdefghijklmnop"},
+		"only the first":  {"lr_abcdefghijklmnop\nsomething else\n", "lr_abcdefghijklmnop"},
+		"long token":      {strings.Repeat("a", 200) + "\n", strings.Repeat("a", 200)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			t.Setenv(config.EnvPath, path)
+			var out, errb bytes.Buffer
+			app := &App{Name: "lr", In: strings.NewReader(tc.stdin), Out: &out, Err: &errb, ConfigPath: config.Path}
+
+			code := app.Run([]string{"config", "--token", "-"})
+
+			if code != 0 {
+				t.Fatalf("code %d: %s", code, errb.String())
+			}
+			c, err := config.Load(path)
+			if err != nil || c.Token != tc.want {
+				t.Fatalf("token %q, %v; want %q", c.Token, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestConfigTokenFromStdinMustNotBeEmpty(t *testing.T) {
+	for name, stdin := range map[string]string{"nothing": "", "blank line": "\n", "blanks": "  \r\n"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			t.Setenv(config.EnvPath, path)
+			var out, errb bytes.Buffer
+			app := &App{Name: "lr", In: strings.NewReader(stdin), Out: &out, Err: &errb, ConfigPath: config.Path}
+
+			code := app.Run([]string{"config", "--token", "-"})
+
+			if code != ExitUsage || !strings.Contains(errb.String(), "token") {
+				t.Fatalf("code %d, stderr %q", code, errb.String())
+			}
+			if _, err := os.Stat(path); err == nil {
+				t.Fatal("the config must not be written")
+			}
+		})
+	}
+}
+
+func TestConfigTokenFromStdinCombinesWithServer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv(config.EnvPath, path)
+	app := &App{Name: "lr", In: strings.NewReader("lr_abcdefghijklmnop\n"), Out: &bytes.Buffer{}, Err: &bytes.Buffer{}, ConfigPath: config.Path}
+
+	if code := app.Run([]string{"config", "--server", "https://lr.example", "--token", "-"}); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+
+	c, err := config.Load(path)
+	if err != nil || c.Server != "https://lr.example" || c.Token != "lr_abcdefghijklmnop" {
+		t.Fatalf("%+v %v", c, err)
+	}
+}

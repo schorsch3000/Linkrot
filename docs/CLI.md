@@ -115,7 +115,8 @@ Asks the server to run its cleanup now (`POST /cleanup`).
 
 ```
 config --server <url>     set the server URL, e.g. https://linkrot.example (https only; http is accepted for localhost and loopback addresses, and an https to http redirect is refused)
-config --token <token>    set the token
+config --token <token>    set the token (it ends up in the shell history and the process list; prefer the next form)
+config --token -          read the token from the first line of stdin, e.g. `lr config --token - < token-file`
 config                    show the current configuration (token masked)
 config get [--json]       show the settings of the server (they change its public pages)
 config set <setting> <on|off> [<setting> <on|off>...]   change settings of the server
