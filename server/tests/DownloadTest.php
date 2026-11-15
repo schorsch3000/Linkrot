@@ -121,6 +121,25 @@ final class DownloadTest extends AppTestCase
         return (int) \Linkrot\Database::query($this->app->db(), 'SELECT uses_left FROM files WHERE id = ' . $this->app->db()->quote($id))->fetchColumn();
     }
 
+    /** nginx serves `//dl/x` with the /dl/ location and passes the URI on unchanged: the app has to agree. */
+    public function testRepeatedSlashesAreServedLikeTheCanonicalPath(): void
+    {
+        $id = $this->upload('abc');
+        $server = $_SERVER;
+        try {
+            foreach (["//dl/$id/a.txt", "/dl//$id/a.txt", "///dl///$id///a.txt"] as $uri) {
+                $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => $uri . '?x=//y', 'REMOTE_ADDR' => '192.0.2.1'];
+
+                $response = $this->app->handle(\Linkrot\Http\Request::fromGlobals());
+
+                self::assertSame(200, $response->status, $uri);
+                self::assertArrayHasKey('X-Accel-Redirect', $response->headers, $uri);
+            }
+        } finally {
+            $_SERVER = $server;
+        }
+    }
+
     public function testHeadPageAndResumedRangesDoNotConsumeUses(): void
     {
         $id = $this->upload('abcdef', extra: ['uses' => 2]);

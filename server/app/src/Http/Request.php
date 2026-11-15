@@ -64,10 +64,27 @@ final readonly class Request
                 $query[(string) $key] = $value;
             }
         }
-        $uri = $server['REQUEST_URI'] ?? '/';
-        $path = rawurldecode((string) parse_url($uri, PHP_URL_PATH));
 
-        return new self(strtoupper($server['REQUEST_METHOD'] ?? 'GET'), $path, $headers, $query, $server);
+        return new self(strtoupper($server['REQUEST_METHOD'] ?? 'GET'), self::pathOf($server['REQUEST_URI'] ?? '/'), $headers, $query, $server);
+    }
+
+    /**
+     * The path to route, from the request URI as nginx hands it on. nginx merges runs of slashes before it picks the
+     * location (`//dl/x` is served by the `/dl/` location) but keeps the URI as it came, so the same is done here:
+     * parse_url would take `dl` for a host and route `/x`, or give up on `///`. The query and a fragment are cut off,
+     * a scheme and host of the absolute form too, and percent-decoding comes last (an encoded slash stays one segment
+     * longer than the merge sees it, as before).
+     */
+    private static function pathOf(string $uri): string
+    {
+        $uri = preg_replace('~^[a-z][a-z0-9+.-]*://[^/?#]*~i', '', $uri) ?? $uri;
+        $path = substr($uri, 0, strcspn($uri, '?#'));
+        $path = preg_replace('~/{2,}~', '/', $path) ?? $path;
+        if (!str_starts_with($path, '/')) {
+            $path = '/' . $path;
+        }
+
+        return rawurldecode($path);
     }
 
     public function header(string $name): ?string
