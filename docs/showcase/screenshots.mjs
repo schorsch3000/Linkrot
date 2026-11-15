@@ -132,4 +132,14 @@ await shoot('themed-download.png', photos.path, 'light');
 await shoot('imprint.png', '/page/imprint', 'light');
 await shoot('startpage.png', '/', 'light');
 
+// the same download page with five of the six switches off: no headline, no tagline, no commands for a terminal
+await api('PATCH', '/api/v1/settings', {
+  show_taglines: false,
+  show_title: false,
+  show_linkrot_line: false,
+  show_curl_line: false,
+  show_hash_line: false,
+}, json());
+await shoot('minimal-download.png', photos.path, 'light');
+
 await browser.close();
