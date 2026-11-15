@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -509,5 +511,91 @@ func TestPartPathDependsOnTheContent(t *testing.T) {
 	a, b := PartPath("x/report.txt", contentSum), PartPath("x/report.txt", strings.Repeat("0", 64))
 	if a == b || a == "x/report.txt.part" || !strings.HasSuffix(a, ".part") || !strings.HasPrefix(a, "x/report.txt") {
 		t.Fatalf("%q %q", a, b)
+	}
+}
+
+func linkUnsupported(string, string) error {
+	return &os.LinkError{Op: "link", Err: syscall.EPERM} // what FAT, some SMB/FUSE mounts and Termux answer
+}
+
+// On a filesystem without hard links the file still arrives, by an exclusive create and a copy.
+func TestFilesystemWithoutHardLinksFallsBackToACopy(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	o := noSleep()
+	o.Link = linkUnsupported
+
+	path, err := Download(t.Context(), c, id, dir, o)
+
+	if err != nil || path != filepath.Join(dir, "report.txt") || read(t, path) != content {
+		t.Fatalf("%q %v", path, err)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Fatalf("leftovers: %v", entries)
+	}
+}
+
+// The fallback keeps the promise: a file that appears at the last moment is not replaced, the download is kept.
+func TestFallbackNeverOverwritesAFileThatAppearedMeanwhile(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	dest := filepath.Join(dir, "report.txt")
+	o := noSleep()
+	o.Link = func(string, string) error {
+		if err := os.WriteFile(dest, []byte("mine"), 0o600); err != nil {
+			t.Error(err)
+		}
+		return linkUnsupported("", "")
+	}
+
+	_, err := Download(t.Context(), c, id, dir, o)
+
+	if err == nil || !strings.Contains(err.Error(), "not overwriting") || !strings.Contains(err.Error(), ".part") {
+		t.Fatalf("%v", err)
+	}
+	if read(t, dest) != "mine" {
+		t.Fatal("the file that appeared was replaced")
+	}
+	if _, err := os.Stat(PartPath(dest, contentSum)); err != nil {
+		t.Fatal("the download must be kept")
+	}
+}
+
+// "already exists" from link() is the answer, not a reason to copy.
+func TestLinkSaysExistsThenThereIsNoFallback(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	o := noSleep()
+	o.Link = func(string, string) error { return &os.LinkError{Op: "link", Err: fs.ErrExist} }
+
+	_, err := Download(t.Context(), c, id, dir, o)
+
+	if err == nil || !strings.Contains(err.Error(), "not overwriting") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "report.txt")); err == nil {
+		t.Fatal("the destination was created")
+	}
+}
+
+// A copy that does not match what was verified is removed again; the download stays.
+func TestCopyThatDoesNotMatchIsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	part, dest := filepath.Join(dir, "a.part"), filepath.Join(dir, "a")
+	if err := os.WriteFile(part, []byte("not the content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := moveByCopy(part, dest, &api.File{Size: int64(len(content)), SHA256: contentSum})
+
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if _, err := os.Lstat(dest); err == nil {
+		t.Fatal("the bad copy was left under the final name")
+	}
+	if _, err := os.Stat(part); err != nil {
+		t.Fatal("the download must be kept")
 	}
 }

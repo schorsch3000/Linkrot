@@ -25,6 +25,8 @@ type Options struct {
 	OnRetry    func(err error, wait time.Duration)
 	MaxRetries int
 	Sleep      func(ctx context.Context, d time.Duration) error
+	// Link is os.Link unless a test replaces it.
+	Link func(oldname, newname string) error
 }
 
 // Download fetches the file with the given id. target is empty (current directory, original name),
@@ -107,11 +109,21 @@ func Download(ctx context.Context, c *api.Client, id, target string, o Options) 
 		return "", err
 	}
 	// link() fails if dest exists, so a file that appeared meanwhile is never replaced (rename would).
-	if err := os.Link(part, dest); err != nil {
+	link := o.Link
+	if link == nil {
+		link = os.Link
+	}
+	if err := link(part, dest); err != nil {
+		if !errors.Is(err, fs.ErrExist) {
+			// No hard links here (FAT, some SMB/NFS/FUSE mounts, Termux): an exclusive create keeps the promise too.
+			err = moveByCopy(part, dest, file)
+		}
 		if errors.Is(err, fs.ErrExist) {
 			return "", fmt.Errorf("%s already exists, not overwriting (the download is kept as %s)", dest, part)
 		}
-		return "", fmt.Errorf("move into place: %w (the download is kept as %s)", err, part)
+		if err != nil {
+			return "", fmt.Errorf("move into place: %w (the download is kept as %s)", err, part)
+		}
 	}
 	if err := os.Remove(part); err != nil {
 		return "", err
@@ -291,4 +303,36 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
+}
+
+// moveByCopy puts the verified partial file under its final name where hard links are not available. dest is created
+// with O_EXCL, so nothing that exists is replaced. Unlike link() it is not atomic: while it runs, dest is visible
+// half written, and a crash leaves it truncated. A copy that fails or does not match is removed again; it is ours,
+// we created it. The partial file stays for the caller to remove.
+func moveByCopy(part, dest string, file *api.File) error {
+	src, err := os.Open(part) //nolint:gosec // our own partial file
+	if err != nil {
+		return err
+	}
+	defer func() { _ = src.Close() }()
+	dst, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o666) //nolint:gosec // permissions follow the umask
+	if err != nil {
+		return err
+	}
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(dst, h), src)
+	if err == nil {
+		err = dst.Sync()
+	}
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && (n != file.Size || hex.EncodeToString(h.Sum(nil)) != file.SHA256) {
+		err = errors.New("the copy does not match the checksum of the file")
+	}
+	if err != nil {
+		_ = os.Remove(dest)
+		return err
+	}
+	return nil
 }

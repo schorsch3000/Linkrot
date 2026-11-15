@@ -105,7 +105,9 @@ Downloads a file.
 - **never overwrites** a file and **never creates** a directory
 - the data goes to `<name>.<start of the sha256>.part` first (created with `O_EXCL`), is resumed with `Range` if that file exists, is
   verified against the sha256 and is then moved into place with `link()` + `unlink()` so an existing file can never
-  be replaced. If the final name exists the command fails and says so. Because the hash is in the name, a `<name>.part` that
+  be replaced. On a filesystem without hard links (FAT, some network or FUSE mounts, Termux) it creates the file with
+  `O_EXCL` instead and copies the data into it, which still never replaces anything but is not atomic: a crash while
+  copying leaves a truncated file, a failed or mismatching copy is removed again and the `.part` is kept. If the final name exists the command fails and says so. Because the hash is in the name, a `<name>.part` that
   another program wrote is never resumed, appended to or deleted, and the partial data of another version is not continued
 - the server-supplied name is sanitised (`filepath.Base`, `..`, empty names and path separators rejected)
 
