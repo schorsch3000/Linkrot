@@ -118,4 +118,92 @@ final class PagesCacheTest extends AppTestCase
             chmod($this->dir . '/pages', 0o755);
         }
     }
+
+    /**
+     * A cache from an older renderer: the index says so, and the `.html` of the page is still there (not deleted, unlike in
+     * staleCache()) with output that the current rules would not produce.
+     */
+    private function oldRendererCache(): void
+    {
+        $put = $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\nlink: Impressum\n---\n# Angaben\n\nMusterstraße 1\n");
+        self::assertSame(200, $put->status);
+        $index = json_decode((string) file_get_contents($this->dir . '/pages/index.json'), true);
+        $index['pages'][0]['render_version'] = \Linkrot\Pages\PageRenderer::VERSION - 1;
+        file_put_contents($this->dir . '/pages/index.json', json_encode($index));
+        file_put_contents($this->dir . '/pages/imprint.html', '<p>OLD-RENDERER-HTML</p>');
+    }
+
+    private function assertFreshImprint(): void
+    {
+        $body = $this->request('GET', '/page/imprint', auth: false)->body;
+        self::assertStringContainsString('Musterstraße 1', $body, 'rendered from the Markdown');
+        self::assertStringNotContainsString('OLD-RENDERER-HTML', $body, 'the html of an older renderer is not served');
+        $preview = $this->request('GET', '/api/v1/pages/imprint?format=html')->body;
+        self::assertStringNotContainsString('OLD-RENDERER-HTML', $preview);
+    }
+
+    public function testHtmlOfAnOlderRendererIsNotServedWhileAnotherProcessMakesTheCache(): void
+    {
+        $this->oldRendererCache();
+        $lock = fopen($this->dir . '/pages/pages.lock', 'c') ?: self::fail('open');
+        self::assertTrue(flock($lock, LOCK_EX | LOCK_NB), 'the test plays the other process');
+        try {
+            $this->assertFreshImprint();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    public function testHtmlOfAnOlderRendererIsNotServedWhenTheLockCannotBeOpened(): void
+    {
+        if (posix_geteuid() === 0) {
+            self::markTestSkipped('root can write anywhere');
+        }
+        $this->oldRendererCache();
+        file_put_contents($this->dir . '/pages/pages.lock', '');
+        chmod($this->dir . '/pages/pages.lock', 0o000);
+        chmod($this->dir . '/pages', 0o555);
+        try {
+            $this->assertFreshImprint();
+        } finally {
+            chmod($this->dir . '/pages', 0o755);
+            chmod($this->dir . '/pages/pages.lock', 0o644);
+        }
+    }
+
+    public function testHtmlOfAnOlderRendererIsNotServedWhenTheCacheCannotBeWritten(): void
+    {
+        if (posix_geteuid() === 0) {
+            self::markTestSkipped('root can write anywhere');
+        }
+        $this->oldRendererCache();
+        chmod($this->dir . '/pages', 0o555);
+        chmod($this->dir . '/pages/imprint.html', 0o444);
+        try {
+            $this->assertFreshImprint();
+        } finally {
+            chmod($this->dir . '/pages', 0o755);
+            chmod($this->dir . '/pages/imprint.html', 0o644);
+        }
+    }
+
+    public function testAnOlderRendererCacheIsMadeAgainWhenNothingGetsInTheWay(): void
+    {
+        $this->oldRendererCache();
+
+        $this->assertFreshImprint();
+
+        self::assertStringContainsString('Musterstraße 1', (string) file_get_contents($this->dir . '/pages/imprint.html'), 'the cache was rewritten');
+    }
+
+    /** The rendered file is the point of the cache: while the index is current, it is what is served. */
+    public function testAValidCacheIsServedFromItsFile(): void
+    {
+        $put = $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\n---\nfrom the markdown\n");
+        self::assertSame(200, $put->status);
+        file_put_contents($this->dir . '/pages/imprint.html', '<p>FROM-THE-CACHE-FILE</p>');
+
+        self::assertStringContainsString('FROM-THE-CACHE-FILE', $this->request('GET', '/page/imprint', auth: false)->body);
+    }
 }
