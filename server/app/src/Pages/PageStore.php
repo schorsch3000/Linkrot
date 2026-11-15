@@ -125,15 +125,21 @@ final readonly class PageStore
     /** The rendered body (an HTML fragment) of a page, published or not. */
     public function html(string $slug): ?string
     {
-        if (!self::isSlug($slug) || !$this->meta($slug) instanceof \Linkrot\Pages\PageMeta) {
+        if (!self::isSlug($slug)) {
             return null;
         }
-        $html = @file_get_contents($this->path($slug, 'html'));
+        [$index, $cached] = $this->indexAndCache();
+        if (!isset($index[$slug])) {
+            return null;
+        }
+        // Only a cache that the index vouches for is read. If the index had to be made in memory (an older renderer, a
+        // damaged index, and the cache could not be rebuilt) the `.html` files may be from that older renderer.
+        $html = $cached ? @file_get_contents($this->path($slug, 'html')) : false;
         if ($html !== false) {
             return $html;
         }
 
-        // the cache could not be written (or is being made): render this page from its source
+        // the cache is not usable (or this file is missing): render this page from its source
         $source = $this->source($slug);
         if ($source === null) {
             return null;
@@ -296,24 +302,35 @@ final readonly class PageStore
      */
     private function index(): array
     {
+        return $this->indexAndCache()[0];
+    }
+
+    /**
+     * The index, and whether the rendered files next to it can be trusted: true if the index on disk is current or was
+     * just made together with them, false if it only exists in memory because the cache could not be made.
+     *
+     * @return array{array<string, PageMeta>, bool}
+     */
+    private function indexAndCache(): array
+    {
         $index = $this->readIndex();
         if ($index !== null) {
-            return $index;
+            return [$index, true];
         }
         if (!is_dir($this->dir)) {
-            return [];
+            return [[], true];
         }
         try {
             $made = $this->tryLocked($this->currentIndex(...));
             if ($made !== null) {
-                return $made;
+                return [$made, true];
             }
             // somebody else is making it right now: do not queue behind them
         } catch (\Throwable $e) {
             error_log('linkrot pages: the cache cannot be made, rendering without it: ' . $e->getMessage());
         }
 
-        return $this->renderSources()[0];
+        return [$this->renderSources()[0], false];
     }
 
     /**
