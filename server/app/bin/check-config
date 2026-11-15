@@ -23,10 +23,11 @@ if (isset($argv[1])) {
 }
 
 try {
-    if (is_file($root . '/' . Tenants::FILE_NAME)) {
-        Tenants::load($root . '/' . Tenants::FILE_NAME, strict: true);
+    $tenants = is_file($root . '/' . Tenants::FILE_NAME) ? Tenants::load($root . '/' . Tenants::FILE_NAME, strict: true) : null;
+    $config = Config::load($file, Config::baseUrlFor($host ?? 'localhost'), strict: true);
+    if ($config->email !== null && $tenants?->mailFrom === null) {
+        fwrite(STDERR, "warning: email is set, but global-config.php has no mail.from: no code will be sent\n");
     }
-    Config::load($file, Config::baseUrlFor($host ?? 'localhost'), strict: true);
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . "\n");
     exit(1);

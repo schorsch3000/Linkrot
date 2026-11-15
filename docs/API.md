@@ -288,6 +288,37 @@ may come from any `https` address and from `data:` URLs (`img-src 'self' https: 
 `ETag` and `Cache-Control: no-cache`, so a repeat visit is a `304` and a change is visible at once. A draft and an
 unknown name are the same `404`.
 
+### Tokens by mail
+
+How the owner of a host gets and manages tokens without shell access, see [SERVER.md](SERVER.md#tokens-by-mail). These
+routes take no API token; the token routes take a management session instead (`Authorization: Bearer lm_...`).
+
+#### `POST /auth/start`
+
+```json
+{ "email": "me@example.com" }
+```
+
+Always `202` `{ "challenge": "<id>", "expires_in": 600, "message": "..." }`, for every address and after exactly 5
+seconds; if the address is the one configured for the host, a code was mailed. `400 invalid_request` without an address,
+`429 rate_limited` if the client address asked too often.
+
+#### `POST /auth/verify`
+
+```json
+{ "challenge": "<id>", "code": "ABCD-EFGH" }
+```
+
+`200` `{ "session": "lm_...", "expires_in": 600 }`. The code may be typed in lower case and with or without the dash.
+`401 invalid_code` for a wrong, used, expired or unknown code (the same answer), `429 rate_limited`.
+
+#### `GET /tokens`, `POST /tokens`, `DELETE /tokens/{name}`
+
+Need a session. `GET` answers `{ "tokens": [ { "name": "laptop", "last_used_at": 1700000000 | null } ] }`. `POST` takes
+`{ "name": "laptop" }` (`a-z` and `-`, at most 32) and answers `201` `{ "name": "laptop", "token": "lr_..." }`, the only
+time the token is shown. `400 invalid_request` for a bad name, `409 duplicate` for a taken one, `409 limit_reached` at 50
+tokens. `DELETE` answers `204`, or `404 not_found`. A mail to the owner follows every `POST` and `DELETE`.
+
 ## Public download URLs
 
 No authentication.
@@ -314,9 +345,9 @@ the continuation of the last download of an exhausted file, see [SERVER.md](SERV
 | HTTP | codes |
 | --- | --- |
 | 400 | `invalid_request` |
-| 401 | `unauthorized` |
+| 401 | `unauthorized`, `invalid_code` |
 | 404 | `not_found` |
-| 409 | `duplicate`, `offset_mismatch`, `locked` |
+| 409 | `duplicate`, `offset_mismatch`, `locked`, `limit_reached` |
 | 413 | `too_large` |
 | 422 | `chunk_hash_mismatch`, `file_hash_mismatch` |
 | 429 | `rate_limited` (`Retry-After` set) |

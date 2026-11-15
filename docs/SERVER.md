@@ -50,6 +50,8 @@ return [
         'files.example.com',
         'share.example.org',
     ],
+    // optional: the sender of the mails (codes for tokens by mail, see Authentication)
+    'mail' => ['from' => 'linkrot@example.com'],
 ];
 ```
 
@@ -347,6 +349,35 @@ lr-auth ls           list tokens: name and last used date only
 
 Only a hash of a token is stored, so the raw token cannot be shown again and `del` takes the name.
 
+### Tokens by mail
+
+A host can let its owner make and revoke tokens without shell access. The trust anchor is the mailbox: `email` in
+`config.php` of the host (one address) and `mail.from` in `global-config.php`. Without either the feature is off, the
+answers stay the same, and nothing is sent. Mail goes out through PHP's `mail()`, so the server needs a working
+`sendmail_path` (postfix, msmtp, ...); the MTA is the queue, the application has none.
+
+1. `POST /api/v1/auth/start` with an address. The answer is `202` with a challenge id **for every address**, and it
+   always takes 5 seconds: the mail is sent inside that time, the rest is waited out, so neither the body nor the timing
+   tells whether the address is the owner's. Only the right address gets a mail, with a code of 8 characters.
+2. `POST /api/v1/auth/verify` with the challenge id and the code. The code lives 10 minutes, works once, only together
+   with its own challenge id, and gets 5 guesses. Only a hash of it is stored. Wrong, used, expired and unknown look
+   alike (`401 invalid_code`).
+3. The answer is a **management session** (`lm_...`, 10 minutes from the start, no matter how busy). It can create, list
+   and revoke tokens under `/api/v1/tokens`, and nothing else; an API token cannot manage tokens, and a session cannot
+   touch files. A new session needs a new code.
+
+Created tokens are ordinary tokens, with the same rights as one from `lr-auth`. Every create and revoke is mailed to the
+owner. A host holds at most 50 tokens.
+
+Limits: per client address, the same limiter as for failed logins (own counters), counting every `start` and every wrong
+code. Per host, the server mails at most one code per 30 seconds and 6 per hour; a request over that is answered like any
+other and nothing is sent. That caps what anybody can do to the inbox, and it means somebody who keeps asking can use up
+the owner's codes for a while: `lr-auth` on the server is not affected. A mail that cannot be sent is logged
+(`mail() refused`), not reported to the client.
+
+What this does not protect against: whoever reads the mailbox owns the tenant's tokens. Use an address with a second
+factor, or a shared mailbox of the team.
+
 ## Rate limiting
 
 nginx has a fixed `limit_req` which only protects against DoS. On top of that the application limits failed
@@ -375,7 +406,8 @@ authentication itself:
 | `cleanup_interval` | `8h` | minimum time between lazy cleanups |
 | `upload_timeout` | `1d` | unfinished uploads without activity are removed |
 | `orphan_row_timeout` | `1h` | grace period: rows without a data file are removed after it, expired and used-up files are deleted this long after the expiry or the last use, and the last download of a used-up file can still be resumed inside it |
-| `rate_limit_attempts` / `rate_limit_window` | 10 / 15 min | failed-auth limiter |
+| `rate_limit_attempts` / `rate_limit_window` | 10 / 15 min | failed-auth limiter; the requests for a code and the wrong codes are counted the same way, with counters of their own |
+| `email` | none | the one address that may get a code to manage the tokens, see [Tokens by mail](#tokens-by-mail); needs `mail.from` in `global-config.php` |
 | `download_mode` | `xaccel` | `xaccel` or `php` (development only) |
 
 ### Durations

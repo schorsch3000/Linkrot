@@ -144,6 +144,31 @@ The settings are `show_taglines`, `show_startpage`, `show_title`, `show_linkrot_
 
 The directory of the config file does not depend on the name the program is called with, so `linkrot`, `lr` and any other alias share one configuration.
 
+### `auth`
+
+```
+auth --email <address> [--server <url>] [--name <name>] [--allow-unsafe-file]
+```
+
+Gets you your own token, if the host lets its owner do that (see [SERVER.md](SERVER.md#tokens-by-mail)): the server mails
+a code to the address that is configured for the host, `auth` asks for it, creates a token and saves it in the config
+file together with the server and the address. `--server` and `--email` default to what the config file has. `--name` is
+the name of the token (`a-z` and `-`, default: the name of this machine). The server answers the same for every address
+and takes 5 seconds to do so, so a wrong address looks like a mail that never arrives. Asking for a code again within 30
+seconds sends nothing.
+
+### `token`
+
+```
+token ls [--json]
+token new <name>
+token rm <name>
+```
+
+List, create and revoke the tokens of the host. **Every call asks for a fresh code**, mailed to the address of the host
+(`--server`, `--email` as for `auth`, the config file is the default): the session it opens ends with the command and is
+never written to disk. `new` prints the token on stdout, once. The owner gets a mail for every `new` and `rm`.
+
 ### `custom`
 
 Files of your server that you can replace with your own, see [API.md](API.md#getputdelete-customname---files-that-replace-the-built-in-look):

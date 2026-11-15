@@ -96,6 +96,14 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    sudo -u www-data LINKROT_HOST=linkrot.example {deployroot}/app/bin/lr-auth get my-laptop
    ```
 
+### Mail (optional)
+
+Tokens by mail (`lr auth`, `lr token`, see [SERVER.md](SERVER.md#tokens-by-mail)) need three things: `mail.from` in
+`app_data/global-config.php`, `email` in `config.php` of every host that wants it, and a working MTA for PHP's `mail()`
+(`sendmail_path` in the php-fpm `php.ini`, e.g. `/usr/sbin/sendmail -t -i` with postfix, or msmtp). Try it with
+`lr auth --email <address>` and watch the php-fpm error log for `cannot mail the code`. Without `mail.from` the server
+sends nothing and answers as usual.
+
 ### Timeouts
 
 A chunk request (default 32 MiB) writes, reads back and `fsync`s one chunk; it does not depend on the file size.
