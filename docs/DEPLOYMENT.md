@@ -137,10 +137,5 @@ linkrot config --server https://linkrot.example
 linkrot config --token                 # asks for the token from lr-auth, the input is hidden
 ```
 
-Shell completion (replace `linkrot` with `lr` if that is what you call it):
-
-```
-linkrot completion bash > ~/.local/share/bash-completion/completions/linkrot
-linkrot completion zsh  > "${fpath[1]}/_linkrot"
-linkrot completion fish > ~/.config/fish/completions/linkrot.fish
-```
+Shell completion for bash, zsh and fish, including the live completion of your file ids: how to load it for each shell
+is in [CLI.md](CLI.md#completion-bashzshfish). For example, in bash: `source <(lr completion bash)`.

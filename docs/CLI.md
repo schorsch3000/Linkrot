@@ -224,9 +224,37 @@ the editor knows the syntax), opens it in an editor and **uploads it whenever yo
 
 ### `completion bash|zsh|fish`
 
-Prints a completion script. Subcommands and flags complete statically. For `rm`, `set`, `info` and `down` the ids are
-completed live from the server (name as description) with a 2 second timeout; the lowercase start of every id makes
-prefix completion pleasant. `config set` completes the setting names and `on`/`off`, `custom` the file names, `page get` and `page rm` the names of your pages.
+Prints a completion script for the shell you name. Subcommands and flags complete statically. For `rm`, `set`, `info` and
+`down` the ids are completed live from the server (name as description) with a 2 second timeout; the lowercase start of
+every id makes prefix completion pleasant. `config set` completes the setting names and `on`/`off`, `custom` the file
+names, `page get` and `page rm` the names of your pages.
+
+The script is made for the name you call the program by: run it as `lr completion ...` and it completes `lr`, run it as
+`linkrot completion ...` and it completes `linkrot`. If you use both names, load it once under each.
+
+**bash** (needs the `bash-completion` package, version 2, which most distributions load for interactive shells):
+
+```
+source <(lr completion bash)                                           # this shell; put it in ~/.bashrc to keep it
+lr completion bash > ~/.local/share/bash-completion/completions/lr     # or once: loaded on demand, in every new shell
+```
+
+**zsh** (completion has to be on: `autoload -U compinit && compinit` in `~/.zshrc`, before the line below):
+
+```
+source <(lr completion zsh)                                            # this shell; put it in ~/.zshrc after compinit
+lr completion zsh > "${fpath[1]}/_lr"                                  # or once: a file named _lr in a directory of $fpath
+```
+
+**fish**:
+
+```
+lr completion fish | source                                            # this shell
+lr completion fish > ~/.config/fish/completions/lr.fish                # or once: loaded on demand, in every new shell
+```
+
+After writing a file, open a new shell (zsh: delete `~/.zcompdump` first if the new completion does not show up). The
+live parts (ids, page names) need a configured server and say nothing, rather than hang, when it cannot be reached.
 
 ## Exit codes
 
