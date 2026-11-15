@@ -531,8 +531,11 @@ func lifecycle(t *testing.T, s *stack) {
 		}
 	}
 
-	// uses: one left, the last download works, then the link is dead (resumed ranges would not count)
-	s.must(t, "set", file.ID, "--uses", "1")
+	// uses: two, a resumed range is free once a use was counted, the last download works, then the link is dead
+	s.must(t, "set", file.ID, "--uses", "2")
+	if r, _ := get(t, dl, nil); r.StatusCode != 200 {
+		t.Fatalf("first use: %d", r.StatusCode)
+	}
 	if r, _ := get(t, dl, http.Header{"Range": {"bytes=10-"}}); r.StatusCode != 200 && r.StatusCode != 206 {
 		t.Fatalf("ranged download: %d", r.StatusCode)
 	}
@@ -546,12 +549,16 @@ func lifecycle(t *testing.T, s *stack) {
 		t.Fatalf("exhausted file still listed:\n%s", out)
 	}
 
-	// the request that found it exhausted already removed it; cleanup has nothing left to do
+	// the last download can still be resumed for a while, and neither that nor a cleanup removes the file under it
+	// (orphan_row_timeout, 1h, has to pass first; the unit tests of the server cover the removal)
+	if r, _ := get(t, dl, http.Header{"Range": {"bytes=10-"}}); r.StatusCode != 200 && r.StatusCode != 206 {
+		t.Fatalf("resume of the last use: %d", r.StatusCode)
+	}
 	if out := s.must(t, "cleanup"); !strings.HasPrefix(out, "removed ") {
 		t.Fatalf("cleanup: %q", out)
 	}
-	if _, err := os.Stat(filepath.Join(s.dataDir, "files", file.ID)); err == nil {
-		t.Fatal("exhausted file still on disk")
+	if _, err := os.Stat(filepath.Join(s.dataDir, "files", file.ID)); err != nil {
+		t.Fatalf("exhausted file removed during its grace period: %v", err)
 	}
 	small := filepath.Join(t.TempDir(), "small.txt")
 	if err := os.WriteFile(small, []byte("small"), 0o600); err != nil {
