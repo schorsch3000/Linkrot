@@ -63,7 +63,7 @@ final class LineFile
         }
         if ($kind === Kind::Headerlines) {
             // Header values: printable ASCII only. Anything else (control characters above all) could split the response.
-            return preg_match('~^[\x20-\x7e]+$~', $line) === 1 ? null : 'only printable ASCII is allowed in a header line';
+            return preg_match('~^[\x20-\x7e]+$~D', $line) === 1 ? null : 'only printable ASCII is allowed in a header line';
         }
 
         return preg_match('~[\x00-\x1f\x7f]~', $line) === 1 ? 'control characters are not allowed' : null;

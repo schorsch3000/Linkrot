@@ -28,7 +28,7 @@ final readonly class PageStore
 
     public static function isSlug(string $slug): bool
     {
-        return preg_match('~^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$~', $slug) === 1;
+        return preg_match('~^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$~D', $slug) === 1;
     }
 
     /**

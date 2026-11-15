@@ -23,7 +23,7 @@ final class ByteSize
     /** @throws InvalidArgumentException */
     public static function parse(string $value): int
     {
-        if (preg_match('~^(0|[1-9][0-9]{0,9})\s?(b|kb|mb|gb|tb)?$~i', trim($value), $m) !== 1) {
+        if (preg_match('~^(0|[1-9][0-9]{0,9})\s?(b|kb|mb|gb|tb)?$~iD', trim($value), $m) !== 1) {
             throw new InvalidArgumentException("invalid size '$value', expected <n>[b|kb|mb|gb|tb] like 100, 100kb, 5gb, 1tb");
         }
 

@@ -15,7 +15,7 @@ final readonly class Authenticator
     public function authenticate(Request $request): ?string
     {
         $header = $request->header('authorization');
-        if ($header === null || preg_match('~^Bearer ([^\s]+)$~i', $header, $m) !== 1) {
+        if ($header === null || preg_match('~^Bearer ([^\s]+)$~iD', $header, $m) !== 1) {
             return null;
         }
 

@@ -254,6 +254,7 @@ final class PagesTest extends AppTestCase
         yield 'slug with dot' => ['a.b', 'x', 400, 'name of a page'];
         yield 'slug with dash at the end' => ['abc-', 'x', 400, 'name of a page'];
         yield 'slug too long' => [str_repeat('a', 41), 'x', 400, 'name of a page'];
+        yield 'slug with a trailing newline' => ["imprint\n", 'x', 400, 'name of a page'];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('refused')]

@@ -24,7 +24,7 @@ final readonly class TokenStore
 
     public static function isValidName(string $name): bool
     {
-        return strlen($name) <= self::MAX_NAME_LENGTH && preg_match('~^[a-z-]+$~', $name) === 1;
+        return strlen($name) <= self::MAX_NAME_LENGTH && preg_match('~^[a-z-]+$~D', $name) === 1;
     }
 
     public static function hash(string $token): string

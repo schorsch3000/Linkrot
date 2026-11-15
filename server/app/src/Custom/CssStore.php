@@ -22,7 +22,7 @@ final readonly class CssStore
     public const int MAX_RETIRED = 5;
     public const string URL_PREFIX = '/assets/';
 
-    private const string NAME_PATTERN = '~^user\.[0-9a-f]{16}\.css$~';
+    private const string NAME_PATTERN = '~^user\.[0-9a-f]{16}\.css$~D';
 
     /** @param Closure(): int $clock */
     public function __construct(private string $dir, private Closure $clock) {}
@@ -228,7 +228,7 @@ final readonly class CssStore
         if (!is_array($data)) {
             return $empty;
         }
-        $isHash = static fn(mixed $h): bool => is_string($h) && preg_match('~^[0-9a-f]{16}$~', $h) === 1;
+        $isHash = static fn(mixed $h): bool => is_string($h) && preg_match('~^[0-9a-f]{16}$~D', $h) === 1;
         $retired = [];
         foreach (is_array($data['retired'] ?? null) ? $data['retired'] : [] as $entry) {
             if (is_array($entry) && $isHash($entry['hash'] ?? null) && is_int($entry['at'] ?? null)) {

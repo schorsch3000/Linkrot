@@ -26,13 +26,13 @@ final readonly class Tenants
     public static function normalize(string $host): ?string
     {
         $host = strtolower(trim($host));
-        $host = preg_replace('~:\d{1,5}$~', '', $host) ?? $host;
+        $host = preg_replace('~:\d{1,5}$~D', '', $host) ?? $host;
         $host = rtrim($host, '.');
         if ($host === '' || strlen($host) > 253) {
             return null;
         }
 
-        return preg_match('~^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$~', $host) === 1 ? $host : null;
+        return preg_match('~^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$~D', $host) === 1 ? $host : null;
     }
 
     public static function load(string $file, bool $strict = false): self

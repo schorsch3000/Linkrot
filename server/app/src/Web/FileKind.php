@@ -50,7 +50,7 @@ enum FileKind: string
         }
         $extension = substr($lower, $dot + 1);
 
-        return preg_match('~^[a-z0-9]{1,8}$~', $extension) === 1 ? $extension : null;
+        return preg_match('~^[a-z0-9]{1,8}$~D', $extension) === 1 ? $extension : null;
     }
 
     /** Hue (0-360) of the icon colour. */

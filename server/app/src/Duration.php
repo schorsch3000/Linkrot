@@ -23,7 +23,7 @@ final class Duration
     /** @throws InvalidArgumentException */
     public static function parse(string $value): int
     {
-        if (preg_match('~^([1-9][0-9]{0,5})([hdwmy])$~', $value, $m) !== 1) {
+        if (preg_match('~^([1-9][0-9]{0,5})([hdwmy])$~D', $value, $m) !== 1) {
             throw new InvalidArgumentException("invalid duration '$value', expected <n><h|d|w|m|y> like 1h, 2d, 3w, 4m, 5y");
         }
 

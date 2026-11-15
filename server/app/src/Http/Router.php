@@ -18,7 +18,7 @@ final class Router
             static fn(array $m): string => isset($m[1]) ? '(?P<' . $m[1] . '>[^/]+)' : preg_quote($m[0], '~'),
             $pattern,
         );
-        $this->routes[] = ['method' => strtoupper($method), 'regex' => '~^' . $regex . '$~', 'handler' => $handler];
+        $this->routes[] = ['method' => strtoupper($method), 'regex' => '~^' . $regex . '$~D', 'handler' => $handler];
     }
 
     public function dispatch(Request $request): Response

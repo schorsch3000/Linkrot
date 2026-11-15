@@ -55,7 +55,7 @@ final readonly class UploadController
         if (!is_int($size) || $size < 0) {
             return $this->invalid('size must be a non-negative integer');
         }
-        if (preg_match('~^[0-9a-f]{64}$~', $sha256) !== 1) {
+        if (preg_match('~^[0-9a-f]{64}$~D', $sha256) !== 1) {
             return $this->invalid('sha256 must be 64 hex characters');
         }
         if ($size === 0 && $sha256 !== self::EMPTY_SHA256) {
@@ -159,7 +159,7 @@ final readonly class UploadController
         }
         $size = $body['size'] ?? null;
         $sha256 = is_string($body['sha256'] ?? null) ? strtolower($body['sha256']) : '';
-        if (!is_int($size) || $size < 0 || preg_match('~^[0-9a-f]{64}$~', $sha256) !== 1) {
+        if (!is_int($size) || $size < 0 || preg_match('~^[0-9a-f]{64}$~D', $sha256) !== 1) {
             return $this->invalid('size must be a non-negative integer and sha256 64 hex characters');
         }
         if ($file->isReady()) {

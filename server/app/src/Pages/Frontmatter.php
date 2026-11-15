@@ -58,7 +58,7 @@ final class Frontmatter
                 continue;
             }
             $number = $i + 1 + $skipped;
-            if (preg_match('~^([a-z_]+)\s*:\s*(.*)$~', $line, $m) !== 1) {
+            if (preg_match('~^([a-z_]+)\s*:\s*(.*)$~D', $line, $m) !== 1) {
                 throw new InvalidCustomFile("frontmatter line $number: expected `key: value`");
             }
             [, $key, $raw] = $m;
@@ -104,7 +104,7 @@ final class Frontmatter
 
                 return $value;
             case 'order':
-                if (preg_match('~^-?\d{1,4}$~', $value) !== 1) {
+                if (preg_match('~^-?\d{1,4}$~D', $value) !== 1) {
                     throw new InvalidCustomFile("frontmatter line $number: `order` must be a whole number from -9999 to 9999");
                 }
 
@@ -117,7 +117,7 @@ final class Frontmatter
                     default => throw new InvalidCustomFile("frontmatter line $number: `$key` must be true or false"),
                 };
             default: // lang
-                if (preg_match('~^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$~', $value) !== 1) {
+                if (preg_match('~^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$~D', $value) !== 1) {
                     throw new InvalidCustomFile("frontmatter line $number: `lang` must be a language code like en or de-AT");
                 }
 

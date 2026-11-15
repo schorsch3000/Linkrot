@@ -31,7 +31,7 @@ final readonly class Config
         public DownloadMode $downloadMode = DownloadMode::Xaccel,
         public int $quota = 0,
     ) {
-        if (!preg_match('~^https?://[^/\s]+(/\S*)?$~', $baseUrl)) {
+        if (!preg_match('~^https?://[^/\s]+(/\S*)?$~D', $baseUrl)) {
             throw new InvalidArgumentException('config: base URL must be an https URL');
         }
         if (!$this->isSecureOrLoopback($baseUrl)) {

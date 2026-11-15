@@ -168,7 +168,7 @@ final class PageRenderer
         return match ($this->scheme($normalized)) {
             null => str_starts_with($normalized, '/'),
             'https' => true,
-            'data' => preg_match('~^data:image/(png|gif|jpeg|webp);base64,[A-Za-z0-9+/=]+$~i', trim($url)) === 1,
+            'data' => preg_match('~^data:image/(png|gif|jpeg|webp);base64,[A-Za-z0-9+/=]+$~iD', trim($url)) === 1,
             default => false,
         };
     }
