@@ -37,6 +37,43 @@ final class RequestTest extends TestCase
         return new Request('POST', '/', [], [], [], $stream);
     }
 
+    /** @return iterable<string, array{string, string}> REQUEST_URI, path the app routes */
+    public static function requestUris(): iterable
+    {
+        yield 'plain' => ['/dl/abc/x', '/dl/abc/x'];
+        yield 'query is not part of it' => ['/dl/abc/x?y=1', '/dl/abc/x'];
+        yield 'fragment is not part of it' => ['/file/x#frag', '/file/x'];
+        yield 'two leading slashes' => ['//dl/abc/x', '/dl/abc/x'];
+        yield 'three leading slashes' => ['///dl/abc', '/dl/abc'];
+        yield 'slashes in the middle' => ['/dl//abc/x', '/dl/abc/x'];
+        yield 'slashes in the query stay in the query' => ['//dl/abc?x=//y', '/dl/abc'];
+        yield 'nothing but slashes' => ['//', '/'];
+        yield 'only a query' => ['?x=1', '/'];
+        yield 'percent-decoding after merging' => ['/api/v1/pages/imprint%0A', "/api/v1/pages/imprint\n"];
+        yield 'encoded slash is a slash after decoding, as before' => ['/a%2Fb', '/a/b'];
+        yield 'absolute form' => ['http://lr.example/dl/abc?x=1', '/dl/abc'];
+        yield 'absolute form with only a host' => ['http://lr.example', '/'];
+    }
+
+    /**
+     * nginx merges slashes before it picks the location (`//dl/x` is served by the /dl/ location) but hands the
+     * request URI on as it came: the app has to route the path nginx matched, not what parse_url makes of `//dl`.
+     */
+    #[DataProvider('requestUris')]
+    public function testThePathIsTheOneNginxMatched(string $uri, string $path): void
+    {
+        $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => $uri];
+
+        self::assertSame($path, Request::fromGlobals()->path);
+    }
+
+    public function testAMissingRequestUriIsTheRoot(): void
+    {
+        $_SERVER = ['REQUEST_METHOD' => 'GET'];
+
+        self::assertSame('/', Request::fromGlobals()->path);
+    }
+
     public function testFromGlobalsReadsMethodPathQueryAndHeaders(): void
     {
         $_SERVER = [
