@@ -162,6 +162,9 @@ type AuthChallenge struct {
 	ExpiresIn int    `json:"expires_in"`
 }
 
+// SessionMinutes is how long a management session lasts (the server's SessionStore::LIFETIME).
+const SessionMinutes = 10
+
 // AuthSession is a management session: it may manage the tokens of the host, for ExpiresIn seconds.
 type AuthSession struct {
 	Session   string `json:"session"`

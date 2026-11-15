@@ -23,6 +23,8 @@ type SelfService struct {
 	Tokens map[string]string
 	// Starts counts requests for a code.
 	Starts int
+	// Expired makes the session end: the token routes answer 401.
+	Expired bool
 }
 
 func (s *FakeServer) selfService(w http.ResponseWriter, r *http.Request, path string) {
@@ -55,7 +57,7 @@ func (s *FakeServer) selfService(w http.ResponseWriter, r *http.Request, path st
 		ss.Mailed = 0
 		writeJSON(w, 200, map[string]any{"session": SessionToken, "expires_in": 600})
 	case strings.HasPrefix(path, "/api/v1/tokens"):
-		if r.Header.Get("Authorization") != "Bearer "+SessionToken {
+		if ss.Expired || r.Header.Get("Authorization") != "Bearer "+SessionToken {
 			writeError(w, 401, api.CodeUnauthorized, "missing or invalid token", nil)
 			return
 		}

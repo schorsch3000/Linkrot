@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -176,5 +177,113 @@ func TestTokenNewRefusesABadNameWithoutMailingAnything(t *testing.T) {
 func TestDefaultTokenNameIsAcceptedByTheServer(t *testing.T) {
 	if name := defaultTokenName(); !tokenName.MatchString(name) {
 		t.Errorf("%q", name)
+	}
+}
+
+// runScript is env.run with the answers to the prompts in order: the code first, then what is typed at `token>`.
+// Running out of answers is the end of the input (Ctrl+D).
+func (e *env) runScript(answers []string, args ...string) (int, string, string) {
+	e.t.Helper()
+	var out, errb bytes.Buffer
+	app := &App{
+		Name: "lr", Out: &out, Err: &errb, ConfigPath: config.Path,
+		Sleep: func(context.Context, time.Duration) error { return nil },
+		ReadLine: func(string) (string, error) {
+			if len(answers) == 0 {
+				return "", io.EOF
+			}
+			next := answers[0]
+			answers = answers[1:]
+			return next, nil
+		},
+	}
+	return app.Run(args), out.String(), errb.String()
+}
+
+func TestTokenSessionDoesSeveralOperationsWithOneCode(t *testing.T) {
+	e := newEnv(t)
+	e.server.Auth.Email = "owner@example.com"
+	e.server.Auth.Tokens = map[string]string{"old": "lr_old"}
+
+	code, out, errs := e.runScript([]string{"ABCD-EFGH", "ls", "new phone", "rm old", "ls", "quit"}, "token", "--email", "owner@example.com")
+
+	if code != 0 {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	if want := "old\tnever\nlr_made_phone\nphone\tnever\n"; out != want {
+		t.Errorf("stdout %q, want %q", out, want)
+	}
+	if e.server.Auth.Starts != 1 {
+		t.Errorf("%d codes were asked for, want 1", e.server.Auth.Starts)
+	}
+	if _, ok := e.server.Auth.Tokens["old"]; ok {
+		t.Errorf("old was not revoked: %v", e.server.Auth.Tokens)
+	}
+}
+
+func TestTokenSessionEndsCleanlyAtEndOfInput(t *testing.T) {
+	e := newEnv(t)
+	e.server.Auth.Email = "owner@example.com"
+
+	if code, _, errs := e.runScript([]string{"ABCD-EFGH", "ls"}, "token", "--email", "owner@example.com"); code != 0 {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+}
+
+func TestTokenSessionShowsErrorsAndGoesOn(t *testing.T) {
+	e := newEnv(t)
+	e.server.Auth.Email = "owner@example.com"
+
+	code, out, errs := e.runScript([]string{"ABCD-EFGH", "rm ghost", "bogus", "new Bad_Name", "new fine", "help", "q"}, "token", "--email", "owner@example.com")
+
+	if code != 0 {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	for _, want := range []string{"no such token", `unknown command "bogus"`, "use 1-32 characters", "list the tokens"} {
+		if !strings.Contains(errs, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, errs)
+		}
+	}
+	if out != "lr_made_fine\n" {
+		t.Errorf("stdout %q: the session stopped early", out)
+	}
+}
+
+func TestTokenSessionEndsWhenTheServerSaysItEnded(t *testing.T) {
+	e := newEnv(t)
+	e.server.Auth.Email = "owner@example.com"
+	e.server.Auth.Expired = true
+
+	code, _, errs := e.runScript([]string{"ABCD-EFGH", "ls", "ls"}, "token", "--email", "owner@example.com")
+
+	if code != ExitError || !strings.Contains(errs, "session has ended") {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+}
+
+func TestTokenSessionReadsTheCodeAndTheCommandsFromOnePipe(t *testing.T) {
+	e := newEnv(t)
+	e.server.Auth.Email = "owner@example.com"
+	var out, errb bytes.Buffer
+	app := &App{
+		Name: "lr", Out: &out, Err: &errb, ConfigPath: config.Path, In: strings.NewReader("ABCD-EFGH\nnew phone\nls\n"),
+		Sleep: func(context.Context, time.Duration) error { return nil },
+	}
+
+	if code := app.Run([]string{"token", "--email", "owner@example.com"}); code != 0 {
+		t.Fatalf("code %d: %s", code, errb.String())
+	}
+	if out.String() != "lr_made_phone\nphone\tnever\n" {
+		t.Errorf("stdout %q", out.String())
+	}
+}
+
+func TestTokenWithStrayArgumentsIsAUsageError(t *testing.T) {
+	e := newEnv(t)
+	if code, _, _ := e.runScript(nil, "token", "frobnicate"); code != ExitUsage {
+		t.Errorf("code %d", code)
+	}
+	if e.server.Auth.Starts != 0 {
+		t.Error("a mail was asked for")
 	}
 }

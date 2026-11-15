@@ -160,14 +160,20 @@ seconds sends nothing.
 ### `token`
 
 ```
+token                  one code, then a prompt: ls, new <name>, rm <name>, help, quit
 token ls [--json]
 token new <name>
 token rm <name>
 ```
 
-List, create and revoke the tokens of the host. **Every call asks for a fresh code**, mailed to the address of the host
-(`--server`, `--email` as for `auth`, the config file is the default): the session it opens ends with the command and is
-never written to disk. `new` prints the token on stdout, once. The owner gets a mail for every `new` and `rm`.
+List, create and revoke the tokens of the host. A code is mailed to the address of the host (`--server`, `--email` as for
+`auth`, the config file is the default) and asked for.
+
+Without a subcommand, that one code opens a **session of 10 minutes** with a `token>` prompt, for as many operations as you
+need; it also reads the commands from a pipe. Errors of one operation are shown and the session goes on; Ctrl+D or `quit`
+ends it, and so does the server when the 10 minutes are over (run `token` again for a new code). The subcommands `ls`,
+`new` and `rm` do one operation each and **need a fresh code every time**, which is what scripts want. The session is kept in
+memory only, never on disk. `new` prints the token on stdout, once. The owner gets a mail for every `new` and `rm`.
 
 ### `custom`
 

@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -38,6 +39,8 @@ type App struct {
 
 	// ReadSecret asks for a line without echoing it; nil asks on the terminal. Replaced in tests.
 	ReadSecret func(prompt string) (string, error)
+
+	lines *bufio.Reader // stdin by lines, see readLine
 
 	// ReadLine asks for a line (the mailed code); nil asks on the terminal. Replaced in tests.
 	ReadLine func(prompt string) (string, error)
