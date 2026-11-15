@@ -101,6 +101,21 @@ final class DownloadTest extends AppTestCase
         self::assertSame(404, $this->call('GET', "/api/v1/files/$id")[0]);
     }
 
+    public function testAnExhaustedFileIsNotFoundButStaysUntilTheCleanup(): void
+    {
+        $id = $this->upload('abc', extra: ['uses' => 1]);
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+
+        // a second visitor (a link preview bot) must not unlink the file under the download that took the last use
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+        self::assertSame(404, $this->request('GET', "/file/$id/a.txt", auth: false)->status);
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=1-'], auth: false)->status);
+        self::assertSame(404, $this->call('GET', "/api/v1/files/$id")[0]);
+
+        self::assertFileExists($this->dir . '/files/' . $id);
+        self::assertSame(1, (int) \Linkrot\Database::query($this->app->db(), 'SELECT count(*) FROM files')->fetchColumn());
+    }
+
     public function testHeadPageAndResumedRangesDoNotConsumeUses(): void
     {
         $id = $this->upload('abcdef', extra: ['uses' => 1]);

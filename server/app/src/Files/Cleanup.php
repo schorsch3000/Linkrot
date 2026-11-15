@@ -124,9 +124,10 @@ final readonly class Cleanup
         $this->pdo->exec('BEGIN IMMEDIATE');
         try {
             $select = $this->pdo->prepare(
-                "SELECT id FROM files WHERE status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :now) OR uses_left = 0)",
+                "SELECT id FROM files WHERE status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :now) OR (uses_left = 0 AND updated_at < :used_up))",
             );
-            $select->execute(['now' => $now]);
+            // A used-up file waits a while: the download that took the last use may still be opening it.
+            $select->execute(['now' => $now, 'used_up' => $now - $orphanTimeout]);
             $ids = array_values(array_unique([...array_map(strval(...), $select->fetchAll(PDO::FETCH_COLUMN)), ...$orphans]));
             $delete = $this->pdo->prepare('DELETE FROM files WHERE id = ?');
             foreach ($ids as $id) {

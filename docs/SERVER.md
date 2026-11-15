@@ -201,8 +201,10 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
 - **Uses.** A `GET` counts as a use if it has no `Range` header or a range starting at 0. `HEAD` and the
   `/file` page do not count. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1
   WHERE uses_left > 0`), so concurrent downloads cannot exceed the limit. When `uses_left` reaches 0 the file is
-  treated as expired for all following requests; the physical deletion is left to the cleanup, because
-  unlinking before nginx has opened the file would break the download that just consumed the last use.
+  treated as expired for all following requests (including a resumed `Range` request); the physical deletion is
+  left to the cleanup, which removes it once `orphan_row_timeout` has passed since the last use. Neither a later
+  request nor a cleanup run right after the last use unlinks the file, because that could break the download that
+  just consumed it before nginx has opened the file.
 - Config switch `download_mode = xaccel|php`. `php` streams the file from PHP; it exists for development and
   end-to-end tests with `php -S` and must not be used in production.
 

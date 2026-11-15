@@ -9,7 +9,6 @@ use Linkrot\DownloadMode;
 use Linkrot\FileName;
 use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRecord;
-use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
@@ -28,7 +27,6 @@ final readonly class DownloadController
 
     public function __construct(
         private Config $config,
-        private FileRepository $files,
         private FileCatalog $catalog,
         private FileStore $store,
         private string $host,
@@ -62,7 +60,7 @@ final readonly class DownloadController
             return $this->notFound();
         }
         // HEAD and ranges that do not start at 0 (resumed downloads) never consume a use.
-        if ($request->method === 'GET' && $file->usesLeft !== null && $this->startsAtBeginning($request) && !$this->files->consumeUse($file->id)) {
+        if ($request->method === 'GET' && $file->usesLeft !== null && $this->startsAtBeginning($request) && !$this->catalog->consumeUse($file->id)) {
             return $this->notFound();
         }
 

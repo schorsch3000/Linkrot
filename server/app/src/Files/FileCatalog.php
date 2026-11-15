@@ -7,7 +7,11 @@ namespace Linkrot\Files;
 use Closure;
 use Linkrot\FileId;
 
-/** Looks files up the way the API sees them: over its time counts as not found, and is removed on the spot. */
+/**
+ * Looks files up the way the API sees them: over its time counts as not found, and is removed on the spot. A file whose
+ * last use is gone is not found either, but it stays: the download that took the last use may not have been opened by
+ * nginx yet, and unlinking now would break it. The cleanup removes it after a grace period.
+ */
 final readonly class FileCatalog
 {
     /** @param Closure(): int $clock */
@@ -27,12 +31,20 @@ final readonly class FileCatalog
             return null;
         }
         if (!$file->isLive(($this->clock)())) {
-            $this->remove($id);
+            if (!$file->isExhausted()) {
+                $this->remove($id);
+            }
 
             return null;
         }
 
         return $file;
+    }
+
+    /** Takes one use, atomically, and notes when (the cleanup waits a grace period after the last one). False if none is left. */
+    public function consumeUse(string $id): bool
+    {
+        return $this->files->consumeUse($id, ($this->clock)());
     }
 
     /** Removes row and data file. */

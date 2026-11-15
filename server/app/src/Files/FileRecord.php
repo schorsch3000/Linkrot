@@ -63,6 +63,12 @@ final readonly class FileRecord
         return ($this->expiresAt === null || $this->expiresAt > $now) && $this->usesLeft !== 0;
     }
 
+    /** The last use is gone (the file may also be past its time). */
+    public function isExhausted(): bool
+    {
+        return $this->status === FileStatus::Ready && $this->usesLeft === 0;
+    }
+
     public function url(string $baseUrl): string
     {
         return rtrim($baseUrl, '/') . '/file/' . $this->id . '/' . FileName::urlSegment($this->name);

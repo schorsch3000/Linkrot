@@ -50,9 +50,29 @@ final class CleanupTest extends AppTestCase
         $this->request('GET', "/dl/$id/a.txt", auth: false);
         self::assertFileExists($this->path($id), 'the last use must not unlink before nginx opened the file');
 
+        $this->now += 3601; // the grace period (orphan_row_timeout) after the last use
+
         $result = $this->cleanup();
 
         self::assertSame(1, $result['rows_deleted']);
+        self::assertFileDoesNotExist($this->path($id));
+    }
+
+    public function testKeepsExhaustedFilesDuringTheGracePeriod(): void
+    {
+        $id = $this->upload('one', extra: ['uses' => 1]);
+        $this->request('GET', "/dl/$id/a.txt", auth: false);
+        $this->now += 3000;
+
+        // a cleanup that runs while nginx may still be opening the file must leave it alone
+        $result = $this->cleanup();
+
+        self::assertSame(0, $result['rows_deleted']);
+        self::assertFileExists($this->path($id));
+        self::assertSame(1, $this->rows());
+
+        $this->now += 601;
+        self::assertSame(1, $this->cleanup()['rows_deleted']);
         self::assertFileDoesNotExist($this->path($id));
     }
 

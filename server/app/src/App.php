@@ -114,7 +114,7 @@ final class App
         }
         // the stylesheet of the host: in production nginx hands unknown /assets/ names to index.php, php -S does the same
         $this->router->add('GET', '/assets/{name}', static fn(Request $request, array $params): Response => new CustomController($custom, $css)->stylesheet($params['name']));
-        $download = fn(): DownloadController => new DownloadController($this->config, $repository(), $catalog(), $store, $this->host, $appearance());
+        $download = fn(): DownloadController => new DownloadController($this->config, $catalog(), $store, $this->host, $appearance());
         $this->router->add('GET', '/file/{id}/{name}', static fn(Request $request, array $params): Response => $download()->page($params['id'], $params['name']));
         $this->router->add('GET', '/file/{id}', static fn(Request $request, array $params): Response => $download()->page($params['id'], null));
         foreach (['GET', 'HEAD'] as $method) {
