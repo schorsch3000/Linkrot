@@ -506,8 +506,8 @@ func lifecycle(t *testing.T, s *stack) {
 	if code, _, errs := s.run(t, "down", file.ID, dir); code != cli.ExitError || !strings.Contains(errs, "not overwriting") {
 		t.Fatalf("second down: %d %s", code, errs)
 	}
-	if _, err := os.Stat(path + ".part"); err == nil {
-		t.Fatal(".part left behind")
+	if left, _ := filepath.Glob(path + ".*.part"); len(left) > 0 {
+		t.Fatalf(".part left behind: %v", left)
 	}
 
 	// the download link itself: headers, ranges, the internal location is not reachable

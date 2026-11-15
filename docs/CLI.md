@@ -103,9 +103,10 @@ Downloads a file.
 - `target` is an existing directory: write into it with the original name
 - otherwise `target` is the file name; its parent directory must exist
 - **never overwrites** a file and **never creates** a directory
-- the data goes to `<name>.part` first (created with `O_EXCL`), is resumed with `Range` if a `.part` exists, is
+- the data goes to `<name>.<start of the sha256>.part` first (created with `O_EXCL`), is resumed with `Range` if that file exists, is
   verified against the sha256 and is then moved into place with `link()` + `unlink()` so an existing file can never
-  be replaced. If the final name exists the command fails and says so
+  be replaced. If the final name exists the command fails and says so. Because the hash is in the name, a `<name>.part` that
+  another program wrote is never resumed, appended to or deleted, and the partial data of another version is not continued
 - the server-supplied name is sanitised (`filepath.Base`, `..`, empty names and path separators rejected)
 
 ### `cleanup`

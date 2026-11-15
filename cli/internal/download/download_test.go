@@ -2,6 +2,8 @@ package download
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -16,6 +18,8 @@ import (
 )
 
 const content = "0123456789abcdefghij0123456789ABCDEFGHIJ" // 40 bytes
+
+var contentSum = func() string { h := sha256.Sum256([]byte(content)); return hex.EncodeToString(h[:]) }()
 
 func setup(t *testing.T) (*testutil.FakeServer, *api.Client, string) {
 	t.Helper()
@@ -45,7 +49,7 @@ func TestTargetIsAnExistingDirectory(t *testing.T) {
 	if err != nil || path != filepath.Join(dir, "report.txt") || read(t, path) != content {
 		t.Fatalf("%q %v", path, err)
 	}
-	if _, err := os.Stat(path + ".part"); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(PartPath(path, contentSum)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(".part must be gone")
 	}
 }
@@ -137,7 +141,7 @@ func TestUnsafeServerNames(t *testing.T) {
 func TestResumeFromPartFile(t *testing.T) {
 	s, c, dir := setup(t)
 	id := s.Add("report.txt", []byte(content))
-	if err := os.WriteFile(filepath.Join(dir, "report.txt.part"), []byte(content[:15]), 0o600); err != nil {
+	if err := os.WriteFile(PartPath(filepath.Join(dir, "report.txt"), contentSum), []byte(content[:15]), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var gotRange string
@@ -164,7 +168,7 @@ func TestResumeFromPartFile(t *testing.T) {
 func TestServerIgnoringRangeStartsOver(t *testing.T) {
 	s, c, dir := setup(t)
 	id := s.Add("report.txt", []byte(content))
-	if err := os.WriteFile(filepath.Join(dir, "report.txt.part"), []byte(content[:15]), 0o600); err != nil {
+	if err := os.WriteFile(PartPath(filepath.Join(dir, "report.txt"), contentSum), []byte(content[:15]), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	s.Intercept = func(r *http.Request) (int, http.Header, string) {
@@ -251,7 +255,7 @@ func TestGivesUpAndKeepsPartialData(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "giving up") {
 		t.Fatalf("%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "report.txt.part")); err != nil {
+	if _, err := os.Stat(PartPath(filepath.Join(dir, "report.txt"), contentSum)); err != nil {
 		t.Fatal("the .part file must stay so that a later run can resume")
 	}
 }
@@ -259,7 +263,7 @@ func TestGivesUpAndKeepsPartialData(t *testing.T) {
 func TestPartFileProblems(t *testing.T) {
 	s, c, dir := setup(t)
 	id := s.Add("report.txt", []byte(content))
-	part := filepath.Join(dir, "report.txt.part")
+	part := PartPath(filepath.Join(dir, "report.txt"), contentSum)
 	if err := os.WriteFile(part, []byte(content+"too much"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +378,7 @@ func TestBodyThatEndsEarlyWithoutProgressIsGivenUpOn(t *testing.T) {
 			if requests > 10 || sleeps != 3 {
 				t.Fatalf("%d requests, %d sleeps", requests, sleeps)
 			}
-			if _, err := os.Stat(filepath.Join(dir, "report.txt.part")); err != nil {
+			if _, err := os.Stat(PartPath(filepath.Join(dir, "report.txt"), contentSum)); err != nil {
 				t.Fatal("the .part file must stay so that a later run can resume")
 			}
 		})
@@ -446,5 +450,64 @@ func TestSilentServerInTheMiddleOfTheBodyIsResumed(t *testing.T) {
 	}
 	if len(ranges) != 2 || ranges[0] != "" || ranges[1] != "bytes=12-" {
 		t.Fatalf("ranges %q", ranges)
+	}
+}
+
+// A file that merely looks like a partial download (Firefox, curl, a backup tool wrote it) is not ours: it is neither
+// appended to nor removed, whatever happens to the download.
+func TestForeignPartFileIsLeftAlone(t *testing.T) {
+	foreign := "somebody else's half-finished download"
+	for name, corrupt := range map[string]bool{"download succeeds": false, "download is corrupted": true} {
+		t.Run(name, func(t *testing.T) {
+			s, c, dir := setup(t)
+			id := s.Add("report.txt", []byte(content))
+			if corrupt {
+				s.Intercept = func(r *http.Request) (int, http.Header, string) {
+					if strings.HasPrefix(r.URL.Path, "/dl/") {
+						return 200, nil, strings.Repeat("X", 40)
+					}
+					return 0, nil, ""
+				}
+			}
+			theirs := filepath.Join(dir, "report.txt.part")
+			if err := os.WriteFile(theirs, []byte(foreign), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			path, err := Download(t.Context(), c, id, dir, noSleep())
+
+			if corrupt != (err != nil) || (!corrupt && read(t, path) != content) {
+				t.Fatalf("%q %v", path, err)
+			}
+			if got, rerr := os.ReadFile(theirs); rerr != nil || string(got) != foreign {
+				t.Fatalf("the foreign file was touched: %q, %v", got, rerr)
+			}
+		})
+	}
+}
+
+// Partial data of another version of the file (same name, other content) is not continued with this one.
+func TestPartialOfAnotherVersionIsNotResumed(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	other := PartPath(filepath.Join(dir, "report.txt"), strings.Repeat("0", 64))
+	if err := os.WriteFile(other, []byte("0123456789abc"), 0o600); err != nil { // looks like the start of content
+		t.Fatal(err)
+	}
+
+	path, err := Download(t.Context(), c, id, dir, noSleep())
+
+	if err != nil || read(t, path) != content {
+		t.Fatalf("%v", err)
+	}
+	if read(t, other) != "0123456789abc" {
+		t.Fatal("the partial of the other version was touched")
+	}
+}
+
+func TestPartPathDependsOnTheContent(t *testing.T) {
+	a, b := PartPath("x/report.txt", contentSum), PartPath("x/report.txt", strings.Repeat("0", 64))
+	if a == b || a == "x/report.txt.part" || !strings.HasSuffix(a, ".part") || !strings.HasPrefix(a, "x/report.txt") {
+		t.Fatalf("%q %q", a, b)
 	}
 }

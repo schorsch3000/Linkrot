@@ -22,7 +22,7 @@ func (a *App) downCommand() *cobra.Command {
 			"Without a target the file goes to the current directory under its original name. If the target is an\n" +
 			"existing directory the file goes into it, otherwise the target is the file name. Existing files are\n" +
 			"never overwritten and directories are never created. An interrupted download is resumed when the\n" +
-			"command is run again (the data is kept in <name>.part until it is verified).",
+			"command is run again (the data is kept in <name>.<hash>.part until it is verified).",
 		Example: fmt.Sprintf("  %[1]s down abcd\n  %[1]s down abcd ~/Downloads\n  %[1]s down abcd copy.pdf", a.Name),
 		Args:    usageArgs(cobra.RangeArgs(1, 2)),
 		RunE: func(cmd *cobra.Command, args []string) error {

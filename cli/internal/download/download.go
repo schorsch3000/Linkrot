@@ -47,7 +47,7 @@ func Download(ctx context.Context, c *api.Client, id, target string, o Options) 
 	if err != nil {
 		return "", err
 	}
-	part := dest + ".part"
+	part := PartPath(dest, file.SHA256)
 
 	out, size, err := openPart(part, file.Size)
 	if err != nil {
@@ -117,6 +117,25 @@ func Download(ctx context.Context, c *api.Client, id, target string, o Options) 
 		return "", err
 	}
 	return dest, nil
+}
+
+// PartPath is where the partial data of a download of the file with this sha256 lives: <dest>.<start of the hash>.part.
+// The hash makes the name ours: a "<name>.part" that some other program wrote is never resumed, appended to or removed,
+// and the partial data of another version of the file (same name, other content) is never continued with this one.
+func PartPath(dest, sha256 string) string {
+	id := strings.Map(func(r rune) rune {
+		if strings.ContainsRune("0123456789abcdef", r) {
+			return r
+		}
+		return -1
+	}, strings.ToLower(sha256))
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	if id == "" {
+		id = "unknown"
+	}
+	return dest + "." + id + ".part"
 }
 
 // fetch requests the file from offset on and appends what arrives. It returns the new size of the partial
