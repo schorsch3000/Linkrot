@@ -63,15 +63,15 @@ uploads it every time you save, so you can refresh the browser and see what you 
 - **Pipes.** `pg_dump db | gzip | lr up --mv db.sql.gz` works; the hash is sent at the end.
 - **Expiry, and a download limit.** Pick a lifetime from `1h` up (the server has a mandatory maximum) and optionally a
   number of downloads. Expired files act as not found immediately, even before the cleanup removes them.
-- **No cron job.** The cleanup runs lazily, after the response, when a request comes in.
 - **Duplicate detection.** The same bytes twice give you the existing link.
 - **Downloads from the terminal**, with resume, verification and a promise never to overwrite your files: `lr down`.
 - **One user, many devices.** Every device has its own token; a lost laptop costs you one `lr-auth del`.
 - **Many hosts per installation**, each with its own tokens, files, quota and cleanup.
 - **Pages you can shape:** colors, taglines, the `X-Rot` header lines, Markdown pages with strict rendering (no raw HTML),
   an imprint link on every page, a start page of your own.
-- **A terminal that behaves.** Results on stdout, progress on stderr, `--json`, `-q` for scripts, completion for bash, zsh
-  and fish.
+- **A terminal that behaves.** Results on stdout, progress on stderr, `--json`, `-q` for scripts.
+- **Extensive tab completion** for bash, zsh and fish, even for your remote files: `lr down <TAB>` lists the ids on the
+  server with their file names, `lr page edit <TAB>` your pages, `lr config set <TAB>` the settings.
 - **Plain parts.** PHP 8.4 and SQLite behind nginx on the server, one static Go binary for the client (Linux, macOS,
   Windows, FreeBSD), signed release artifacts.
 
@@ -86,6 +86,7 @@ uploads it every time you save, so you can refresh the browser and see what you 
 - **Statistics, notifications or download history.** You can see how many downloads are left, not who took them.
 - **Other storage than the local disk,** and no clustering: it is one PHP application on one SQLite file per host.
 - **Minutes or seconds.** The smallest lifetime is one hour.
+- **A cron job or any other scheduler.** The cleanup runs lazily, after the response, when a request comes in.
 
 ## Quick start
 
