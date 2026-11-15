@@ -32,7 +32,10 @@ const (
 	// watchUploadTimeout bounds one upload while watching (a server that went silent must not block the next save or
 	// Ctrl+C), finalSyncTimeout the one after Ctrl+C. A second Ctrl+C ends the wait at once.
 	watchUploadTimeout = 2 * time.Minute
-	finalSyncTimeout   = time.Minute
+	// recentMtime is how long after a save the watcher also compares the content: file systems with a coarse clock give two
+	// saves in the same tick the same mtime.
+	recentMtime      = 5 * time.Second
+	finalSyncTimeout = time.Minute
 )
 
 // splitCommand splits a command line such as `code --wait "my file"` into words: spaces separate, single and double
@@ -242,6 +245,9 @@ func (u *uploader) sync(ctx context.Context) bool {
 
 // watch polls the file and uploads it after it was saved and then stayed the same for a moment, until ctx is done.
 func (u *uploader) watch(ctx context.Context, interval time.Duration, last fileState) {
+	u.mu.Lock()
+	seen := u.sent // what the watcher last saw in the file
+	u.mu.Unlock()
 	changed, stable := false, 0
 	t := time.NewTicker(interval)
 	defer t.Stop()
@@ -255,8 +261,19 @@ func (u *uploader) watch(ctx context.Context, interval time.Duration, last fileS
 		if !ok { // an editor that saves by renaming is between two files
 			continue
 		}
+		// Size and mtime are enough, except right after a save: on a file system with a coarse clock a second save of the
+		// same size can get the same mtime. So while the mtime is recent the content is compared as well; an old mtime is
+		// trusted (a tool that sets one on purpose has its reasons, and the last upload at the end reads the content anyway).
+		moved := st != last
+		if moved || u.recent(st) {
+			if content, err := os.ReadFile(u.path); err == nil { //nolint:gosec // our own temp file
+				if h := hashOf(content); h != seen {
+					seen, moved = h, true
+				}
+			}
+		}
 		switch {
-		case st != last:
+		case moved:
 			last, changed, stable = st, true, 0
 		case changed:
 			if stable++; stable >= stableTicks {
@@ -267,6 +284,11 @@ func (u *uploader) watch(ctx context.Context, interval time.Duration, last fileS
 			}
 		}
 	}
+}
+
+// recent says that the file was saved less than recentMtime ago, or claims to come from the future.
+func (u *uploader) recent(st fileState) bool {
+	return u.a.now().Sub(st.mod) < recentMtime
 }
 
 func (a *App) editorEnv() (getenv func(string) string, lookPath func(string) (string, error), run func([]string, io.Reader, io.Writer, io.Writer) error) {

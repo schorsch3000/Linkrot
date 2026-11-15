@@ -199,7 +199,10 @@ the editor knows the syntax), opens it in an editor and **uploads it whenever yo
   belongs to the editor.
 - **Watching.** `lr` stays open and polls the file. A save that then stays unchanged for a moment is uploaded, but only if
   the content changed. A refused upload (raw HTML in a page, a mistake in the head) is explained with the lines and tried
-  again at the next save. Because the file is watched and not the editor, graphical editors that return at once
+  again at the next save. A change is noticed by size and modification time, and for 5 seconds after a save by the
+  content as well (file systems with a coarse clock give two quick saves the same time); a tool that sets an old
+  modification time on purpose is not noticed while watching, but the last upload at the end reads the content anyway.
+  Because the file is watched and not the editor, graphical editors that return at once
   (`code`, `subl`, `gedit`) work as well. The result of every upload is printed, with the URL of a page or of the new
   stylesheet.
 - **Full-screen editors** (vim, nano, ...) own the terminal, and anything printed would garble their screen. So while the

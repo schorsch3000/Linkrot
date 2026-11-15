@@ -744,3 +744,66 @@ func TestEnterWaiterAtEndOfInputWaitsForASignal(t *testing.T) {
 		t.Fatalf("result %v", r)
 	}
 }
+
+// setMtime plays a file system with a coarse clock: two saves that get the same modification time.
+func setMtime(t *testing.T, path string, sec int64) {
+	t.Helper()
+	if err := os.Chtimes(path, time.Unix(sec, 0), time.Unix(sec, 0)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The tests of the watcher run on a fake clock that stands at 2000 s: a file with mtime 1999 was just saved, one with
+// mtime 1000 was saved a long time ago.
+func TestEditSeesASameSizeSaveWithTheSameRecentMtime(t *testing.T) {
+	e := newEnv(t)
+	e.server.Pages = map[string]string{"imprint": "0000\n"}
+	var pathBox box[string]
+	s := e.startEdit(func(_ int, argv []string) error {
+		path := argv[len(argv)-1]
+		pathBox.set(path)
+		overwrite(t, argv, "aaaa\n")
+		setMtime(t, path, 1999)
+		return nil
+	}, "page", "edit", "imprint", "ed")
+	s.waitFor("the first save", func() bool { got, _ := e.server.PageText("imprint"); return got == "aaaa\n" })
+
+	// same size, same modification time: only the content tells
+	overwrite(t, []string{pathBox.get()}, "bbbb\n")
+	setMtime(t, pathBox.get(), 1999)
+
+	s.waitFor("the second save", func() bool { got, _ := e.server.PageText("imprint"); return got == "bbbb\n" })
+	if code := s.stop(); code != 0 {
+		t.Fatalf("code %d:\n%s", code, s.errb.String())
+	}
+}
+
+// A file whose mtime is old is not read again and again: nothing but a new mtime or size makes the watcher look. What a
+// tool that sets old mtimes on purpose writes still reaches the server, with the last upload when the session ends.
+func TestEditDoesNotHashAFileWithAnOldMtimeButTheEndStillUploadsIt(t *testing.T) {
+	e := newEnv(t)
+	e.server.Pages = map[string]string{"imprint": "0000\n"}
+	var pathBox box[string]
+	s := e.startEdit(func(_ int, argv []string) error {
+		path := argv[len(argv)-1]
+		pathBox.set(path)
+		overwrite(t, argv, "aaaa\n")
+		setMtime(t, path, 1000)
+		return nil
+	}, "page", "edit", "imprint", "ed")
+	s.waitFor("the first save", func() bool { got, _ := e.server.PageText("imprint"); return got == "aaaa\n" })
+
+	overwrite(t, []string{pathBox.get()}, "bbbb\n")
+	setMtime(t, pathBox.get(), 1000)
+	time.Sleep(300 * time.Millisecond) // many polls
+
+	if got, _ := e.server.PageText("imprint"); got != "aaaa\n" {
+		t.Fatalf("the watcher hashed a file with an old mtime: %q", got)
+	}
+	if code := s.stop(); code != 0 {
+		t.Fatalf("code %d:\n%s", code, s.errb.String())
+	}
+	if got, _ := e.server.PageText("imprint"); got != "bbbb\n" {
+		t.Fatalf("the end must still upload the last version: %q", got)
+	}
+}
