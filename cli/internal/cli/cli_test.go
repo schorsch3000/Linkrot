@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,5 +178,131 @@ func TestConfigTokenFromStdinCombinesWithServer(t *testing.T) {
 	c, err := config.Load(path)
 	if err != nil || c.Server != "https://lr.example" || c.Token != "lr_abcdefghijklmnop" {
 		t.Fatalf("%+v %v", c, err)
+	}
+}
+
+// "--token" without a value asks for the token on the terminal, hidden. Tests play the terminal with ReadSecret.
+func promptApp(t *testing.T, secret string) (app *App, errb *bytes.Buffer, prompts *[]string) {
+	t.Helper()
+	errb = &bytes.Buffer{}
+	prompts = new([]string)
+	app = &App{
+		Name: "lr", In: strings.NewReader("never read\n"), Out: &bytes.Buffer{}, Err: errb, ConfigPath: config.Path,
+		ReadSecret: func(prompt string) (string, error) { *prompts = append(*prompts, prompt); return secret, nil },
+	}
+	return app, errb, prompts
+}
+
+func TestConfigTokenWithoutValuePrompts(t *testing.T) {
+	for name, args := range map[string][]string{
+		"alone":       {"config", "--token"},
+		"before flag": {"config", "--token", "--server", "https://lr.example"},
+		"after flag":  {"config", "--server", "https://lr.example", "--token"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			t.Setenv(config.EnvPath, path)
+			app, errb, prompts := promptApp(t, " lr_abcdefghijklmnop \n")
+
+			code := app.Run(args)
+
+			if code != 0 {
+				t.Fatalf("code %d: %s", code, errb.String())
+			}
+			if len(*prompts) != 1 || !strings.Contains((*prompts)[0], "oken") {
+				t.Errorf("prompts %q", *prompts)
+			}
+			c, err := config.Load(path)
+			if err != nil || c.Token != "lr_abcdefghijklmnop" || (len(args) > 2) != (c.Server == "https://lr.example") {
+				t.Fatalf("%+v %v", c, err)
+			}
+		})
+	}
+}
+
+func TestConfigTokenGivenAsValueStillWorksAndDoesNotPrompt(t *testing.T) {
+	for name, args := range map[string][]string{
+		"space":        {"config", "--token", "lr_abcdefghijklmnop"},
+		"equals":       {"config", "--token=lr_abcdefghijklmnop"},
+		"after server": {"config", "--server", "https://lr.example", "--token", "lr_abcdefghijklmnop"},
+		"before":       {"config", "--token", "lr_abcdefghijklmnop", "--server", "https://lr.example"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			t.Setenv(config.EnvPath, path)
+			app, errb, prompts := promptApp(t, "wrong")
+
+			code := app.Run(args)
+
+			if code != 0 || len(*prompts) != 0 {
+				t.Fatalf("code %d, prompts %q: %s", code, *prompts, errb.String())
+			}
+			if c, err := config.Load(path); err != nil || c.Token != "lr_abcdefghijklmnop" {
+				t.Fatalf("%+v %v", c, err)
+			}
+		})
+	}
+}
+
+func TestConfigTokenPromptNeedsATerminal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv(config.EnvPath, path)
+	var out, errb bytes.Buffer
+	// stdin is a pipe or a file here, and has a token on it that must not be taken silently
+	app := &App{Name: "lr", In: strings.NewReader("lr_abcdefghijklmnop\n"), Out: &out, Err: &errb, ConfigPath: config.Path}
+
+	code := app.Run([]string{"config", "--token"})
+
+	if code != ExitUsage || !strings.Contains(errb.String(), "terminal") || !strings.Contains(errb.String(), "--token -") {
+		t.Fatalf("code %d, stderr %q", code, errb.String())
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("the config must not be written")
+	}
+}
+
+func TestConfigTokenPromptMustNotBeEmptyOrFail(t *testing.T) {
+	for name, tc := range map[string]struct {
+		secret string
+		err    error
+	}{
+		"empty":  {"", nil},
+		"blanks": {"  \n", nil},
+		"failed": {"", io.ErrClosedPipe},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			t.Setenv(config.EnvPath, path)
+			var errb bytes.Buffer
+			app := &App{
+				Name: "lr", Out: &bytes.Buffer{}, Err: &errb, ConfigPath: config.Path,
+				ReadSecret: func(string) (string, error) { return tc.secret, tc.err },
+			}
+
+			code := app.Run([]string{"config", "--token"})
+
+			if code == 0 || !strings.Contains(errb.String(), "token") {
+				t.Fatalf("code %d, stderr %q", code, errb.String())
+			}
+			if _, err := os.Stat(path); err == nil {
+				t.Fatal("the config must not be written")
+			}
+		})
+	}
+}
+
+func TestConfigStrayArgumentsAreStillUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"config", "extra"},
+		{"config", "--server", "https://lr.example", "extra"},
+		{"config", "--token", "lr_abcdefghijklmnop", "extra"},
+		{"config", "--token", "--server", "https://lr.example", "extra"},
+	} {
+		app, errb, prompts := promptApp(t, "lr_abcdefghijklmnop")
+		t.Setenv(config.EnvPath, filepath.Join(t.TempDir(), "config.toml"))
+
+		if code := app.Run(args); code != ExitUsage {
+			t.Errorf("%v: code %d, stderr %q, prompts %q", args, code, errb.String(), *prompts)
+		}
 	}
 }

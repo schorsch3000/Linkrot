@@ -32,6 +32,11 @@ type App struct {
 	Err        io.Writer
 	ConfigPath func() (string, error)
 
+	args []string // the command line, for the one flag whose value is optional (config --token)
+
+	// ReadSecret asks for a line without echoing it; nil asks on the terminal. Replaced in tests.
+	ReadSecret func(prompt string) (string, error)
+
 	// Copy puts text into a clipboard selection; Sleep waits between retries. Both are replaced in tests.
 	Copy  func(selection, text string) error
 	Sleep func(ctx context.Context, d time.Duration) error
@@ -71,6 +76,7 @@ func (a *App) stdin() io.Reader {
 // Run executes the command line and returns the exit code.
 func (a *App) Run(args []string) int {
 	root := a.NewRoot()
+	a.args = args
 	root.SetArgs(args)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
