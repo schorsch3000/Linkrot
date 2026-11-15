@@ -375,6 +375,45 @@ Format `<n><unit>` with units `h`, `d`, `w`, `m`, `y`. `m` is **month**. Smalles
 or seconds. For calculation `d = 24h`, `w = 7d`, `m = 30d`, `y = 365d`. Requested values above `max_rm_after`
 are rejected with `400`, not silently clamped.
 
+## Limits and caveats
+
+What the server does not promise, and where it behaves differently from what you might expect. The limits of the client
+are in [CLI.md](CLI.md#limits-and-caveats).
+
+- **`--uses` is a convenience limit, not access control.** It stops honest clients after n downloads. A `GET` takes a use;
+  `HEAD` and the `/file` page do not; a resumed download (a single `Range` starting after byte 0) is free for
+  `orphan_row_timeout` (default 1h) after a counted use, so someone who knows that can read a "one use" file in pieces
+  inside that window. Anyone who has the link can download until it expires, and anyone with the link can copy the file.
+  If a file must not be copied, encrypt it before you upload it.
+- **The id in the link is the only secret on the public side.** There is no login for downloads, no password for links
+  and no encryption of the content: the server sees what you upload.
+- **Used-up files stay on disk for a while.** A file whose last use is gone is not found any more, but it is only deleted by
+  the cleanup once `orphan_row_timeout` has passed since that use, so that a download that is still being opened is not
+  broken. Its last download can be resumed inside that window.
+- **The cleanup is lazy.** There is no scheduler: it runs after a response when it is due. A server without traffic does
+  not clean up (expired files are still not found, they just are not deleted yet). If the lock file of the cleanup cannot
+  be opened, nothing is cleaned up, which is logged, shown by `GET /health` and answered by `POST /cleanup` with
+  `500 cleanup_lock`; `install.sh` checks for this.
+- **One SQLite file per host, one writer at a time.** There is no clustering. Writers wait for each other up to 5
+  seconds; after that the request is answered `503 busy` with a `Retry-After`, which the CLI retries. Reads are never
+  blocked (WAL mode). After an upgrade run `install.sh` first: a database with an older schema answers `503
+  schema_outdated` until it is migrated.
+- **The pages cache is only a cache.** If it cannot be made, public pages and downloads keep working: the request renders
+  the pages in memory and logs why. That costs the rendering of up to 20 pages on every request until the permissions of
+  `pages/` are fixed, so watch the log for `the cache cannot be made`. An upload of a page still fails (`500`) in that case.
+- **A stylesheet can do very little, but not nothing.** It is accepted as it is (size and UTF-8 are checked, the content
+  is not) and limited by the Content-Security-Policy of the pages: no scripts, no other stylesheets, no fonts, no
+  connections, images from this origin only. On the pages that come from your Markdown the policy also allows `https:` and
+  `data:` images, because the Markdown may embed them, so a stylesheet can make a visitor's browser request an image from
+  another server there (a tracking pixel, or text of the page sent along in the address through attribute selectors; the
+  text is your own public page). A stylesheet that cannot work under the policy (an `@import` from another host, a web font)
+  is accepted and silently has no effect.
+- **The smallest lifetime is one hour**, and expiry is checked when a file is asked for, not by a clock tick: an expired
+  file is "not found" at once, deleted later.
+- **A new release can re-render your pages.** When the renderer changes (`PageRenderer::VERSION`) the cached HTML of every
+  page is made again from your Markdown on the next request. A page that the stricter rules of a new release no longer
+  accept stays listed and downloadable as a draft and is not shown.
+
 ## Security notes
 
 - download is always `attachment` with `nosniff`; there is no content type guessing from user names
@@ -384,4 +423,5 @@ are rejected with `400`, not silently clamped.
 - the data directory is outside of the document root
 - the custom stylesheet is same-origin CSS from the token holder of the host. The page CSP (`default-src 'none'`,
   `style-src 'self'`) keeps it from loading anything from elsewhere, and a stylesheet cannot run script; it can change how
-  the pages of that host look, nothing else
+  the pages of that host look and, on Markdown pages where images from `https:` are allowed, make a browser request such an
+  image (see the limits above)

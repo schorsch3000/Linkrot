@@ -88,6 +88,10 @@ uploads it every time you save, so you can refresh the browser and see what you 
 - **Minutes or seconds.** The smallest lifetime is one hour.
 - **A cron job or any other scheduler.** The cleanup runs lazily, after the response, when a request comes in.
 
+The small print (what resumes and what does not, what `--uses` really is, how far a stylesheet can reach, what was only tested
+on Linux) is written down in one place for each side: [client](docs/CLI.md#limits-and-caveats) and
+[server](docs/SERVER.md#limits-and-caveats).
+
 ## Quick start
 
 The client:

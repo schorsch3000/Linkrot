@@ -235,3 +235,37 @@ prefix completion pleasant. `config set` completes the setting names and `on`/`o
 | 1 | error (network, server error, local I/O, ...) |
 | 2 | usage error |
 | 3 | `up`: the file already exists on the server (URL printed on stdout) |
+
+## Limits and caveats
+
+What the client does not promise, and where it behaves differently from what you might expect. The limits of the server
+are in [SERVER.md](SERVER.md#limits-and-caveats).
+
+- **A file upload resumes, an upload from stdin does not.** Run `lr up big.iso` again after an interruption and it
+  continues where the server is. A pipe cannot: nobody knows whether the same bytes would ever come again, so an interrupted
+  `... | lr up` starts over (the server drops the unfinished upload by itself, after `upload_timeout`). The hash of a pipe
+  is only known at the end, so its integrity is checked at the end, not chunk by chunk beforehand.
+- **`lr down` never overwrites, and on some file systems it cannot do that atomically.** Normally the finished download
+  is put in place with `link()`, which fails if the name exists. Where hard links do not exist (FAT/exFAT, some SMB, NFS or
+  FUSE mounts, Termux) it creates the file with `O_EXCL` and copies the verified data into it. Nothing is replaced, but a
+  crash or a power loss during that copy leaves a truncated file under the final name; a copy that fails or does not match
+  is removed again, and the `.part` file is kept.
+- **Partial downloads are `<name>.<start of the sha256>.part`.** A `<name>.part` that another program wrote is never
+  touched, and partial data of another version of the same file is never continued. Partial files that an older version
+  of `lr` left behind are not picked up either: delete them by hand.
+- **A server that goes quiet counts as a network error.** A connection on which not a single byte moves for a minute is
+  given up, then retried or resumed like any other failure. A `Retry-After` of the server is honoured, but never longer
+  than 5 minutes.
+- **`lr page edit` and `lr custom edit` watch the file, they do not know your editor.** A change is noticed by size and
+  modification time, and for 5 seconds after a save by the content as well (file systems with a coarse clock give two
+  quick saves the same time). A tool that sets an old modification time on purpose is not noticed while watching; the last
+  upload when you press Ctrl+C reads the content anyway.
+- **A server that does not answer cannot hold the editor.** A watched upload gives up after 2 minutes, the last one
+  after 1 minute, and a second Ctrl+C during the last one gives up at once; the file is kept and its path printed.
+- **The config file holds your token.** `lr` warns once per run if group or others can read it, and refuses to write a
+  token into such a file when it is a symlink (dotfile managers) unless you pass `--allow-unsafe-file`. On Windows there are
+  no such file modes, nothing is checked. `lr config --token` without a value asks on the terminal, the input hidden; it
+  needs a terminal and otherwise fails (use `--token -` with the token on stdin).
+- **Tested on Linux.** Release archives are built for Linux, macOS, Windows and FreeBSD, but the tests and the
+  end-to-end run in CI are on Linux only. Behaviour that depends on the platform (hard links, file modes, the token
+  prompt, the clipboard) is the part to watch on the others.
