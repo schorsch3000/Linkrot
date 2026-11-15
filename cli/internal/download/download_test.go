@@ -338,3 +338,73 @@ func TestOpenPartCreatesResumesAndRefuses(t *testing.T) {
 		t.Error("a part file in a missing directory must fail")
 	}
 }
+
+// A response that ends cleanly before the file is complete and makes no progress (empty body, or the
+// whole short body again and again) must count as a failed attempt, not be re-requested in a tight loop.
+func TestBodyThatEndsEarlyWithoutProgressIsGivenUpOn(t *testing.T) {
+	for name, body := range map[string]string{
+		"empty body": "",
+		"short body": content[:10],
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, c, dir := setup(t)
+			id := s.Add("report.txt", []byte(content))
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			requests := 0
+			s.Intercept = func(r *http.Request) (int, http.Header, string) {
+				if !strings.HasPrefix(r.URL.Path, "/dl/") {
+					return 0, nil, ""
+				}
+				if requests++; requests > 100 { // safety net: a client that spins is stopped here
+					cancel()
+				}
+				return 200, nil, body
+			}
+			var sleeps int
+			o := noSleep()
+			o.MaxRetries = 3
+			o.Sleep = func(context.Context, time.Duration) error { sleeps++; return nil }
+
+			_, err := Download(ctx, c, id, dir, o)
+
+			if err == nil || !strings.Contains(err.Error(), "giving up after 3 failed attempts") {
+				t.Fatalf("got %v after %d requests, want giving up after 3 failed attempts", err, requests)
+			}
+			if requests > 10 || sleeps != 3 {
+				t.Fatalf("%d requests, %d sleeps", requests, sleeps)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "report.txt.part")); err != nil {
+				t.Fatal("the .part file must stay so that a later run can resume")
+			}
+		})
+	}
+}
+
+// A body that ends early but made progress is resumed without using up the retries.
+func TestBodyThatEndsEarlyWithProgressIsResumed(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	inner := s.Config.Handler
+	requests := 0
+	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/dl/") {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		requests++
+		if requests == 1 {
+			_, _ = io.WriteString(w, content[:12]) // 200, clean end, 12 of 40 bytes
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+	o := noSleep()
+	o.MaxRetries = 1
+
+	path, err := Download(t.Context(), c, id, dir, o)
+
+	if err != nil || read(t, path) != content {
+		t.Fatalf("%v", err)
+	}
+}

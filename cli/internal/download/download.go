@@ -64,8 +64,13 @@ func Download(ctx context.Context, c *api.Client, id, target string, o Options) 
 	for failures := 0; size < file.Size; {
 		before := size
 		size, err = fetch(ctx, c, file, out, size, report)
-		if err == nil {
+		if err == nil && size >= file.Size {
 			continue
+		}
+		if err == nil {
+			// A clean end of the body before the file is complete is a failed attempt like any other,
+			// otherwise a server that keeps sending nothing would be asked again without pause or limit.
+			err = fmt.Errorf("response ended after %d of %d bytes", size, file.Size)
 		}
 		if ctx.Err() != nil {
 			return "", ctx.Err()
