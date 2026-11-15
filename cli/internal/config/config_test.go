@@ -179,3 +179,172 @@ func TestSaveReplacesAnExistingFileAtomically(t *testing.T) {
 		t.Fatalf("%+v, %v", c, err)
 	}
 }
+
+// dotfile managers (stow, chezmoi, home-manager) keep the real file elsewhere and link it into place
+func linked(t *testing.T, mode os.FileMode, content string) (link, target string) {
+	t.Helper()
+	managed, home := t.TempDir(), t.TempDir()
+	target, link = filepath.Join(managed, "config.toml"), filepath.Join(home, "config.toml")
+	if err := os.WriteFile(target, []byte(content), mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	return link, target
+}
+
+func isLink(t *testing.T, path string) bool {
+	t.Helper()
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+func TestSaveFollowsASymlinkAndKeepsIt(t *testing.T) {
+	link, target := linked(t, 0o600, "server = 'https://old.example'\n")
+	want := Config{Server: "https://lr.example", Token: "lr_secret"}
+
+	if err := Save(link, want); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isLink(t, link) {
+		t.Fatal("the symlink was replaced by a regular file")
+	}
+	if got, err := Load(target); err != nil || got != want {
+		t.Fatalf("target holds %+v, %v", got, err)
+	}
+	if entries, _ := os.ReadDir(filepath.Dir(target)); len(entries) != 1 {
+		t.Fatalf("temporary files left: %v", entries)
+	}
+}
+
+func TestSaveKeepsTheModeOfAManagedFile(t *testing.T) {
+	link, target := linked(t, 0o400, "")
+	// 0400: the owner can read it only, which is as safe as it gets, and chezmoi would see a mode change otherwise
+	if err := Save(link, Config{Server: "https://lr.example", Token: "t"}); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(target); info.Mode().Perm() != 0o400 {
+		t.Fatalf("mode %v, want 0400", info.Mode().Perm())
+	}
+}
+
+func TestSaveThroughADanglingSymlinkCreatesTheTarget(t *testing.T) {
+	dir := t.TempDir()
+	target, link := filepath.Join(dir, "managed", "config.toml"), filepath.Join(dir, "config.toml")
+	if err := os.Mkdir(filepath.Dir(target), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	want := Config{Server: "https://lr.example", Token: "lr_secret"}
+
+	if err := Save(link, want); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := Load(target); err != nil || got != want {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if !isLink(t, link) {
+		t.Fatal("the symlink was replaced")
+	}
+	if info, _ := os.Stat(target); info.Mode().Perm() != 0o600 {
+		t.Fatalf("a new file must be 0600, is %v", info.Mode().Perm())
+	}
+}
+
+func TestSaveInAReadOnlyPlaceSaysWhyAndChangesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write anywhere")
+	}
+	link, target := linked(t, 0o600, "server = 'https://old.example'\n")
+	if err := os.Chmod(filepath.Dir(target), 0o500); err != nil { // like the Nix store
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(target), 0o700) })
+
+	err := Save(link, Config{Server: "https://lr.example", Token: "t"})
+
+	if err == nil || !strings.Contains(err.Error(), "symlink") || !strings.Contains(err.Error(), target) {
+		t.Fatalf("%v", err)
+	}
+	if !isLink(t, link) {
+		t.Fatal("the symlink was replaced")
+	}
+	if b, _ := os.ReadFile(target); string(b) != "server = 'https://old.example'\n" {
+		t.Fatalf("target changed: %q", b)
+	}
+}
+
+func TestSaveRefusesToPutTheTokenIntoAFileOthersCanRead(t *testing.T) {
+	link, target := linked(t, 0o644, "server = 'https://old.example'\n")
+
+	err := Save(link, Config{Server: "https://lr.example", Token: "lr_secret"})
+
+	var unsafe *UnsafeFileError
+	if !errors.As(err, &unsafe) || unsafe.Path != target || unsafe.Mode.Perm() != 0o644 {
+		t.Fatalf("%v", err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "server = 'https://old.example'\n" {
+		t.Fatalf("target changed: %q", b)
+	}
+}
+
+func TestSaveLooseWritesItAnywayAndKeepsTheMode(t *testing.T) {
+	link, target := linked(t, 0o644, "")
+	want := Config{Server: "https://lr.example", Token: "lr_secret"}
+
+	if err := SaveLoose(link, want); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := Load(target); err != nil || got != want {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if info, _ := os.Stat(target); info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v: the user decided to keep it", info.Mode().Perm())
+	}
+}
+
+func TestSaveWithoutATokenIntoALooseManagedFileIsFine(t *testing.T) {
+	link, _ := linked(t, 0o644, "")
+	if err := Save(link, Config{Server: "https://lr.example"}); err != nil {
+		t.Fatalf("nothing secret is written: %v", err)
+	}
+}
+
+func TestAPlainLooseFileIsReplacedByASafeOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("server = 'x'\n"), 0o644); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+
+	if err := Save(path, Config{Server: "https://lr.example", Token: "t"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestLooseMode(t *testing.T) {
+	for mode, want := range map[os.FileMode]bool{0o600: false, 0o400: false, 0o640: true, 0o604: true, 0o644: true, 0o666: true} {
+		link, _ := linked(t, mode, "")
+		if got, loose := LooseMode(link); loose != want || (want && got.Perm() != mode) {
+			t.Errorf("%v: loose %v (mode %v), want %v", mode, loose, got, want)
+		}
+	}
+	if _, loose := LooseMode(filepath.Join(t.TempDir(), "nope")); loose {
+		t.Error("a missing file is not loose")
+	}
+}

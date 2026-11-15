@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,7 @@ const promptToken = "\x00prompt"
 
 func (a *App) configCommand() *cobra.Command {
 	var server, token string
+	var allowUnsafe bool
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show or set the server URL and token; get and set change the settings of the server",
@@ -35,6 +37,7 @@ func (a *App) configCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			a.warnLooseConfig(path)
 			if cmd.Flags().Changed("token") && token == promptToken && len(args) > 0 && a.followsToken(args[0]) {
 				token, args = args[0], args[1:] // "--token <value>": the flag took no value, the word after it is the value
 			}
@@ -63,7 +66,16 @@ func (a *App) configCommand() *cobra.Command {
 					}
 					c.Token = token
 				}
-				return config.Save(path, c)
+				save := config.Save
+				if allowUnsafe {
+					save = config.SaveLoose
+				}
+				err := save(path, c)
+				var unsafe *config.UnsafeFileError
+				if errors.As(err, &unsafe) {
+					return fmt.Errorf("%w: run `chmod 600 %s` first, or pass --allow-unsafe-file to write it anyway", err, unsafe.Path)
+				}
+				return err
 			}
 			server := c.Server
 			if server == "" {
@@ -77,6 +89,7 @@ func (a *App) configCommand() *cobra.Command {
 	cmd.Flags().StringVar(&server, "server", "", "server URL, e.g. https://linkrot.example")
 	cmd.Flags().StringVar(&token, "token", "", "API token (see lr-auth on the server); without a value it is asked for on the terminal (hidden), `-` reads it from stdin; both keep it out of the shell history and the process list")
 	cmd.Flags().Lookup("token").NoOptDefVal = promptToken
+	cmd.Flags().BoolVar(&allowUnsafe, "allow-unsafe-file", false, "write the token even into a config file (behind a symlink) that others can read")
 	return cmd
 }
 

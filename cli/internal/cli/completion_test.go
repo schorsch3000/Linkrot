@@ -75,10 +75,10 @@ func TestConfigCompletesItsFlags(t *testing.T) {
 	e := newEnv(t)
 
 	got := flagNamesOf(e.completions("config", ""))
-	if strings.Join(got, " ") != "get set --quiet --server --token" {
+	if strings.Join(got, " ") != "get set --allow-unsafe-file --quiet --server --token" {
 		t.Fatalf("config: %v", got)
 	}
-	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--quiet --token" {
+	if got := flagNamesOf(e.completions("config", "--server", "https://x", "")); strings.Join(got, " ") != "--allow-unsafe-file --quiet --token" {
 		t.Fatalf("flags that are already given are not offered again: %v", got)
 	}
 	if got := flagNamesOf(e.completions("config", "--t")); strings.Join(got, " ") != "--token" {

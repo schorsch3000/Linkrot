@@ -122,10 +122,19 @@ config --server <url>     set the server URL, e.g. https://linkrot.example (http
 config --token            ask for the token on the terminal, the input is hidden (fails if stdin is not a terminal)
 config --token -          read the token from the first line of stdin, e.g. `lr config --token - < token-file`
 config --token <token>    set the token (it ends up in the shell history and the process list; prefer the two forms above)
+config --allow-unsafe-file ...  write the token even into a config file that others can read (see below)
 config                    show the current configuration (token masked)
 config get [--json]       show the settings of the server (they change its public pages)
 config set <setting> <on|off> [<setting> <on|off>...]   change settings of the server
 ```
+
+The config file (`$XDG_CONFIG_HOME/linkrot/config.toml`, `~/.config/linkrot/config.toml`, or `$LINKROT_CONFIG`) is
+written with mode 0600 through a temporary file that is fsynced and renamed, so a crash leaves the old or the new file.
+If it is a **symlink** (stow, chezmoi, home-manager), the link is followed and kept, and the mode of the file behind it
+is kept as well. Every command warns once (not with `-q`) if the config file can be read by group or others, and
+`config` refuses to write a token into such a file behind a symlink: `chmod 600` it, or pass `--allow-unsafe-file` to
+write it anyway. A plain file readable by others is simply replaced by a private one. If the symlink points into a
+read-only place (the Nix store), the error says so and nothing changes.
 
 The settings are `show_taglines`, `show_startpage`, `show_title`, `show_linkrot_line`, `show_curl_line` and
 `show_hash_line`, see [API.md](API.md#get-settings-patch-settings---the-look-of-the-public-pages). All are on by default.

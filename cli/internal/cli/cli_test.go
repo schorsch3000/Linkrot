@@ -306,3 +306,95 @@ func TestConfigStrayArgumentsAreStillUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// a config file that others can read, behind a symlink as dotfile managers make them
+func looseLinkedConfig(t *testing.T) (link, target string) {
+	t.Helper()
+	managed, home := t.TempDir(), t.TempDir()
+	target, link = filepath.Join(managed, "config.toml"), filepath.Join(home, "config.toml")
+	if err := os.WriteFile(target, []byte("server = 'https://old.example'\n"), 0o644); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o644); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(config.EnvPath, link)
+	return link, target
+}
+
+func TestConfigRefusesToWriteTheTokenIntoAFileOthersCanRead(t *testing.T) {
+	link, target := looseLinkedConfig(t)
+
+	code, _, errs := runWithConfig(t, "lr", "config", "--token", "lr_abcdefghijklmnop")
+
+	if code != ExitError {
+		t.Fatalf("code %d, stderr %q", code, errs)
+	}
+	for _, want := range []string{target, "readable by others", "chmod 600 " + target, "--allow-unsafe-file"} {
+		if !strings.Contains(errs, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, errs)
+		}
+	}
+	if b, _ := os.ReadFile(target); string(b) != "server = 'https://old.example'\n" {
+		t.Fatalf("the file was changed: %q", b)
+	}
+	_ = link
+}
+
+func TestConfigAllowUnsafeFileWritesItAndKeepsTheMode(t *testing.T) {
+	link, target := looseLinkedConfig(t)
+
+	code, _, errs := runWithConfig(t, "lr", "config", "--allow-unsafe-file", "--token", "lr_abcdefghijklmnop")
+
+	if code != 0 {
+		t.Fatalf("code %d: %s", code, errs)
+	}
+	if c, err := config.Load(link); err != nil || c.Token != "lr_abcdefghijklmnop" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if info, _ := os.Stat(target); info.Mode().Perm() != 0o644 {
+		t.Fatalf("mode %v", info.Mode().Perm())
+	}
+}
+
+func TestLooseConfigFileIsWarnedAboutOnceAndNotWhenQuiet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv(config.EnvPath, path)
+	if err := config.Save(path, config.Config{Server: "https://lr.example", Token: "lr_abcdefghijklmnop"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+
+	_, _, errs := runWithConfig(t, "lr", "config")
+	if strings.Count(errs, "readable by others") != 1 || !strings.Contains(errs, "chmod 600 "+path) {
+		t.Errorf("no (single) warning:\n%s", errs)
+	}
+	if _, _, errs := runWithConfig(t, "lr", "-q", "config"); errs != "" {
+		t.Errorf("-q must be silent:\n%s", errs)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, errs := runWithConfig(t, "lr", "config"); errs != "" {
+		t.Errorf("a private file must not be warned about:\n%s", errs)
+	}
+}
+
+func TestLooseConfigFileIsWarnedAboutWhenTheServerIsUsed(t *testing.T) {
+	e := newEnv(t)
+	path, _ := config.Path()
+	if err := os.Chmod(path, 0o640); err != nil { //nolint:gosec // the point of the test
+		t.Fatal(err)
+	}
+
+	code, _, errs := e.run("ls")
+
+	if code != 0 || !strings.Contains(errs, "readable by others") {
+		t.Fatalf("code %d, stderr %q", code, errs)
+	}
+}

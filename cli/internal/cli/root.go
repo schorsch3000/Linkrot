@@ -32,6 +32,8 @@ type App struct {
 	Err        io.Writer
 	ConfigPath func() (string, error)
 
+	warnedLoose bool // the config file was reported as readable by others
+
 	args []string // the command line, for the one flag whose value is optional (config --token)
 
 	// ReadSecret asks for a line without echoing it; nil asks on the terminal. Replaced in tests.
@@ -119,6 +121,7 @@ func (a *App) client() (*api.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.warnLooseConfig(path)
 	if err := c.Check(); err != nil {
 		return nil, err
 	}
@@ -173,4 +176,16 @@ func changed(fs *pflag.FlagSet, names ...string) bool {
 		}
 	}
 	return false
+}
+
+// warnLooseConfig says once per run that the config file, which holds the token, can be read by others.
+func (a *App) warnLooseConfig(path string) {
+	if a.Quiet || a.warnedLoose {
+		return
+	}
+	if mode, loose := config.LooseMode(path); loose {
+		a.warnedLoose = true
+		_, _ = fmt.Fprintf(a.Err, "%s: %s is readable by others (mode %04o) and holds your token: run `chmod 600 %s`\n",
+			a.errPaint().Paint(color.Yellow, a.Name+": warning"), path, mode, path)
+	}
 }
