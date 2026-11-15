@@ -217,13 +217,14 @@ final readonly class UploadController
         }
         try {
             $this->files->seal($file->id, $size, $sha256, $now);
-        } catch (PDOException) {
+        } catch (PDOException $e) {
             $winner = $this->files->findBySha256($sha256);
             if ($winner instanceof FileRecord && $winner->isReady()) {
                 return $this->duplicateOfSealed($file, $winner);
             }
 
-            throw new \RuntimeException('cannot seal upload ' . $file->id);
+            // with the cause: a busy or read-only database is not a mystery, and the app answers a busy one with 503
+            throw new \RuntimeException('cannot seal upload ' . $file->id, 0, $e);
         }
         $ready = $this->files->find($file->id);
 

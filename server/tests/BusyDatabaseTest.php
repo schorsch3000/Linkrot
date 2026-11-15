@@ -73,6 +73,38 @@ final class BusyDatabaseTest extends AppTestCase
         $this->assertBusy($this->request('GET', "/dl/$id/a.txt", auth: false));
     }
 
+    /** Sealing a stream looks for a winner when the database says no; a busy database must still be seen as busy. */
+    public function testSealingWhileTheDatabaseIsBusyAnswers503NotAMysteryError(): void
+    {
+        $created = $this->call('POST', '/api/v1/files', ['name' => 'stdin.txt', 'stream' => true])[1];
+        $id = $created['id'];
+        self::assertIsString($id);
+        $data = 'abc';
+        $chunk = $this->request('PATCH', "/api/v1/files/$id/content", [
+            'content-type' => 'application/offset+octet-stream',
+            'upload-offset' => '0',
+        ], raw: $data . hash('sha256', $data, true));
+        self::assertSame(200, $chunk->status);
+        $this->lock();
+
+        $this->assertBusy($this->request('POST', "/api/v1/files/$id/seal", json: ['size' => 3, 'sha256' => hash('sha256', $data)]));
+    }
+
+    public function testSealingWithAReadOnlyDatabaseIsAnInternalError(): void
+    {
+        $created = $this->call('POST', '/api/v1/files', ['name' => 'stdin.txt', 'stream' => true])[1];
+        $id = $created['id'];
+        self::assertIsString($id);
+        $data = 'abc';
+        $this->request('PATCH', "/api/v1/files/$id/content", [
+            'content-type' => 'application/offset+octet-stream',
+            'upload-offset' => '0',
+        ], raw: $data . hash('sha256', $data, true));
+        $this->app->db()->exec('PRAGMA query_only = ON');
+
+        self::assertSame(500, $this->request('POST', "/api/v1/files/$id/seal", json: ['size' => 3, 'sha256' => hash('sha256', $data)])->status);
+    }
+
     public function testTheSameRequestWorksOnceTheLockIsGone(): void
     {
         $create = ['name' => 'a.txt', 'size' => 3, 'sha256' => hash('sha256', 'abc')];
