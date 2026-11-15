@@ -657,3 +657,69 @@ func TestStreamUploadStopsWhenCancelled(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A server that answers a chunk with an offset that does not move forward, or that lies beyond the
+// file, must not make the client spin: it counts as a failed attempt and ends in "giving up".
+func TestBadOffsetAnswersCountAsFailures(t *testing.T) {
+	for name, answer := range map[string]string{
+		"does not advance": `{"offset":0,"status":"uploading"}`,
+		"goes backwards":   `{"offset":-5,"status":"uploading"}`,
+		"beyond the file":  `{"offset":9999,"status":"uploading"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, c := setup(t)
+			o, sleeps := newOptions()
+			o.MaxRetries = 3
+			// Safety net: a client that loops forever is stopped here and fails the test below.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			patches := 0
+			s.Intercept = func(r *http.Request) (int, http.Header, string) {
+				if r.Method != http.MethodPatch {
+					return 0, nil, ""
+				}
+				if patches++; patches > 50 {
+					cancel()
+				}
+				return 200, http.Header{"Content-Type": {"application/json"}}, answer
+			}
+
+			_, err := Upload(ctx, c, writeFile(t, "a.txt", content), *o)
+
+			if err == nil || !strings.Contains(err.Error(), "giving up after 3 failed attempts") {
+				t.Fatalf("got %v after %d chunk requests, want giving up after 3 failed attempts", err, patches)
+			}
+			if patches > 10 || len(*sleeps) != 3 {
+				t.Fatalf("%d chunk requests, sleeps %v", patches, *sleeps)
+			}
+		})
+	}
+}
+
+// If the server's own answer to "where are we" is nonsense, the upload stops with an error.
+func TestImpossibleOffsetFromGetIsAnError(t *testing.T) {
+	s, c := setup(t)
+	o, _ := newOptions()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	requests := 0
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if requests++; requests > 100 {
+			cancel()
+		}
+		h := http.Header{"Content-Type": {"application/json"}}
+		switch {
+		case r.Method == http.MethodPatch:
+			return 503, nil, "busy"
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/files/"):
+			return 200, h, `{"id":"x","status":"uploading","offset":9999,"size":31}`
+		}
+		return 0, nil, ""
+	}
+
+	_, err := Upload(ctx, c, writeFile(t, "a.txt", content), *o)
+
+	if err == nil || errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v after %d requests, want an error about the offset", err, requests)
+	}
+}

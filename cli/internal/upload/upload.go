@@ -103,18 +103,25 @@ func sendChunks(ctx context.Context, c *api.Client, f *os.File, size int64, file
 	report(offset)
 	failures := 0
 	for {
+		if offset < 0 || offset >= size {
+			return nil, fmt.Errorf("server reports offset %d for a file of %d bytes that is not complete", offset, size)
+		}
 		n := min(file.ChunkSize, size-offset)
 		body := &countingReader{r: io.NewSectionReader(f, offset, n), base: offset, report: report}
 		res, err := c.UploadChunk(ctx, file.ID, offset, body, n)
-		if err == nil {
+		if err == nil && res.Status == api.StatusReady {
+			report(size)
+			return res, nil
+		}
+		if err == nil && res.Offset > offset && res.Offset <= size {
 			failures = 0
-			if res.Status == api.StatusReady {
-				report(size)
-				return res, nil
-			}
 			offset = res.Offset
 			report(offset)
 			continue
+		}
+		if err == nil {
+			// An answer that does not move us forward would make us ask for the same chunk forever.
+			err = fmt.Errorf("server answered offset %d after a chunk at %d of %d", res.Offset, offset, size)
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
