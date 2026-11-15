@@ -114,12 +114,16 @@ final class FilesApiTest extends AppTestCase
         self::assertSame(404, $this->call('DELETE', "/api/v1/files/$id")[0]);
     }
 
-    public function testExpiredFileIsNotFoundAndRemoved(): void
+    public function testExpiredFileIsNotFoundAtOnceAndRemovedByTheCleanupAfterTheGracePeriod(): void
     {
         $id = $this->upload('one', rmAfter: '1h');
         $this->now += 3601;
 
         self::assertSame(404, $this->call('GET', "/api/v1/files/$id")[0]);
+        self::assertFileExists($this->dir . '/files/' . $id);
+
+        $this->now += 3600;
+        $this->call('POST', '/api/v1/cleanup');
         self::assertFileDoesNotExist($this->dir . '/files/' . $id);
     }
 }

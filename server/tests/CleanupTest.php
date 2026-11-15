@@ -36,7 +36,7 @@ final class CleanupTest extends AppTestCase
     {
         $gone = $this->upload('one', rmAfter: '1h');
         $kept = $this->upload('two', rmAfter: '2d');
-        $this->now += 3601;
+        $this->now += 3601 + 3600; // expired, and the grace period (orphan_row_timeout, 1h) is over
 
         self::assertSame(['ran' => true, 'rows_deleted' => 1, 'files_deleted' => 1], $this->cleanup());
         self::assertFileDoesNotExist($this->path($gone));
@@ -218,13 +218,13 @@ final class CleanupTest extends AppTestCase
     public function testLazyRunHonoursInterval(): void
     {
         $id = $this->upload('one', rmAfter: '1h');
-        $this->now += 3601;
+        $this->now += 3601 + 3600; // expired, and past the grace period
 
         $this->app->cleanupIfDue();
         self::assertFileDoesNotExist($this->path($id), 'first request after start is due');
 
         $second = $this->upload('two', rmAfter: '1h');
-        $this->now += 3601;
+        $this->now += 3601 + 3600;
         $this->app->cleanupIfDue();
         self::assertFileExists($this->path($second), 'within 8h nothing runs');
 

@@ -8,9 +8,10 @@ use Closure;
 use Linkrot\FileId;
 
 /**
- * Looks files up the way the API sees them: over its time counts as not found, and is removed on the spot. A file whose
- * last use is gone is not found either, but it stays: the download that took the last use may not have been opened by
- * nginx yet, and unlinking now would break it. The cleanup removes it after a grace period.
+ * Looks files up the way the API sees them: a file that is over its time, or whose last use is gone, is not found, at
+ * once and for everybody. Nothing is deleted here: the download that was authorized a moment earlier may not have been
+ * opened by nginx yet (PHP answers with X-Accel-Redirect), and unlinking now would break it. The cleanup removes the file
+ * after a grace period (`orphan_row_timeout`).
  */
 final readonly class FileCatalog
 {
@@ -31,11 +32,7 @@ final readonly class FileCatalog
             return null;
         }
         if (!$file->isLive(($this->clock)())) {
-            if (!$file->isExhausted()) {
-                $this->remove($id);
-            }
-
-            return null;
+            return null; // dead for everybody at once; the file itself is the cleanup's business, after a grace period
         }
 
         return $file;

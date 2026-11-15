@@ -155,11 +155,12 @@ final readonly class Cleanup
         $this->pdo->exec('BEGIN IMMEDIATE');
         try {
             $select = $this->pdo->prepare(
-                "SELECT id FROM files WHERE status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :now) OR (uses_left = 0 AND COALESCE(last_use_at, updated_at) < CAST(:used_up AS INTEGER)))",
+                "SELECT id FROM files WHERE status = 'ready' AND ((expires_at IS NOT NULL AND expires_at <= :expired) OR (uses_left = 0 AND COALESCE(last_use_at, updated_at) < CAST(:used_up AS INTEGER)))",
             );
-            // A used-up file waits a while: the download that took the last use may still be opening it. (The CAST: PDO binds
-            // text, and without the column's affinity, which COALESCE drops, SQLite would call every integer smaller.)
-            $select->execute(['now' => $now, 'used_up' => $now - $orphanTimeout]);
+            // An expired or used-up file waits a while: the download that was authorized just before may still be opening it,
+            // nginx does that after PHP has answered. (The CAST: PDO binds text, and without the column's affinity, which
+            // COALESCE drops, SQLite would call every integer smaller.)
+            $select->execute(['expired' => $now - $orphanTimeout, 'used_up' => $now - $orphanTimeout]);
             $ids = array_values(array_unique([...array_map(strval(...), $select->fetchAll(PDO::FETCH_COLUMN)), ...$orphans]));
             $delete = $this->pdo->prepare('DELETE FROM files WHERE id = ?');
             foreach ($ids as $id) {

@@ -197,7 +197,10 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   `add_header X-Rot $upstream_http_x_rot always;` (in [nginx.conf.example](nginx.conf.example)); without that line
   the header is just missing.
 - A file is only served if it is `ready`, not past `expires_at` and not exhausted. A file that is past its time
-  is treated as **not found** and removed on the spot.
+  is treated as **not found** at once, for everybody, but it is not deleted by that request: the physical deletion is left
+  to the cleanup, `orphan_row_timeout` (default 1h) after the expiry, like for an exhausted file below. PHP answers a
+  download with `X-Accel-Redirect` and nginx opens the file a moment later; a request that arrives after the expiry must
+  not unlink the file under the download that was authorized just before it.
 - **Uses.** `--uses` is a convenience limit, not access control. A `GET` takes a use; `HEAD` and the `/file`
   page do not. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1 WHERE
   uses_left > 0`), so concurrent downloads cannot exceed the limit, and it notes the time in `last_use_at`.
@@ -293,7 +296,8 @@ lock, re-check `last_cleanup` so a second request does not repeat the work.
 Cleanup does three steps in this order:
 
 1. **Database first, one quick transaction.** Delete rows that are
-   - `ready` and past `expires_at`, or with `uses_left = 0`
+   - `ready` and past `expires_at` for more than `orphan_row_timeout` (default 1h), or with `uses_left = 0` and the last use
+     longer ago than that
    - without a data file and older than `orphan_row_timeout` (default 1h)
 
    Then, one by one, the **stale uploads**: `uploading` with `updated_at` older than `upload_timeout` (default 1d). A chunk
@@ -313,8 +317,9 @@ Cleanup does three steps in this order:
 Finally `last_cleanup` is written (and `last_cleanup_ok` if every file that had to go is gone, otherwise
 `last_cleanup_error`) and a one-line result (counts, failures) is logged.
 
-Independently of the cleanup, a request that touches an expired file treats it as not found and deletes it
-(see Download).
+An expired or used-up file is not found at once; only its deletion waits for the cleanup (see Download). The one place
+that does not wait: a new upload of the same bytes (the same sha256) replaces the dead row and file of the old one right
+away, because the sha256 is unique.
 
 ## Authentication
 
@@ -387,8 +392,8 @@ are in [CLI.md](CLI.md#limits-and-caveats).
   If a file must not be copied, encrypt it before you upload it.
 - **The id in the link is the only secret on the public side.** There is no login for downloads, no password for links
   and no encryption of the content: the server sees what you upload.
-- **Used-up files stay on disk for a while.** A file whose last use is gone is not found any more, but it is only deleted by
-  the cleanup once `orphan_row_timeout` has passed since that use, so that a download that is still being opened is not
+- **Expired and used-up files stay on disk for a while.** A file that is over its time or whose last use is gone is not
+  found any more, but it is only deleted by the cleanup once `orphan_row_timeout` has passed since the expiry or that use, so that a download that is still being opened is not
   broken. Its last download can be resumed inside that window.
 - **The cleanup is lazy.** There is no scheduler: it runs after a response when it is due. A server without traffic does
   not clean up (expired files are still not found, they just are not deleted yet). If the lock file of the cleanup cannot
@@ -409,7 +414,7 @@ are in [CLI.md](CLI.md#limits-and-caveats).
   text is your own public page). A stylesheet that cannot work under the policy (an `@import` from another host, a web font)
   is accepted and silently has no effect.
 - **The smallest lifetime is one hour**, and expiry is checked when a file is asked for, not by a clock tick: an expired
-  file is "not found" at once, deleted later.
+  file is "not found" at once and deleted by the cleanup an hour later (`orphan_row_timeout`).
 - **A new release can re-render your pages.** `install.sh` removes the cached HTML and the index of every host
   (`app/bin/pages-cache-clear`; your Markdown is never touched), so the next request renders every page again with the new
   release; the same happens when the renderer changes (`PageRenderer::VERSION`) without `install.sh` having run. A page that the stricter rules of a new release no longer

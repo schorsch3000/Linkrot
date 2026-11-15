@@ -79,13 +79,17 @@ final class DownloadTest extends AppTestCase
         self::assertCount(1, $bodies);
     }
 
-    public function testExpiredFileIsNotFoundAndRemoved(): void
+    public function testExpiredFileIsNotFoundAtOnceAndRemovedByTheCleanupAfterTheGracePeriod(): void
     {
         $id = $this->upload('abc', rmAfter: '1h');
         self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
         $this->now += 3601;
 
         self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+        self::assertFileExists($this->dir . '/files/' . $id, 'a download that was authorized a moment ago may still be opening it');
+
+        $this->now += 3600;
+        $this->call('POST', '/api/v1/cleanup');
         self::assertFileDoesNotExist($this->dir . '/files/' . $id);
     }
 
