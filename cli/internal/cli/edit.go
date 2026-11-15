@@ -367,6 +367,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 	}
 	defer stopWatching()
 
+	enter := newEnterWaiter(a.stdin())
 	argv := append(append([]string{}, editor...), path)
 	for {
 		out.info("%s: editing %s in %s (%s)", a.Name, spec.label, strings.Join(editor, " "), path)
@@ -396,7 +397,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 			out.info("%s: watching %s; every save is uploaded. Press Enter to open the editor again, Ctrl+C to stop.", a.Name, spec.label)
 		}
 
-		switch waitForEnterOrStop(a.stdin(), sigs) {
+		switch enter.wait(sigs) {
 		case waitEnter:
 			continue
 		default:
@@ -451,18 +452,40 @@ const (
 	waitStop
 )
 
-// waitForEnterOrStop returns when a line was typed or a signal arrived. The reader only lives as long as this wait, so it
-// never competes with an editor for the keyboard; at the end of the input only a signal ends the wait.
-func waitForEnterOrStop(in io.Reader, sigs <-chan os.Signal) waitResult {
-	lines := make(chan struct{}, 1)
-	go func() {
-		if _, err := bufio.NewReader(in).ReadString('\n'); err == nil {
-			lines <- struct{}{}
-		}
-	}()
+// enterWaiter waits for Enter or a signal, as often as needed during one session. It reads the keyboard only while a wait
+// is going on, so it never competes with an editor for it. One buffered reader and at most one reading goroutine live
+// for the whole session: a signal ends a wait but not the read, and whatever that read gets is the answer of the next
+// wait; lines that arrived together are not swallowed by a reader that is thrown away.
+type enterWaiter struct {
+	r       *bufio.Reader
+	pending chan error // the result of the read that is in flight, nil if there is none
+	eof     bool       // the input ended: only a signal ends a wait
+}
+
+func newEnterWaiter(in io.Reader) *enterWaiter { return &enterWaiter{r: bufio.NewReader(in)} }
+
+// wait returns waitEnter when a line was typed and waitStop when a signal arrived.
+func (w *enterWaiter) wait(sigs <-chan os.Signal) waitResult {
+	if !w.eof && w.pending == nil {
+		w.pending = make(chan error, 1)
+		go func(done chan<- error) {
+			_, err := w.r.ReadString('\n')
+			done <- err
+		}(w.pending)
+	}
+	var lines <-chan error // nil at the end of the input: never ready
+	if !w.eof {
+		lines = w.pending
+	}
 	select {
-	case <-lines:
-		return waitEnter
+	case err := <-lines:
+		w.pending = nil
+		if err == nil {
+			return waitEnter
+		}
+		w.eof = true
+		<-sigs
+		return waitStop
 	case <-sigs:
 		return waitStop
 	}

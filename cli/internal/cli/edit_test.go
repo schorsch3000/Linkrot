@@ -643,3 +643,104 @@ func TestEditWatchUploadTimesOutAndWatchingContinues(t *testing.T) {
 		t.Fatalf("code %d:\n%s", code, s.errb.String())
 	}
 }
+
+// blockingReader is a terminal nobody types on: Read blocks until the test ends. reads counts the Read calls, which is
+// the number of goroutines that wait on the keyboard.
+type blockingReader struct {
+	reads atomic.Int32
+	gate  chan struct{}
+}
+
+func newBlockingReader(t *testing.T) *blockingReader {
+	r := &blockingReader{gate: make(chan struct{})}
+	t.Cleanup(func() { close(r.gate) })
+	return r
+}
+
+func (r *blockingReader) Read([]byte) (int, error) {
+	r.reads.Add(1)
+	<-r.gate
+	return 0, io.EOF
+}
+
+func waitResultWithin(t *testing.T, w *enterWaiter, sigs chan os.Signal, d time.Duration) (waitResult, bool) {
+	t.Helper()
+	got := make(chan waitResult, 1)
+	go func() { got <- w.wait(sigs) }()
+	select {
+	case r := <-got:
+		return r, true
+	case <-time.After(d):
+		sigs <- os.Interrupt // frees the waiter, the test reports the failure
+		<-got
+		return 0, false
+	}
+}
+
+// Two lines that arrive together (a paste, a pipe) are two Enters, not one.
+func TestEnterWaiterDoesNotSwallowQueuedLines(t *testing.T) {
+	w := newEnterWaiter(strings.NewReader("\n\n"))
+	sigs := make(chan os.Signal, 1)
+
+	for i := 1; i <= 2; i++ {
+		if r, ok := waitResultWithin(t, w, sigs, time.Second); !ok || r != waitEnter {
+			t.Fatalf("wait %d: result %v, answered in time: %v", i, r, ok)
+		}
+	}
+}
+
+// A signal ends the wait but not the read: no second goroutine starts reading the keyboard, and a line typed later
+// still counts instead of vanishing into the first goroutine.
+func TestEnterWaiterKeepsOneReaderAcrossWaits(t *testing.T) {
+	in := newBlockingReader(t)
+	w := newEnterWaiter(in)
+	sigs := make(chan os.Signal, 1)
+	for range 3 {
+		sigs <- os.Interrupt
+		if r := w.wait(sigs); r != waitStop {
+			t.Fatalf("result %v", r)
+		}
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	if n := in.reads.Load(); n != 1 {
+		t.Fatalf("%d goroutines read the keyboard, want 1", n)
+	}
+}
+
+func TestEnterWaiterSeesALineTypedAfterAnInterruptedWait(t *testing.T) {
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pw.Close() })
+	w := newEnterWaiter(pr)
+	sigs := make(chan os.Signal, 1)
+	sigs <- os.Interrupt
+	if r := w.wait(sigs); r != waitStop {
+		t.Fatalf("result %v", r)
+	}
+
+	go func() { _, _ = pw.Write([]byte("\n")) }()
+
+	if r, ok := waitResultWithin(t, w, sigs, time.Second); !ok || r != waitEnter {
+		t.Fatalf("result %v, answered in time: %v", r, ok)
+	}
+}
+
+// At the end of the input only a signal ends the wait.
+func TestEnterWaiterAtEndOfInputWaitsForASignal(t *testing.T) {
+	w := newEnterWaiter(strings.NewReader(""))
+	sigs := make(chan os.Signal, 1)
+	got := make(chan waitResult, 1)
+	go func() { got <- w.wait(sigs) }()
+
+	select {
+	case r := <-got:
+		t.Fatalf("returned %v at the end of the input", r)
+	case <-time.After(50 * time.Millisecond):
+	}
+	sigs <- os.Interrupt
+
+	if r := <-got; r != waitStop {
+		t.Fatalf("result %v", r)
+	}
+}
