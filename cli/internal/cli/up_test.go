@@ -15,6 +15,7 @@ import (
 	"github.com/schorsch3000/Linkrot/internal/api"
 	"github.com/schorsch3000/Linkrot/internal/config"
 	"github.com/schorsch3000/Linkrot/internal/testutil"
+	"github.com/schorsch3000/Linkrot/internal/upload"
 )
 
 const content = "hello linkrot, this is 31 bytes"
@@ -322,5 +323,38 @@ func TestUpStdinFailureIsReported(t *testing.T) {
 
 	if code != ExitError || out != "" || !strings.Contains(errs, "larger than allowed") {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errs)
+	}
+}
+
+func TestInterruptedUploadMessageSaysWhatCanBeDone(t *testing.T) {
+	canceled := func(context.Context, upload.Options) (*api.File, error) { return nil, context.Canceled }
+
+	for name, tc := range map[string]struct {
+		fromStdin bool
+		want      []string
+		not       []string
+	}{
+		"file":  {false, []string{"interrupted", "run the same command again to resume"}, nil},
+		"stdin": {true, []string{"interrupted", "stdin", "cannot be resumed", "start over"}, []string{"to resume"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			app := &App{Name: "lr", Out: &bytes.Buffer{}, Err: &bytes.Buffer{}, Sleep: func(context.Context, time.Duration) error { return nil }}
+
+			err := app.runUp(t.Context(), canceled, tc.fromStdin, upload.Options{}, false, "", false)
+
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("%q lacks %q", err, w)
+				}
+			}
+			for _, n := range tc.not {
+				if strings.Contains(err.Error(), n) {
+					t.Errorf("%q must not contain %q", err, n)
+				}
+			}
+		})
 	}
 }

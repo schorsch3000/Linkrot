@@ -82,7 +82,7 @@ func (a *App) upCommand() *cobra.Command {
 				}
 				return upload.Upload(ctx, client, args[0], o)
 			}
-			return a.runUp(cmd.Context(), send, opts, flags.Changed("copy"), copySel, asJSON)
+			return a.runUp(cmd.Context(), send, fromStdin, opts, flags.Changed("copy"), copySel, asJSON)
 		},
 	}
 	f := cmd.Flags()
@@ -95,7 +95,7 @@ func (a *App) upCommand() *cobra.Command {
 	return cmd
 }
 
-func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Options) (*api.File, error), opts upload.Options, doCopy bool, copySel string, asJSON bool) error {
+func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Options) (*api.File, error), fromStdin bool, opts upload.Options, doCopy bool, copySel string, asJSON bool) error {
 	var bar *progress.Bar
 	finish := func() {
 		if bar != nil {
@@ -134,6 +134,9 @@ func (a *App) runUp(ctx context.Context, send func(context.Context, upload.Optio
 		}
 		a.copyURL(doCopy, copySel, dup.URL)
 		return withCode(ExitDuplicate, fmt.Errorf("this file already exists on the server (%s), its URL was printed", dup.ID))
+	case errors.Is(err, context.Canceled) && fromStdin:
+		// whether the same data would come again is not known, so there is nothing to continue
+		return fmt.Errorf("interrupted; data from stdin cannot be resumed: run the command again to start over (the server drops the unfinished upload by itself)")
 	case errors.Is(err, context.Canceled):
 		return fmt.Errorf("interrupted; run the same command again to resume")
 	case err != nil:
