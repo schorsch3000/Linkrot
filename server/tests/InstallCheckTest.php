@@ -34,7 +34,10 @@ final class InstallCheckTest extends AppTestCase
             fwrite($stream, $body);
             rewind($stream);
             $headers += ['content-length' => (string) strlen($body)];
-            $response = $this->app->handle(new Request($method, $path, $headers, [], ['REMOTE_ADDR' => '192.0.2.1'], $stream));
+            [$path, $queryString] = array_pad(explode('?', $path, 2), 2, '');
+            parse_str($queryString, $query);
+            /** @var array<string, string> $query */
+            $response = $this->app->handle(new Request($method, $path, $headers, $query, ['REMOTE_ADDR' => '192.0.2.1'], $stream));
             $out = array_change_key_case($response->headers, CASE_LOWER);
             $content = $response->body;
             if (isset($out['x-accel-redirect'])) {
@@ -77,6 +80,54 @@ final class InstallCheckTest extends AppTestCase
         self::assertSame(1, count(array_filter($this->lines, static fn(string $l): bool => str_starts_with($l, 'ok: download headers: ok, X-Rot: '))));
         self::assertSame(['test'], $this->tokenNames(), 'the test token is gone');
         self::assertSame(0, $this->files(), 'the check file is gone');
+    }
+
+    public function testChecksThatPagesAndTheCleanupWorkAndLeavesNoPageBehind(): void
+    {
+        self::assertTrue($this->check(), implode("\n", $this->lines));
+
+        self::assertContains('ok: pages: stored, rendered and removed again', $this->lines);
+        self::assertContains('ok: cleanup: ran', $this->lines);
+        self::assertSame(404, $this->request('GET', '/api/v1/pages/linkrot-install-check')->status, 'the check page is gone');
+        self::assertFileDoesNotExist($this->dir . '/pages/linkrot-install-check.md');
+        self::assertSame(404, $this->request('GET', '/page/linkrot-install-check', auth: false)->status, 'it was never public');
+    }
+
+    public function testFailsWithAHintWhenPagesCannotBeStoredAndStillChecksTheRest(): void
+    {
+        file_put_contents($this->dir . '/pages', 'in the way: pages/ cannot be created'); // what an unwritable host folder amounts to
+
+        self::assertFalse($this->check());
+
+        $failure = implode("\n", array_filter($this->lines, static fn(string $l): bool => str_starts_with($l, 'FAILED')));
+        self::assertStringContainsString('page', $failure);
+        self::assertStringContainsString('php-fpm', $failure);
+        self::assertContains('ok: cleanup: ran', $this->lines, 'one problem does not hide the next');
+        self::assertSame(['test'], $this->tokenNames());
+        self::assertSame(0, $this->files());
+    }
+
+    public function testFailsWhenTheCleanupLockCannotBeOpenedAndStillChecksTheRest(): void
+    {
+        mkdir($this->dir . '/cleanup.lock'); // a directory where the lock file should be
+
+        self::assertFalse($this->check());
+
+        $failure = implode("\n", array_filter($this->lines, static fn(string $l): bool => str_starts_with($l, 'FAILED')));
+        self::assertStringContainsString('cleanup lock', $failure);
+        self::assertContains('ok: pages: stored, rendered and removed again', $this->lines, 'one problem does not hide the next');
+        self::assertSame(['test'], $this->tokenNames());
+    }
+
+    public function testAPageThatWasStoredIsRemovedEvenIfRenderingItFails(): void
+    {
+        $http = $this->nginx(override: static fn(string $method, string $path): ?array => $method === 'GET' && str_starts_with($path, '/api/v1/pages/')
+            ? [500, [], '{"error":{"code":"internal","message":"internal error"}}']
+            : null);
+
+        self::assertFalse($this->check($http));
+
+        self::assertFileDoesNotExist($this->dir . '/pages/linkrot-install-check.md');
     }
 
     public function testFailsWhenNginxDropsXRotAndStillCleansUp(): void

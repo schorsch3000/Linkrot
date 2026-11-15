@@ -35,8 +35,10 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    named `test-install-check` it asks the health endpoint, uploads a small file through `https://<host>`, opens its page,
    downloads it and checks the headers (`Content-Disposition: attachment`, `nosniff`, and `X-Rot`, which only arrives
    if the `/_files/` location of nginx passes it on, see [nginx.conf.example](nginx.conf.example); a host that switched
-   its taglines off with `lr config set taglines off` sends no `X-Rot`, and the check does not ask for it). The token and the
-   file are removed again, also when the check fails, and an old test token left by an interrupted run is replaced. A
+   its taglines off with `lr config set taglines off` sends no `X-Rot`, and the check does not ask for it). It also stores a
+   draft page (`linkrot-install-check`), has it rendered and removes it, which needs `pages/` and the host folder to be
+   writable for the php-fpm user, and it runs the cleanup once, which needs its lock file in the same folder. A failing step does not
+   stop the others. The token, the file and the page are removed again, also when the check fails, and an old test token left by an interrupted run is replaced. A
    failed check makes `install.sh` exit with 1. Run it as the user php-fpm runs as, after nginx is configured. On a host
    that cannot reach its own public URL, use `install.sh --no-network-check`.
 

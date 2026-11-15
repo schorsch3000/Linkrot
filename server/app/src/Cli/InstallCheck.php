@@ -11,7 +11,8 @@ use Throwable;
 /**
  * The end-to-end check of `app/install.sh`: with a temporary token, ask the health endpoint, upload a small file
  * through the public URL (https://<host>), open its page, download it and check the headers that only the web server can get right.
- * The token and the file are removed again, whatever happens.
+ * It also stores and removes a (never published) page, which needs the pages folder of the host to be writable for php-fpm, and
+ * runs the cleanup, which needs its lock file. The token, the file and the page are removed again, whatever happens.
  */
 final readonly class InstallCheck
 {
@@ -19,6 +20,9 @@ final readonly class InstallCheck
     public const string TOKEN_NAME = 'test-install-check';
 
     private const string FILE_NAME = 'linkrot-install-check.txt';
+
+    /** A draft: it is never shown in a footer or at its public URL. */
+    private const string PAGE_SLUG = 'linkrot-install-check';
 
     /**
      * @param Closure(string, string, array<string, string>, string): array{int, array<string, string>, string} $http
@@ -36,8 +40,9 @@ final readonly class InstallCheck
         $this->tokens->delete(self::TOKEN_NAME);
         $token = $this->tokens->create(self::TOKEN_NAME);
         $fileId = null;
+        $pageStored = false;
         try {
-            return $this->steps($token, $fileId);
+            return $this->steps($token, $fileId, $pageStored);
         } catch (Throwable $e) {
             $this->fail($e->getMessage());
 
@@ -50,11 +55,18 @@ final readonly class InstallCheck
                     ($this->out)('note: the check file ' . $fileId . ' could not be deleted, it expires by itself');
                 }
             }
+            if ($pageStored) {
+                try {
+                    ($this->http)('DELETE', '/api/v1/pages/' . self::PAGE_SLUG, ['authorization' => 'Bearer ' . $token], '');
+                } catch (Throwable) {
+                    ($this->out)('note: the check page ' . self::PAGE_SLUG . ' could not be deleted, it is a draft and harmless: lr page rm ' . self::PAGE_SLUG);
+                }
+            }
             $this->tokens->delete(self::TOKEN_NAME);
         }
     }
 
-    private function steps(string $token, ?string &$fileId): bool
+    private function steps(string $token, ?string &$fileId, bool &$pageStored): bool
     {
         $auth = ['authorization' => 'Bearer ' . $token];
 
@@ -119,7 +131,60 @@ final readonly class InstallCheck
         }
         $this->say('download: ok, the bytes match');
 
-        return $this->downloadHeaders($headers, $this->xRotExpected($auth));
+        // all of these run, so that one problem does not hide the next
+        $headersOk = $this->downloadHeaders($headers, $this->xRotExpected($auth));
+        $pagesOk = $this->pages($auth, $pageStored);
+        $cleanupOk = $this->cleanup($auth);
+
+        return $headersOk && $pagesOk && $cleanupOk;
+    }
+
+    /**
+     * Stores a draft page, has it rendered and removes it (the caller does that if this returns early): php-fpm has to
+     * create and write the pages folder of the host, which nothing else in this check does.
+     *
+     * @param array<string, string> $auth
+     */
+    private function pages(array $auth, bool &$stored): bool
+    {
+        $hint = 'the pages folder of the host cannot be written: it and the host folder must be writable by the user php-fpm runs as';
+        $path = '/api/v1/pages/' . self::PAGE_SLUG;
+        [$status, , $body] = ($this->http)('PUT', $path, $auth, "---\ntitle: Install check\npublished: false\n---\n# Install check\n");
+        if ($status !== 200) {
+            return $this->fail("storing a page answered HTTP $status: " . $this->excerpt($body) . "; $hint");
+        }
+        $stored = true;
+        [$status, , $body] = ($this->http)('GET', $path . '?format=html', $auth, '');
+        if ($status !== 200 || !str_contains($body, 'Install check')) {
+            return $this->fail("rendering the page answered HTTP $status: " . $this->excerpt($body) . "; $hint");
+        }
+        [$status, , $body] = ($this->http)('DELETE', $path, $auth, '');
+        if ($status !== 200 && $status !== 204) {
+            return $this->fail("removing the page answered HTTP $status: " . $this->excerpt($body) . "; $hint");
+        }
+        $stored = false;
+        $this->say('pages: stored, rendered and removed again');
+
+        return true;
+    }
+
+    /**
+     * Runs the cleanup once, which needs its lock file in the data folder.
+     *
+     * @param array<string, string> $auth
+     */
+    private function cleanup(array $auth): bool
+    {
+        [$status, , $body] = ($this->http)('POST', '/api/v1/cleanup', $auth, '');
+        $answer = json_decode($body, true);
+        if ($status !== 200 || !is_array($answer)) {
+            $message = is_array($answer) && is_array($answer['error'] ?? null) && is_string($answer['error']['message'] ?? null) ? $answer['error']['message'] : $this->excerpt($body);
+
+            return $this->fail("the cleanup answered HTTP $status: $message");
+        }
+        $this->say('cleanup: ' . (($answer['ran'] ?? false) === true ? 'ran' : 'another cleanup is running right now, fine'));
+
+        return true;
     }
 
     /** A host that switched the taglines off (`show_taglines`) sends no X-Rot header, so there is nothing to check. */
