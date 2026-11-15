@@ -40,7 +40,11 @@ final readonly class Cleanup
         return $this->run(false);
     }
 
-    /** Runs now, ignoring the interval. Null if another cleanup holds the lock. */
+    /**
+     * Runs now, ignoring the interval. Null if another cleanup holds the lock.
+     *
+     * @throws CleanupLockException if the lock file cannot be opened
+     */
     public function runNow(): ?CleanupResult
     {
         return $this->run(true);
@@ -52,8 +56,13 @@ final readonly class Cleanup
             return null;
         }
         $lock = @fopen($this->lockFile, 'c');
-        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
-            return null;
+        if ($lock === false) {
+            return $this->lockUnavailable($force);
+        }
+        if (!flock($lock, LOCK_EX | LOCK_NB)) {
+            fclose($lock);
+
+            return null; // somebody else is cleaning
         }
 
         try {
@@ -82,6 +91,28 @@ final readonly class Cleanup
             flock($lock, LOCK_UN);
             fclose($lock);
         }
+    }
+
+    /**
+     * The lock file cannot be opened (wrong owner or mode of the data folder): the cleanup would never run, and nothing
+     * would say so. It is logged and kept for /health like any other failure; the lazy cleanup, which runs after a
+     * request, then waits for the next interval instead of trying (and writing to the database) on every request.
+     */
+    private function lockUnavailable(bool $force): null
+    {
+        $message = 'cannot open the cleanup lock file ' . $this->lockFile . ' (the php-fpm user must be able to create files in the data folder)';
+        error_log('linkrot cleanup: ' . $message);
+        try {
+            $this->writeError($message);
+            $this->setMeta(self::LAST_RUN, (string) ($this->clock)());
+        } catch (\Throwable $e) {
+            error_log('linkrot cleanup: and the failure could not be recorded: ' . $e->getMessage());
+        }
+        if ($force) {
+            throw new CleanupLockException($message);
+        }
+
+        return null;
     }
 
     private function cleanup(): CleanupResult

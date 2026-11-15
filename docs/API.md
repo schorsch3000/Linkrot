@@ -165,7 +165,7 @@ Deletes row and data file. `204`. Unknown id: `404`.
 ### `POST /cleanup`
 
 Runs the cleanup now (ignores the interval, still takes the cleanup lock). Returns `200` with
-`{ "ran": true, "rows_deleted": n, "files_deleted": n }`, or `{ "ran": false }` if another cleanup holds the lock.
+`{ "ran": true, "rows_deleted": n, "files_deleted": n }`, or `{ "ran": false }` if another cleanup holds the lock. If the lock file cannot be opened at all (the php-fpm user cannot create files in the data folder) it answers `500` with the code `cleanup_lock` and says which file; the lazy cleanup that runs after requests records the same message, so `GET /health` shows it as a `cleanup` warning, and tries again after `cleanup_interval`.
 
 ### `GET /health` - is the server ready?
 

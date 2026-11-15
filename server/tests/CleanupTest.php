@@ -232,4 +232,80 @@ final class CleanupTest extends AppTestCase
         $this->app->cleanupIfDue();
         self::assertFileDoesNotExist($this->path($second));
     }
+
+    /** @return array<string, array<string, mixed>> the checks of GET /health by name */
+    private function healthChecks(): array
+    {
+        [$status, $body] = $this->call('GET', '/api/v1/health');
+        self::assertSame(200, $status);
+        $checks = [];
+        foreach ($body['checks'] as $check) {
+            $checks[$check['name']] = $check;
+        }
+
+        return $checks;
+    }
+
+    /** A directory where the lock file should be: it cannot be opened, whoever tries (root included). */
+    private function breakTheLock(): void
+    {
+        mkdir($this->dir . '/cleanup.lock');
+    }
+
+    public function testACleanupLockThatCannotBeOpenedIsReportedByTheApi(): void
+    {
+        $this->breakTheLock();
+
+        $response = $this->request('POST', '/api/v1/cleanup');
+
+        self::assertSame(500, $response->status, 'not "ran: false", that means another cleanup is running');
+        self::assertStringContainsString('cleanup lock', $response->body);
+    }
+
+    public function testACleanupLockThatCannotBeOpenedShowsInTheHealthCheck(): void
+    {
+        $this->breakTheLock();
+        $this->app->cleanupIfDue();
+
+        $cleanup = $this->healthChecks()['cleanup'];
+
+        self::assertSame('warn', $cleanup['level']);
+        self::assertStringContainsString('cleanup lock', $cleanup['message']);
+        self::assertStringNotContainsString('not run yet', $cleanup['message']);
+    }
+
+    public function testTheLazyCleanupTriesAgainOnlyAfterTheInterval(): void
+    {
+        $this->breakTheLock();
+        $this->app->cleanupIfDue();
+        $first = $this->errorAt();
+        self::assertSame($this->now, $first);
+
+        $this->now += 60;
+        $this->app->cleanupIfDue();
+        self::assertSame($first, $this->errorAt(), 'every request must not try (and write to the database) again');
+
+        $this->now += 8 * 3600;
+        $this->app->cleanupIfDue();
+        self::assertSame($this->now, $this->errorAt());
+    }
+
+    public function testOnceTheLockCanBeOpenedTheCleanupRunsAndTheErrorIsGone(): void
+    {
+        $this->breakTheLock();
+        $this->app->cleanupIfDue();
+        rmdir($this->dir . '/cleanup.lock');
+
+        self::assertTrue($this->cleanup()['ran']);
+
+        self::assertSame('ok', $this->healthChecks()['cleanup']['level']);
+    }
+
+    private function errorAt(): ?int
+    {
+        $json = Database::query($this->app->db(), "SELECT value FROM meta WHERE key = 'last_cleanup_error'")->fetchColumn();
+        $error = is_string($json) ? json_decode($json, true) : null;
+
+        return is_array($error) && is_int($error['at'] ?? null) ? $error['at'] : null;
+    }
 }

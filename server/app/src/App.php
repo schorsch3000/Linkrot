@@ -22,6 +22,7 @@ use Linkrot\Auth\TokenStore;
 use Linkrot\Custom\CssStore;
 use Linkrot\Custom\CustomStore;
 use Linkrot\Files\Cleanup;
+use Linkrot\Files\CleanupLockException;
 use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRepository;
 use Linkrot\Files\FileStore;
@@ -122,7 +123,11 @@ final class App
             $this->router->add($method, '/dl/{id}', static fn(Request $request, array $params): Response => $download()->download($request, $params['id']));
         }
         $this->router->add('POST', '/api/v1/cleanup', $this->authed(function (): Response {
-            $result = $this->cleanup()->runNow();
+            try {
+                $result = $this->cleanup()->runNow();
+            } catch (CleanupLockException $e) {
+                return Response::error(500, 'cleanup_lock', $e->getMessage());
+            }
 
             return Response::json($result instanceof \Linkrot\Files\CleanupResult
                 ? ['ran' => true, 'rows_deleted' => $result->rowsDeleted, 'files_deleted' => $result->filesDeleted]
