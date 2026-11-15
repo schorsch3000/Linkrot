@@ -48,7 +48,8 @@ Behaviour:
 2. send chunks of the size the server dictates; each chunk is hashed while it is being sent and the digest is appended to
    the body, so there is no extra delay per chunk
 3. a progress bar with throughput and ETA is drawn on stderr (only if stderr is a terminal)
-4. retry with backoff on network errors and `locked`/`5xx`; resume from the offset the server reports. A connection
+4. retry with backoff on network errors and `locked`/`5xx`; resume from the offset the server reports. A `Retry-After` of the
+   server (seconds or a date) is honoured, for `down` too, but never longer than 5 minutes. A connection
    on which no byte moves for a minute (a server that went silent) counts as a network error, for `down` too
 5. print the URL on stdout
 

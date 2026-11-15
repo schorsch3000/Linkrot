@@ -220,3 +220,32 @@ func TestBytesThatKeepTricklingResetTheIdleTimeout(t *testing.T) {
 		t.Fatalf("%+v %v", h, err)
 	}
 }
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		header string
+		want   time.Duration
+	}{
+		"missing":          {"", 0},
+		"seconds":          {"9", 9 * time.Second},
+		"zero":             {"0", 0},
+		"negative":         {"-5", 0},
+		"words":            {"soon", 0},
+		"huge":             {"99999999999", MaxRetryAfter},
+		"overflows":        {"9223372036854775807", MaxRetryAfter},
+		"over the cap":     {"3600", MaxRetryAfter},
+		"at the cap":       {"300", MaxRetryAfter},
+		"date":             {now.Add(90 * time.Second).Format(http.TimeFormat), 90 * time.Second},
+		"date in the past": {now.Add(-time.Hour).Format(http.TimeFormat), 0},
+		"date far ahead":   {now.Add(24 * time.Hour).Format(http.TimeFormat), MaxRetryAfter},
+		"broken date":      {"Sun, 99 Nov 2026 12:00:00 GMT", 0},
+		"other date form":  {now.Add(30 * time.Second).Format(time.RFC850), 30 * time.Second},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := parseRetryAfter(tc.header, now); got != tc.want {
+				t.Fatalf("%q: %v, want %v", tc.header, got, tc.want)
+			}
+		})
+	}
+}

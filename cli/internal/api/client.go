@@ -281,11 +281,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, le
 func decodeError(resp *http.Response) error {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
 	e := &Error{Status: resp.StatusCode}
-	if s := resp.Header.Get("Retry-After"); s != "" {
-		if secs, err := strconv.Atoi(s); err == nil && secs >= 0 {
-			e.RetryAfter = time.Duration(secs) * time.Second
-		}
-	}
+	e.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 	var payload struct {
 		Error struct {
 			Code    string `json:"code"`
@@ -445,4 +441,26 @@ func (c *Client) DeletePage(ctx context.Context, slug string) error {
 func (c *Client) PageTemplate(ctx context.Context) ([]byte, error) {
 	content, _, err := c.getRaw(ctx, "/api/v1/page-template")
 	return content, err
+}
+
+// MaxRetryAfter caps what a server can ask us to wait: a wrong or hostile header must not park the client for hours.
+const MaxRetryAfter = 5 * time.Minute
+
+// parseRetryAfter reads a Retry-After header: a number of seconds or an HTTP date. Zero if it is missing or unusable
+// (and for a date that has passed); never more than MaxRetryAfter.
+func parseRetryAfter(s string, now time.Time) time.Duration {
+	s = strings.TrimSpace(s)
+	if secs, err := strconv.ParseInt(s, 10, 64); err == nil {
+		switch {
+		case secs <= 0:
+			return 0
+		case secs >= int64(MaxRetryAfter/time.Second): // also keeps the multiplication from overflowing
+			return MaxRetryAfter
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(s); err == nil {
+		return min(max(t.Sub(now), 0), MaxRetryAfter)
+	}
+	return 0
 }

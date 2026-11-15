@@ -599,3 +599,29 @@ func TestCopyThatDoesNotMatchIsRemoved(t *testing.T) {
 		t.Fatal("the download must be kept")
 	}
 }
+
+// A server that says how long to wait is believed (up to the cap), downloads included.
+func TestRetryAfterOfTheServerIsHonoured(t *testing.T) {
+	s, c, dir := setup(t)
+	id := s.Add("report.txt", []byte(content))
+	failed := false
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if strings.HasPrefix(r.URL.Path, "/dl/") && !failed {
+			failed = true
+			return 503, http.Header{"Retry-After": {"7"}}, "busy"
+		}
+		return 0, nil, ""
+	}
+	var sleeps []time.Duration
+	o := noSleep()
+	o.Sleep = func(_ context.Context, d time.Duration) error { sleeps = append(sleeps, d); return nil }
+
+	path, err := Download(t.Context(), c, id, dir, o)
+
+	if err != nil || read(t, path) != content {
+		t.Fatalf("%v", err)
+	}
+	if len(sleeps) != 1 || sleeps[0] != 7*time.Second {
+		t.Fatalf("sleeps %v, want [7s]", sleeps)
+	}
+}

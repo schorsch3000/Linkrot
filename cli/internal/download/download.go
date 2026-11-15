@@ -89,6 +89,9 @@ func Download(ctx context.Context, c *api.Client, id, target string, o Options) 
 			return "", fmt.Errorf("giving up after %d failed attempts (partial data kept in %s): %w", failures-1, part, err)
 		}
 		d := min(time.Second<<min(failures-1, 5), 30*time.Second)
+		if ae != nil && ae.RetryAfter > d {
+			d = ae.RetryAfter // the server said how long (api caps it)
+		}
 		if o.OnRetry != nil {
 			o.OnRetry(err, d)
 		}

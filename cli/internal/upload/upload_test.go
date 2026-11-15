@@ -752,3 +752,26 @@ func TestSilentServerAfterAChunkIsRetried(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A server cannot make the client sleep for hours or years.
+func TestRetryAfterIsCapped(t *testing.T) {
+	s, c := setup(t)
+	o, sleeps := newOptions()
+	failed := false
+	s.Intercept = func(r *http.Request) (int, http.Header, string) {
+		if r.Method == http.MethodPatch && !failed {
+			failed = true
+			return 429, http.Header{"Retry-After": {"99999999"}}, "slow down"
+		}
+		return 0, nil, ""
+	}
+
+	file, err := Upload(t.Context(), c, writeFile(t, "a.txt", content), *o)
+
+	if err != nil || string(s.Content(file.ID)) != content {
+		t.Fatalf("%v", err)
+	}
+	if len(*sleeps) != 1 || (*sleeps)[0] != api.MaxRetryAfter {
+		t.Fatalf("sleeps %v, want [%v]", *sleeps, api.MaxRetryAfter)
+	}
+}
