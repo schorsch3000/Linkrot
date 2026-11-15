@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -122,6 +123,12 @@ type session struct {
 
 func (e *env) startEdit(editor func(call int, argv []string) error, args ...string) *session {
 	e.t.Helper()
+	return e.startEditWith(nil, editor, args...)
+}
+
+// startEditWith is startEdit with a chance to change the App first.
+func (e *env) startEditWith(tune func(*App), editor func(call int, argv []string) error, args ...string) *session {
+	e.t.Helper()
 	pr, pw := io.Pipe()
 	s := &session{t: e.t, e: e, errb: &lockedBuffer{}, sigs: make(chan os.Signal, 4), enter: pw, code: make(chan int, 1), editor: editor}
 	app := &App{
@@ -138,9 +145,44 @@ func (e *env) startEdit(editor func(call int, argv []string) error, args ...stri
 			return s.editor(n, argv)
 		},
 	}
+	if tune != nil {
+		tune(app)
+	}
 	go func() { s.code <- app.Run(args) }()
 	e.t.Cleanup(func() { _ = pw.Close() })
 	return s
+}
+
+// stall makes every write to the server hang until the test ends (or release is called): a server that accepted the
+// connection and then went silent. started counts the requests that are stuck.
+func stall(e *env) (started *atomic.Int32, release func()) {
+	started = new(atomic.Int32)
+	gate := make(chan struct{})
+	var once sync.Once
+	release = func() { once.Do(func() { close(gate) }) }
+	e.t.Cleanup(release)
+	// not Intercept: the fake server holds its lock while that runs, which would freeze every other request too
+	inner := e.server.Config.Handler
+	e.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			started.Add(1)
+			<-gate
+		}
+		inner.ServeHTTP(w, r)
+	})
+	return started, release
+}
+
+// ends waits for the session to end by itself and returns its exit code.
+func (s *session) ends(within time.Duration) int {
+	s.t.Helper()
+	select {
+	case code := <-s.code:
+		return code
+	case <-time.After(within):
+		s.t.Fatalf("the session did not end within %v; output:\n%s", within, s.errb.String())
+		return -1
+	}
 }
 
 func (s *session) stop() int {
@@ -520,5 +562,84 @@ func TestEditWithoutAnyEditorFails(t *testing.T) {
 	}
 	if e.server.HealthCalls != 0 {
 		t.Error("the server was asked")
+	}
+}
+
+func saveAndKeepPath(t *testing.T, pathBox *box[string], content string) func(int, []string) error {
+	return func(_ int, argv []string) error {
+		pathBox.set(argv[len(argv)-1])
+		overwrite(t, argv, content)
+		return nil
+	}
+}
+
+// A stalled server must not hold Ctrl+C hostage: the upload that is stuck in watch mode is abandoned, the last sync is
+// bounded, and the edits stay in the temp file.
+func TestEditCtrlCWithAStalledServerEndsAndKeepsTheFile(t *testing.T) {
+	e := newEnv(t)
+	started, _ := stall(e)
+	var pathBox box[string]
+	s := e.startEditWith(func(a *App) { a.EditFinalTimeout = 200 * time.Millisecond },
+		saveAndKeepPath(t, &pathBox, "my edits\n"), "page", "edit", "imprint", "ed")
+	s.waitFor("the stuck upload", func() bool { return started.Load() > 0 })
+
+	s.sigs <- os.Interrupt
+
+	if code := s.ends(3 * time.Second); code == 0 {
+		t.Fatal("exit code 0 although nothing was uploaded")
+	}
+	path := pathBox.get()
+	if b, err := os.ReadFile(path); err != nil || string(b) != "my edits\n" {
+		t.Fatalf("the file is gone: %q, %v", b, err)
+	}
+	if !strings.Contains(s.errb.String(), "your file is kept at "+path) {
+		t.Errorf("no path printed:\n%s", s.errb.String())
+	}
+	_ = os.RemoveAll(filepath.Dir(path))
+}
+
+// A second Ctrl+C while the last upload hangs gives up at once instead of waiting for the timeout.
+func TestEditSecondCtrlCDuringTheFinalSyncGivesUp(t *testing.T) {
+	e := newEnv(t)
+	started, _ := stall(e)
+	var pathBox box[string]
+	s := e.startEditWith(func(a *App) { a.EditFinalTimeout = time.Hour },
+		saveAndKeepPath(t, &pathBox, "my edits\n"), "page", "edit", "imprint", "ed")
+	s.waitFor("the stuck upload", func() bool { return started.Load() > 0 })
+	s.sigs <- os.Interrupt
+	s.waitFor("the final upload to be stuck", func() bool { return started.Load() > 1 })
+
+	s.sigs <- os.Interrupt
+
+	if code := s.ends(3 * time.Second); code == 0 {
+		t.Fatal("exit code 0 although nothing was uploaded")
+	}
+	path := pathBox.get()
+	if !strings.Contains(s.errb.String(), "your file is kept at "+path) {
+		t.Errorf("no path printed:\n%s", s.errb.String())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the file is gone: %v", err)
+	}
+	_ = os.RemoveAll(filepath.Dir(path))
+}
+
+// While watching, an upload that hangs gives up after its timeout and the next save is tried again.
+func TestEditWatchUploadTimesOutAndWatchingContinues(t *testing.T) {
+	e := newEnv(t)
+	started, release := stall(e)
+	var pathBox box[string]
+	s := e.startEditWith(func(a *App) { a.EditUploadTimeout = 150 * time.Millisecond },
+		saveAndKeepPath(t, &pathBox, "my edits\n"), "page", "edit", "imprint", "ed")
+	s.waitFor("the stuck upload", func() bool { return started.Load() > 0 })
+
+	s.waitFor("the timeout message", func() bool { return strings.Contains(s.errb.String(), "not uploaded") })
+
+	release()
+	// still watched: saving again uploads
+	overwrite(t, []string{pathBox.get()}, "second try\n")
+	s.waitFor("the second try", func() bool { got, _ := e.server.PageText("imprint"); return got == "second try\n" })
+	if code := s.stop(); code != 0 {
+		t.Fatalf("code %d:\n%s", code, s.errb.String())
 	}
 }

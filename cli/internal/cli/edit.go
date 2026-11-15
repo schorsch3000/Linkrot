@@ -28,8 +28,11 @@ const (
 	defaultEditPoll = 300 * time.Millisecond
 	// stableTicks is how many polls in a row the file must look the same before it is read: editors that save in several
 	// steps (write a backup, truncate, write, rename) are not uploaded half way.
-	stableTicks      = 2
-	finalSyncTimeout = time.Minute
+	stableTicks = 2
+	// watchUploadTimeout bounds one upload while watching (a server that went silent must not block the next save or
+	// Ctrl+C), finalSyncTimeout the one after Ctrl+C. A second Ctrl+C ends the wait at once.
+	watchUploadTimeout = 2 * time.Minute
+	finalSyncTimeout   = time.Minute
 )
 
 // splitCommand splits a command line such as `code --wait "my file"` into words: spaces separate, single and double
@@ -200,6 +203,8 @@ type uploader struct {
 	path string
 	out  *console
 
+	timeout time.Duration // per upload while watching
+
 	mu   sync.Mutex
 	sent [sha256.Size]byte
 }
@@ -218,8 +223,16 @@ func (u *uploader) sync(ctx context.Context) bool {
 	}
 	result, err := u.spec.upload(ctx, u.c, content)
 	if err != nil {
-		u.out.printf("%s %v", u.a.Name+": not uploaded:", err)
-		u.out.printf("  fix the file and save again; it is still being watched")
+		switch {
+		case errors.Is(ctx.Err(), context.Canceled):
+			// the session is ending and the caller says what that means for the file
+		case errors.Is(err, context.DeadlineExceeded):
+			u.out.printf("%s: not uploaded: no answer from the server in time", u.a.Name)
+			u.out.printf("  it is still being watched; save again to retry")
+		default:
+			u.out.printf("%s %v", u.a.Name+": not uploaded:", err)
+			u.out.printf("  fix the file and save again; it is still being watched")
+		}
 		return false
 	}
 	u.sent = hashOf(content)
@@ -248,7 +261,9 @@ func (u *uploader) watch(ctx context.Context, interval time.Duration, last fileS
 		case changed:
 			if stable++; stable >= stableTicks {
 				changed = false
-				u.sync(ctx)
+				uctx, cancel := context.WithTimeout(ctx, u.timeout)
+				u.sync(uctx)
+				cancel()
 			}
 		}
 	}
@@ -313,7 +328,14 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 	if note != "" {
 		out.info("%s: %s", a.Name, note)
 	}
-	u := &uploader{a: a, c: c, spec: spec, path: path, out: out, sent: hashOf(content)}
+	uploadTimeout, finalTimeout := a.EditUploadTimeout, a.EditFinalTimeout
+	if uploadTimeout <= 0 {
+		uploadTimeout = watchUploadTimeout
+	}
+	if finalTimeout <= 0 {
+		finalTimeout = finalSyncTimeout
+	}
+	u := &uploader{a: a, c: c, spec: spec, path: path, out: out, sent: hashOf(content), timeout: uploadTimeout}
 
 	sigs := a.EditSignals
 	if sigs == nil {
@@ -366,7 +388,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 				out.info("%s: no changes", a.Name)
 				return nil
 			}
-			if u.sync(ctx) {
+			if syncUntilSignal(ctx, u, uploadTimeout, sigs) {
 				return nil
 			}
 			out.printf("%s: press Enter to open the editor again, Ctrl+C to give up (the file is kept)", a.Name)
@@ -385,10 +407,7 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 				out.printf("%s: gave up; your file is kept at %s", a.Name, path)
 				return errors.New("not uploaded")
 			}
-			sctx, cancel := context.WithTimeout(ctx, finalSyncTimeout)
-			ok := u.sync(sctx)
-			cancel()
-			if !ok {
+			if !syncUntilSignal(ctx, u, finalTimeout, sigs) {
 				keep = true
 				out.printf("%s: stopped, but the last version was not uploaded; your file is kept at %s", a.Name, path)
 				return errors.New("the last version was not uploaded")
@@ -397,6 +416,22 @@ func (a *App) edit(cmd *cobra.Command, spec editSpec, editorArgs []string, once 
 			return nil
 		}
 	}
+}
+
+// syncUntilSignal is u.sync with a time limit that a signal (Ctrl+C) cuts short.
+func syncUntilSignal(ctx context.Context, u *uploader, limit time.Duration, sigs <-chan os.Signal) bool {
+	sctx, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-sigs:
+			cancel()
+		case <-done:
+		}
+	}()
+	return u.sync(sctx)
 }
 
 func drain(sigs <-chan os.Signal) {

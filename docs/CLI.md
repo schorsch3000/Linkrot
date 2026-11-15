@@ -193,7 +193,9 @@ the editor knows the syntax), opens it in an editor and **uploads it whenever yo
   editor is open nothing is printed; when you quit it, the messages appear, and `lr` stays open: **Enter** opens the editor
   again, **Ctrl+C** stops. Quit, read what the server said, press Enter, fix it.
 - **Ctrl+C** stops, after one last upload of a save that had not been uploaded yet. If that fails the temporary file is
-  kept and its path printed, and the exit code is 1; otherwise the temporary file is removed.
+  kept and its path printed, and the exit code is 1; otherwise the temporary file is removed. A server that does not
+  answer cannot hold you: an upload gives up after 2 minutes while watching and after 1 minute at the end, and a
+  second Ctrl+C during that last upload gives up at once (the file is kept).
 - **Starting point.** A page that does not exist yet starts from the template (a draft until it says `published: true`).
   A custom file that was never replaced starts from the built-in version. Nothing is uploaded before the first change.
 - **`--once`** does not watch: it uploads when the editor exits (the editor has to wait, `code --wait`, a terminal editor

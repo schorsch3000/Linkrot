@@ -46,11 +46,14 @@ type App struct {
 	Paint *color.Painter // overrides the color detection; nil detects per stream
 
 	// The editor of `page edit` and `custom edit`; all of them are replaced in tests. nil: the real ones.
-	Getenv      func(string) string
-	LookPath    func(string) (string, error)
-	RunEditor   func(argv []string, in io.Reader, out, errw io.Writer) error
-	EditPoll    time.Duration
-	EditSignals <-chan os.Signal
+	Getenv    func(string) string
+	LookPath  func(string) (string, error)
+	RunEditor func(argv []string, in io.Reader, out, errw io.Writer) error
+	EditPoll  time.Duration
+	// EditUploadTimeout bounds each upload while an edit session is watching, EditFinalTimeout the last one after Ctrl+C;
+	// zero means the defaults.
+	EditUploadTimeout, EditFinalTimeout time.Duration
+	EditSignals                         <-chan os.Signal
 
 	// Quiet (-q): no progress, no confirmations, no hints and no warnings; only errors and the result a command exists to
 	// produce (the URL of `up`, the path of `down`, what `ls`, `info` and the `get`s print).
