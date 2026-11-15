@@ -75,6 +75,42 @@ final readonly class PageStore
         return $this->index()[$slug] ?? null;
     }
 
+    /**
+     * Removes what is only a cache (index.json and the rendered `<slug>.html`), never the Markdown.
+     *
+     * @throws RuntimeException naming the files that could not be removed
+     */
+    public function clearCache(): int
+    {
+        if (!is_dir($this->dir)) {
+            return 0;
+        }
+
+        return $this->locked(function (): int {
+            // the index first: nobody trusts the rendered files any more once it is gone, and they render from the Markdown
+            $cache = [$this->path('index', 'json')];
+            foreach (glob($this->dir . '/*.html') ?: [] as $file) {
+                if (self::isSlug(basename($file, '.html'))) {
+                    $cache[] = $file;
+                }
+            }
+            $removed = 0;
+            $failed = [];
+            foreach ($cache as $file) {
+                if (@unlink($file)) {
+                    ++$removed;
+                } elseif (file_exists($file)) {
+                    $failed[] = basename($file);
+                }
+            }
+            if ($failed !== []) {
+                throw new RuntimeException('cannot remove ' . implode(', ', $failed) . ' from ' . $this->dir);
+            }
+
+            return $removed;
+        });
+    }
+
     /** The upload, byte for byte. */
     public function source(string $slug): ?string
     {

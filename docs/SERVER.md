@@ -410,8 +410,9 @@ are in [CLI.md](CLI.md#limits-and-caveats).
   is accepted and silently has no effect.
 - **The smallest lifetime is one hour**, and expiry is checked when a file is asked for, not by a clock tick: an expired
   file is "not found" at once, deleted later.
-- **A new release can re-render your pages.** When the renderer changes (`PageRenderer::VERSION`) the cached HTML of every
-  page is made again from your Markdown on the next request. A page that the stricter rules of a new release no longer
+- **A new release can re-render your pages.** `install.sh` removes the cached HTML and the index of every host
+  (`app/bin/pages-cache-clear`; your Markdown is never touched), so the next request renders every page again with the new
+  release; the same happens when the renderer changes (`PageRenderer::VERSION`) without `install.sh` having run. A page that the stricter rules of a new release no longer
   accept stays listed and downloadable as a draft and is not shown.
 
 ## Security notes

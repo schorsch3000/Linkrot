@@ -27,7 +27,10 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    Afterwards, for every host of `app_data/global-config.php`, it checks `app_data/<host>/config.php`: if the file is
    missing it prints a prominent notice with what to create (until then every request for that host is answered with
    "server misconfigured"), and if it exists it is loaded the way the server does, so mistakes show up at deploy time.
-   It also creates the database of every host or migrates it to the schema of this release (`app/bin/migrate`). Without
+   It also creates the database of every host or migrates it to the schema of this release (`app/bin/migrate`). It removes the cached
+   HTML of the pages of every host (`app/bin/pages-cache-clear`), because a new release may render the same Markdown
+   differently; the Markdown stays and the pages are rendered again by the next request. If that fails (a folder that is
+   not the php-fpm user's) it only says so. Without
    `global-config.php` it says how to enroll the first host (step 4). The script's exit code is 0 for a missing
    config, and non-zero if the migration fails.
 

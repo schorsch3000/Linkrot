@@ -82,6 +82,15 @@ for host in "${hosts[@]}"; do
 	fi
 done
 
+# A new release may render the same Markdown differently: the rendered pages are only a cache, so it is thrown away and
+# made again from the Markdown by the next request (the Markdown is never touched). Not fatal: if it cannot be removed
+# (a folder owned by someone else) the pages are rendered from the Markdown anyway when the renderer says the cache is old.
+for host in "${hosts[@]}"; do
+	if [ -d "$data_dir/$host" ]; then
+		LINKROT_HOST="$host" php bin/pages-cache-clear || echo "install.sh: note: could not clear the page cache of $host; remove its pages/index.json and pages/*.html as the php-fpm user if pages look outdated." >&2
+	fi
+done
+
 # One host: the configuration, the files folder, the end-to-end check. Returns 1 if the check failed.
 check_host() {
 	local host="$1"

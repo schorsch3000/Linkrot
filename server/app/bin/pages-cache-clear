@@ -1,0 +1,41 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Linkrot\Pages\PageRenderer;
+use Linkrot\Pages\PageStore;
+use Linkrot\Tenants;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/*
+ * Removes the rendered pages and the index of every host of global-config.php (or only of $LINKROT_HOST), so that the
+ * pages are rendered again from their Markdown by the next request. Run by install.sh, as the user php-fpm runs as: a new
+ * release may render the same Markdown differently. The Markdown itself is never touched.
+ * usage: pages-cache-clear   (data directory: $LINKROT_DATA or ../../app_data)
+ */
+$root = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
+try {
+    $tenants = Tenants::load($root . '/' . Tenants::FILE_NAME);
+    $hosts = getenv('LINKROT_HOST') ? [$tenants->select(getenv('LINKROT_HOST'))] : $tenants->hosts;
+} catch (InvalidArgumentException $e) {
+    fwrite(STDERR, 'pages-cache-clear: ' . $e->getMessage() . "\n");
+    exit(1);
+}
+
+$failed = false;
+foreach ($hosts as $host) {
+    if (!is_dir("$root/$host")) {
+        continue; // not set up yet, nothing cached
+    }
+    try {
+        $removed = new PageStore("$root/$host/pages", new PageRenderer($host), time(...))->clearCache();
+    } catch (Throwable $e) {
+        fwrite(STDERR, "pages-cache-clear: $host: " . $e->getMessage() . "\n");
+        $failed = true;
+        continue;
+    }
+    echo "$host: page cache cleared ($removed files), the pages are rendered again on the next request\n";
+}
+exit($failed ? 1 : 0);

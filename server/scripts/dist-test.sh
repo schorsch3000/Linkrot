@@ -53,6 +53,25 @@ printf "<?php return [];\n" >"$hd/config.php"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 grep -q "is valid" <<<"$out" || { echo "valid config not accepted:" >&2; echo "$out" >&2; exit 1; }
 
+# a new release may render Markdown differently: install.sh throws the rendered pages away, never the Markdown
+mkdir -p "$hd/pages"
+printf 'Hello\n' >"$hd/pages/imprint.md"
+printf '<p>old render</p>' >"$hd/pages/imprint.html"
+printf '{"pages":[]}' >"$hd/pages/index.json"
+printf 'mine' >"$hd/pages/Notes.html"
+out="$("$root/app/install.sh" --no-network-check 2>&1)"
+grep -q "page cache cleared (2 files)" <<<"$out" || { echo "install.sh did not report clearing the page cache:" >&2; echo "$out" >&2; exit 1; }
+if [ -e "$hd/pages/imprint.html" ] || [ -e "$hd/pages/index.json" ]; then echo "the page cache is still there after install.sh" >&2; exit 1; fi
+if [ ! -f "$hd/pages/imprint.md" ] || [ ! -f "$hd/pages/Notes.html" ]; then echo "install.sh removed more than the page cache" >&2; exit 1; fi
+if [ "$(id -u)" != 0 ]; then
+	printf '<p>old render</p>' >"$hd/pages/imprint.html"
+	chmod 555 "$hd/pages"
+	out="$("$root/app/install.sh" --no-network-check 2>&1)" || { chmod 755 "$hd/pages"; echo "a page cache that cannot be removed must not fail install.sh:" >&2; echo "$out" >&2; exit 1; }
+	chmod 755 "$hd/pages"
+	grep -q "could not clear the page cache" <<<"$out" || { echo "no note about the page cache that could not be removed:" >&2; echo "$out" >&2; exit 1; }
+	rm -f "$hd/pages/imprint.html"
+fi
+
 printf "<?php return ['base_url' => 'https://lr.example'];\n" >"$hd/config.php"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 grep -q "base_url is gone" <<<"$out" || { echo "invalid config not reported:" >&2; echo "$out" >&2; exit 1; }

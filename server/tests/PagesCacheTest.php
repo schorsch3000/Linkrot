@@ -118,4 +118,76 @@ final class PagesCacheTest extends AppTestCase
             chmod($this->dir . '/pages', 0o755);
         }
     }
+
+    /** @return list<string> the files of pages/ */
+    private function pageFiles(): array
+    {
+        $names = array_values(array_diff(scandir($this->dir . '/pages') ?: [], ['.', '..']));
+        sort($names);
+
+        return $names;
+    }
+
+    private function pageStore(): \Linkrot\Pages\PageStore
+    {
+        return new \Linkrot\Pages\PageStore($this->dir . '/pages', new \Linkrot\Pages\PageRenderer('lr.example'), fn(): int => $this->now);
+    }
+
+    public function testClearingTheCacheRemovesTheRenderedFilesAndTheIndexAndNothingElse(): void
+    {
+        $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\n---\nFirst\n");
+        $this->request('PUT', '/api/v1/pages/other', raw: "---\ntitle: Other\n---\nSecond\n");
+        // things that look similar and are not the cache
+        file_put_contents($this->dir . '/pages/Notes.html', 'not a slug');
+        file_put_contents($this->dir . '/pages/a.b.html', 'not a slug either');
+        file_put_contents($this->dir . '/pages/readme.txt', 'mine');
+        self::assertSame(['Notes.html', 'a.b.html', 'imprint.html', 'imprint.md', 'index.json', 'other.html', 'other.md', 'pages.lock', 'readme.txt'], $this->pageFiles());
+
+        $removed = $this->pageStore()->clearCache();
+
+        self::assertSame(3, $removed, 'index.json and two rendered pages');
+        self::assertSame(['Notes.html', 'a.b.html', 'imprint.md', 'other.md', 'pages.lock', 'readme.txt'], $this->pageFiles(), 'the Markdown is the truth and stays');
+    }
+
+    public function testThePagesAreRenderedAgainAfterTheCacheWasCleared(): void
+    {
+        $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\nlink: Impressum\n---\nFirst\n");
+        file_put_contents($this->dir . '/pages/imprint.html', '<p>STALE-OUTPUT</p>');
+        $this->pageStore()->clearCache();
+
+        $page = $this->request('GET', '/page/imprint', auth: false);
+
+        self::assertStringContainsString('First', $page->body);
+        self::assertStringNotContainsString('STALE-OUTPUT', $page->body);
+        self::assertStringContainsString('href="/page/imprint"', $this->request('GET', '/file/unknown', auth: false)->body, 'the footer is back');
+        self::assertFileExists($this->dir . '/pages/index.json');
+        self::assertFileExists($this->dir . '/pages/imprint.html');
+    }
+
+    public function testClearingAnEmptyOrMissingCacheIsFine(): void
+    {
+        self::assertSame(0, $this->pageStore()->clearCache(), 'there is no pages folder yet');
+        $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\n---\nx\n");
+        self::assertSame(2, $this->pageStore()->clearCache());
+        self::assertSame(0, $this->pageStore()->clearCache(), 'twice in a row');
+    }
+
+    public function testClearingTheCacheSaysWhatItCouldNotRemoveAndStillKeepsTheMarkdown(): void
+    {
+        if (posix_geteuid() === 0) {
+            self::markTestSkipped('root can remove anywhere');
+        }
+        $this->request('PUT', '/api/v1/pages/imprint', raw: "---\ntitle: Impressum\n---\nx\n");
+        chmod($this->dir . '/pages', 0o555);
+        try {
+            $this->pageStore()->clearCache();
+            self::fail('nothing was removed, that has to be said');
+        } catch (\RuntimeException $e) {
+            self::assertStringContainsString('imprint.html', $e->getMessage());
+            self::assertStringContainsString('index.json', $e->getMessage());
+        } finally {
+            chmod($this->dir . '/pages', 0o755);
+        }
+        self::assertFileExists($this->dir . '/pages/imprint.md');
+    }
 }
