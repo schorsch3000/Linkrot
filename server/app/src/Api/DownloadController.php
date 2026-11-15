@@ -95,12 +95,15 @@ final readonly class DownloadController
         return $file instanceof \Linkrot\Files\FileRecord && $file->isReady() ? $file : null;
     }
 
-    /** A single range that starts after byte 0 and nothing else: what a client sends to continue an interrupted download. */
+    /**
+     * A single range that starts after byte 0 and nothing else: what a client sends to continue an interrupted download.
+     * The unit is case-insensitive, as it is for nginx (`Bytes=3-` is served as partial content there too).
+     */
     private function isResume(Request $request): bool
     {
         $range = $request->header('range');
 
-        return $range !== null && preg_match('~^bytes=[1-9][0-9]*-[0-9]*$~D', $range) === 1;
+        return $range !== null && preg_match('~^bytes=[1-9][0-9]*-[0-9]*$~iD', $range) === 1;
     }
 
     private function resumeWindow(): int

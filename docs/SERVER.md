@@ -205,7 +205,7 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   page do not. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1 WHERE
   uses_left > 0`), so concurrent downloads cannot exceed the limit, and it notes the time in `last_use_at`.
   The continuation of an interrupted download is free: a single range that starts after byte 0 (`bytes=N-` or
-  `bytes=N-M`) does not take a use as long as a use was counted less than `orphan_row_timeout` ago (default 1h).
+  `bytes=N-M`, the unit in any case, as nginx accepts it) does not take a use as long as a use was counted less than `orphan_row_timeout` ago (default 1h).
   Every other kind of range request (`bytes=0-`, several ranges, blanks, other units) and a range outside the window
   take a use like a plain `GET`, and so does a range on a file that was never downloaded. When `uses_left` reaches 0
   the file is not found for all following requests, except for such a continuation inside the window; the

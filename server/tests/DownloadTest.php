@@ -205,6 +205,7 @@ final class DownloadTest extends AppTestCase
         yield 'no start' => ['bytes=-3'];
         yield 'garbage' => ['bytes=x-'];
         yield 'start zero' => ['bytes=000-'];
+        yield 'start zero, other case' => ['Bytes=0-'];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('rangesThatAreNotASingleResume')]
@@ -217,6 +218,27 @@ final class DownloadTest extends AppTestCase
         $this->request('GET', "/dl/$id/a.txt", ['range' => $range], auth: false);
 
         self::assertSame(1, $this->usesLeft($id));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function resumeRangesInAnyCase(): iterable
+    {
+        yield 'capitalized' => ['Bytes=3-'];
+        yield 'upper case, closed range' => ['BYTES=3-4'];
+        yield 'mixed case' => ['bYtEs=3-'];
+    }
+
+    /** The unit of a range is case-insensitive (RFC 9110) and nginx serves `Bytes=3-` as partial content: it is a resume. */
+    #[\PHPUnit\Framework\Attributes\DataProvider('resumeRangesInAnyCase')]
+    public function testTheUnitOfAResumeIsCaseInsensitive(string $range): void
+    {
+        $id = $this->upload('abcdef', extra: ['uses' => 3]);
+        $this->request('GET', "/dl/$id/a.txt", auth: false);
+        self::assertSame(2, $this->usesLeft($id));
+
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => $range], auth: false)->status);
+
+        self::assertSame(2, $this->usesLeft($id), 'a continuation of the download that was counted does not take another use');
     }
 
     public function testPhpModeStreamsTheFile(): void
