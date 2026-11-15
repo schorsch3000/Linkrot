@@ -318,6 +318,7 @@ Unknown, expired, exhausted or incomplete files answer `404` in the same way for
 | 413 | `too_large` |
 | 422 | `chunk_hash_mismatch`, `file_hash_mismatch` |
 | 429 | `rate_limited` (`Retry-After` set) |
+| 503 | `busy` (`Retry-After` set: another process holds the database, try again), `schema_outdated` |
 | 507 | `insufficient_storage` |
 | 500 | `internal` |
 

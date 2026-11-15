@@ -198,8 +198,24 @@ final class App
             return Response::error(503, 'schema_outdated', $e->getMessage());
         } catch (Throwable $e) {
             error_log('linkrot: ' . $e);
+            if ($this->isBusy($e)) {
+                // another process holds the database and the busy timeout ran out: a state to wait out, not a bug
+                return Response::error(503, 'busy', 'the database is busy, try again in a moment', headers: ['Retry-After' => '2']);
+            }
 
             return Response::error(500, 'internal', 'internal error');
         }
+    }
+
+    /** SQLITE_BUSY (5) or SQLITE_LOCKED (6), also in their extended forms, anywhere in the chain of causes. */
+    private function isBusy(Throwable $e): bool
+    {
+        for (; $e instanceof Throwable; $e = $e->getPrevious()) {
+            if ($e instanceof \PDOException && in_array(((int) ($e->errorInfo[1] ?? 0)) & 0xFF, [5, 6], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

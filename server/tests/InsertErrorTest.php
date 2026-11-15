@@ -59,7 +59,7 @@ final class InsertErrorTest extends AppTestCase
 
             [$status] = $this->create();
 
-            self::assertSame(500, $status);
+            self::assertSame(503, $status, 'busy: try again');
             self::assertSame(1, $this->pdo->inserts, 'one attempt, not five');
             self::assertLessThan(2.0, microtime(true) - $start);
         } finally {
