@@ -58,8 +58,22 @@ return [
 The `Host` header of a request is normalized (lower case, port and trailing dot removed) and must equal an entry of the
 list. Any other host, including a malformed one, is answered with `421 Misdirected Request` before anything under
 `app_data` is touched; the header never reaches a path unchecked. A listed host whose folder or `config.php` is
-missing is answered with "server misconfigured". `app/bin/hosts` prints the list, `install.sh --add-host <host>`
+missing is answered with "server misconfigured". `app/bin/hosts` manages them (below), `install.sh --add-host <host>`
 enrolls a new host.
+
+`app/bin/hosts` (run as the web user, like `lr-auth`):
+
+```
+hosts                                  list the hosts
+hosts add <host> [--email <address>]   enroll a host: global-config.php, app_data/<host>/ and files/, a default config.php
+hosts rewrite [<host>]                 write config.php again, for one host or all
+```
+
+`add` leaves an existing `config.php` alone, unless `--email` is given: that sets (or changes) the address and keeps the
+other values. `rewrite` reads the config, checks it as the server would, and writes a fresh file: every value that is set,
+plus every other option with its current default, commented out. The old file is kept as `config.php.bak`; a config that is
+not valid is not touched. These files are generated: they start with a loud banner, and **comments, notes, layout and the
+commented defaults are not kept** by the next `rewrite`, only lines that set a value.
 
 The command line tools (`lr-auth`, `check-config`, `check-install`, `check-mail`, `migrate`, `pages-cache-clear`) work on the host named in
 `LINKROT_HOST`. It can be omitted if exactly one host is configured; `migrate` and `pages-cache-clear` without it work on every host.

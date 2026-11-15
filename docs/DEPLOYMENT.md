@@ -62,7 +62,10 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    ```
 
    This lists the host in `app_data/global-config.php` (created if needed), creates `app_data/linkrot.example/files/`
-   and the database, and tells you to create `app_data/linkrot.example/config.php`. See
+   and the database, and tells you to create `app_data/linkrot.example/config.php`. `app/bin/hosts add linkrot.example
+   --email me@example.com` does the same without the database, and also writes a default `config.php` (with the address
+   for [tokens by mail](#mail-optional)); `app/bin/hosts rewrite` brings an existing `config.php` up to the options of the
+   current release, see [SERVER.md](SERVER.md#tenants). See
    [SERVER.md](SERVER.md#configuration) for all options. Run `install.sh` again afterwards for the end-to-end check.
 
    ```php
