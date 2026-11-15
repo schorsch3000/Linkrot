@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -721,5 +722,33 @@ func TestImpossibleOffsetFromGetIsAnError(t *testing.T) {
 
 	if err == nil || errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v after %d requests, want an error about the offset", err, requests)
+	}
+}
+
+// A chunk that the server took and never answered must not hang the upload: the idle timeout ends the request and the
+// upload asks where the server is and goes on.
+func TestSilentServerAfterAChunkIsRetried(t *testing.T) {
+	s, c := setup(t)
+	c.IdleTimeout = 150 * time.Millisecond
+	inner := s.Config.Handler
+	gate := make(chan struct{})
+	t.Cleanup(func() { close(gate) })
+	var stalled atomic.Bool
+	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch && stalled.CompareAndSwap(false, true) {
+			_, _ = io.Copy(io.Discard, r.Body)
+			<-gate // never answers
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+	o, _ := newOptions()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) // safety net
+	defer cancel()
+
+	file, err := Upload(ctx, c, writeFile(t, "a.txt", content), *o)
+
+	if err != nil || string(s.Content(file.ID)) != content {
+		t.Fatalf("%v", err)
 	}
 }

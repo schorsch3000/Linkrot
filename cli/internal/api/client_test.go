@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -157,5 +158,65 @@ func TestRedirectToPlainHTTPIsRefused(t *testing.T) {
 	}
 	if err := refuseDowngrade(req("https://linkrot.example/x"), make([]*http.Request, 10)); err == nil {
 		t.Error("redirect loop not stopped")
+	}
+}
+
+// stallingServer answers like the handler, except that a request for which stall returns true gets its first bytes (if
+// any) and then silence until the test is over: a server or middlebox that went quiet with the connection still open.
+func stallingServer(t *testing.T, stall func(r *http.Request) bool, inner http.Handler) *httptest.Server {
+	t.Helper()
+	gate := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if stall(r) {
+			_, _ = io.WriteString(w, `{"status":"ok"`) // the headers and a part of the body are out
+			w.(http.Flusher).Flush()
+			<-gate
+			return
+		}
+		inner.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(gate) }) // runs first: the stuck handlers end, then the server can close
+	return srv
+}
+
+func TestSilentServerEndsARequestAfterTheIdleTimeout(t *testing.T) {
+	srv := stallingServer(t, func(*http.Request) bool { return true }, nil)
+	c := NewClient(srv.URL, "tok")
+	c.IdleTimeout = 150 * time.Millisecond
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second) // safety net: without an idle timeout this is what ends it
+	defer cancel()
+
+	start := time.Now()
+	_, err := c.Health(ctx)
+
+	if err == nil || ctx.Err() != nil {
+		t.Fatalf("err %v after %v, want the request to give up by itself", err, time.Since(start))
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("%v: this is the safety net, not the idle timeout", err)
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) || !ne.Timeout() {
+		t.Errorf("%v is not a timeout error", err)
+	}
+}
+
+func TestBytesThatKeepTricklingResetTheIdleTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, part := range []string{`{"status"`, `:"o`, `k"}`} {
+			_, _ = io.WriteString(w, part)
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond) // slower than nothing, faster than the idle timeout; the sum is longer than it
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := NewClient(srv.URL, "tok")
+	c.IdleTimeout = 250 * time.Millisecond
+
+	h, err := c.Health(t.Context())
+
+	if err != nil || h.Status != "ok" {
+		t.Fatalf("%+v %v", h, err)
 	}
 }

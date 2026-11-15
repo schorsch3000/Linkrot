@@ -408,3 +408,43 @@ func TestBodyThatEndsEarlyWithProgressIsResumed(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A server that goes silent in the middle of the body, connection still open, must not hang the download: the idle
+// timeout ends that request and the transfer resumes from what arrived.
+func TestSilentServerInTheMiddleOfTheBodyIsResumed(t *testing.T) {
+	s, c, dir := setup(t)
+	c.IdleTimeout = 150 * time.Millisecond
+	id := s.Add("report.txt", []byte(content))
+	inner := s.Config.Handler
+	gate := make(chan struct{})
+	t.Cleanup(func() { close(gate) })
+	requests := 0
+	var ranges []string
+	s.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/dl/") {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		requests++
+		ranges = append(ranges, r.Header.Get("Range"))
+		if requests == 1 {
+			w.Header().Set("Content-Length", "40")
+			_, _ = io.WriteString(w, content[:12])
+			w.(http.Flusher).Flush()
+			<-gate // silence
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) // safety net
+	defer cancel()
+
+	path, err := Download(ctx, c, id, dir, noSleep())
+
+	if err != nil || read(t, path) != content {
+		t.Fatalf("%v", err)
+	}
+	if len(ranges) != 2 || ranges[0] != "" || ranges[1] != "bytes=12-" {
+		t.Fatalf("ranges %q", ranges)
+	}
+}

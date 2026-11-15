@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -28,13 +29,55 @@ type Client struct {
 	Base  string // https://host[/path], no trailing slash
 	Token string
 	HTTP  *http.Client
+	// IdleTimeout is how long a connection may go without a single byte moving, in either direction, before the request
+	// fails (and is retried by the callers). Zero means the default.
+	IdleTimeout time.Duration
 }
 
-// NewClient creates a client with sensible timeouts (no overall timeout, uploads can be long).
+// defaultIdleTimeout is how long a transfer may stand completely still. Retry and resume only help if a stuck connection
+// is given up on.
+const defaultIdleTimeout = time.Minute
+
+// NewClient creates a client with sensible timeouts: no overall timeout (uploads and downloads can be long), but a
+// connection that does not move a single byte for IdleTimeout fails, whatever it was doing.
 func NewClient(base, token string) *Client {
+	c := &Client{Base: strings.TrimRight(base, "/"), Token: token, IdleTimeout: defaultIdleTimeout}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.ResponseHeaderTimeout = 2 * time.Minute
-	return &Client{Base: strings.TrimRight(base, "/"), Token: token, HTTP: &http.Client{Transport: transport, CheckRedirect: refuseDowngrade}}
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &idleConn{Conn: conn, idle: c.idleTimeout}, nil
+	}
+	c.HTTP = &http.Client{Transport: transport, CheckRedirect: refuseDowngrade}
+	return c
+}
+
+func (c *Client) idleTimeout() time.Duration {
+	if c.IdleTimeout <= 0 {
+		return defaultIdleTimeout
+	}
+	return c.IdleTimeout
+}
+
+// idleConn gives every read and write a deadline that moves along with the traffic, so only a connection on which
+// nothing happens for the whole idle time fails.
+type idleConn struct {
+	net.Conn
+	idle func() time.Duration
+}
+
+func (c *idleConn) Read(p []byte) (int, error) {
+	_ = c.SetReadDeadline(time.Now().Add(c.idle()))
+	return c.Conn.Read(p)
+}
+
+func (c *idleConn) Write(p []byte) (int, error) {
+	_ = c.SetWriteDeadline(time.Now().Add(c.idle()))
+	return c.Conn.Write(p)
 }
 
 // refuseDowngrade stops a redirect from https to plain http (the token would be sent in the clear).
