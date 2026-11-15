@@ -1,0 +1,10 @@
+{
+  "name": "linkrot-showcase",
+  "private": true,
+  "description": "Makes the screenshots and the terminal recording of the README (docs/img). Development only, not shipped.",
+  "type": "module",
+  "devDependencies": {
+    "playwright-core": "1.65.1",
+    "svg-term-cli": "2.1.1"
+  }
+}

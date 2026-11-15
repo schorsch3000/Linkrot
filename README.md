@@ -1,15 +1,113 @@
 # Linkrot
 
-Terminal-native file sharing with links that rot.
+**Share a file from the terminal. The link rots on its own.**
 
-Linkrot has two parts:
+<p align="center">
+  <img src="docs/img/demo.svg" alt="A terminal session: lr up uploads a file and prints a link, a pipe is uploaded from stdin, lr ls lists the files, and a link that allowed one download answers 404 afterwards" width="100%">
+</p>
 
-- a **CLI** (Go, `linkrot`, usually symlinked or aliased as `lr`) to upload, list, edit, download and delete files
-- a **server** (PHP 8.4 + SQLite, behind nginx) that receives the files, hands out a share URL once an upload is
-  complete, and deletes the file again after a while, after which the URL is dead
+You have a file. Somebody needs it. You do not want to make an account, drag anything into a browser tab, or remember to
+clean up afterwards. So: one command, one URL on stdout, and entropy does the rest. After the time you picked (or the
+number of downloads you allowed), the link stops working and the file is gone. Like leftovers, but you never have to open
+the fridge.
 
-The point: as a terminal user I want to share a file with someone by running one command, get a URL on stdout,
-and not worry about cleaning up later.
+```
+$ lr up report.pdf --rm-after 2d
+https://files.example.com/file/pwzhpaykdZ9Y6KbJ/report.pdf
+```
+
+*The recording is a real session with the real CLI against a local server; its address is shown as
+`files.example.com`. `make showcase` makes it again, together with the screenshots below.*
+
+## What it looks like
+
+The page a link opens: the file, a download button, a QR code for the phone, and the commands to fetch it from a terminal
+(each with a copy button). Light and dark, depending on your system:
+
+<table>
+  <tr>
+    <td><img src="docs/img/download-light.png" alt="The download page, light" width="100%"></td>
+    <td><img src="docs/img/download-dark.png" alt="The download page, dark" width="100%"></td>
+  </tr>
+</table>
+
+### Make it yours
+
+One installation serves any number of hosts, and every host can look like its own thing, through the API and `lr`, no
+admin panel required: colors with a stylesheet (`lr custom edit css`), taglines of your own, six on/off switches, and
+Markdown pages for the footer: an imprint, a privacy notice, whatever the law or your mood requires. A page can even
+take over the start page.
+
+<table>
+  <tr>
+    <td><img src="docs/img/themed-download.png" alt="A download page with a custom warm theme, custom tagline and footer links" width="100%"></td>
+    <td><img src="docs/img/imprint.png" alt="A Markdown page rendered in the same theme: an imprint with a table" width="100%"></td>
+    <td><img src="docs/img/startpage.png" alt="The start page replaced by a Markdown page of the host" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">own colors, own taglines, footer links</td>
+    <td align="center">an imprint, written in Markdown</td>
+    <td align="center">a start page of your own</td>
+  </tr>
+</table>
+
+Editing is meant to be pleasant: `lr page edit imprint` opens the page in your `$VISUAL` / `$EDITOR`, watches the file and
+uploads it every time you save, so you can refresh the browser and see what you did.
+
+## What it has, and what it has not
+
+**It has**
+
+- **Resumable uploads.** Files travel in chunks (32 MiB by default), each one verified with its own SHA-256, and the whole
+  file is verified at the end. A lost connection costs one chunk, not the evening.
+- **Pipes.** `pg_dump db | gzip | lr up --mv db.sql.gz` works; the hash is sent at the end.
+- **Expiry, and a download limit.** Pick a lifetime from `1h` up (the server has a mandatory maximum) and optionally a
+  number of downloads. Expired files act as not found immediately, even before the cleanup removes them.
+- **No cron job.** The cleanup runs lazily, after the response, when a request comes in.
+- **Duplicate detection.** The same bytes twice give you the existing link.
+- **Downloads from the terminal**, with resume, verification and a promise never to overwrite your files: `lr down`.
+- **One user, many devices.** Every device has its own token; a lost laptop costs you one `lr-auth del`.
+- **Many hosts per installation**, each with its own tokens, files, quota and cleanup.
+- **Pages you can shape:** colors, taglines, the `X-Rot` header lines, Markdown pages with strict rendering (no raw HTML),
+  an imprint link on every page, a start page of your own.
+- **A terminal that behaves.** Results on stdout, progress on stderr, `--json`, `-q` for scripts, completion for bash, zsh
+  and fish.
+- **Plain parts.** PHP 8.4 and SQLite behind nginx on the server, one static Go binary for the client (Linux, macOS,
+  Windows, FreeBSD), signed release artifacts.
+
+**It has not (on purpose)**
+
+- **Accounts.** There is no login, no registration and no sharing between users. You are the account.
+- **A web upload form or an admin UI.** Uploads come from the CLI; settings come from the CLI. Browsers only download.
+- **Folders.** A file is a file; for a directory, `tar czf - dir | lr up`.
+- **Encryption of your content.** The server sees what you upload. If that matters, encrypt first
+  (`age -p secret.txt | lr up --mv secret.txt.age`); the id in the link is the only secret on the public side.
+- **Password-protected links, previews, thumbnails or virus scanning.**
+- **Statistics, notifications or download history.** You can see how many downloads are left, not who took them.
+- **Other storage than the local disk,** and no clustering: it is one PHP application on one SQLite file per host.
+- **Minutes or seconds.** The smallest lifetime is one hour.
+
+## Quick start
+
+The client:
+
+```
+tar -xzf linkrot_<version>_linux_amd64.tar.gz
+install -m 0755 linkrot ~/.local/bin/linkrot && ln -s linkrot ~/.local/bin/lr
+
+lr config --server https://files.example.com --token <token>
+lr up report.pdf
+```
+
+The server, shortened (the whole story, nginx included, is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
+
+```
+tar -xzf linkrot-server-<version>.tar.gz -C /srv/linkrot
+sudo -u www-data /srv/linkrot/app/install.sh
+sudo -u www-data /srv/linkrot/app/install.sh --add-host files.example.com
+printf '<?php\nreturn [];\n' | sudo -u www-data tee /srv/linkrot/app_data/files.example.com/config.php
+sudo -u www-data LINKROT_HOST=files.example.com /srv/linkrot/app/bin/lr-auth get my-laptop
+```
 
 ## Principles
 
@@ -34,21 +132,6 @@ and not worry about cleaning up later.
 - **Terminal friendly.** Results go to stdout, progress and messages to stderr, `--json` where it makes sense,
   shell completion for bash, zsh and fish.
 
-## License
-
-Copyright (C) 2026 Schorsch3000
-
-Linkrot is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
-published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is
-distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text. Every release archive
-contains it.
-
-The dependencies keep their own licenses, all compatible with the GPL: `bacon/bacon-qr-code` (BSD-2-Clause),
-`dasprid/enum` (BSD-2-Clause), `league/commonmark` and `league/config` (BSD-3-Clause), `dflydev/dot-access-data` (MIT),
-`nette/schema` and `nette/utils` (BSD-3-Clause or GPL), `psr/event-dispatcher` and the `symfony` polyfill and contracts (MIT), `spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
-(MIT), `inconshreveable/mousetrap` (Apache-2.0). Development tools are not shipped.
-
 ## Documentation
 
 | Document | Content |
@@ -57,7 +140,7 @@ The dependencies keep their own licenses, all compatible with the GPL: `bacon/ba
 | [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, static pages, public URLs, errors |
 | [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, `page`, ...), flags, config file, exit codes, completion |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions, the README images |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |
 
 ## Repository layout
@@ -65,7 +148,7 @@ The dependencies keep their own licenses, all compatible with the GPL: `bacon/ba
 ```
 server/            PHP application (see docs/SERVER.md)
 cli/               Go client (see docs/CLI.md)
-docs/              documentation
+docs/              documentation; docs/img the images of this README, docs/showcase what makes them
 .githooks/         versioned git hooks (activated by `make install-hooks`)
 Makefile           delegates to server/ and cli/
 ```
@@ -88,3 +171,19 @@ Makefile           delegates to server/ and cli/
 | Rate limiting | own limiter on failed authentication, stored in APCu, keyed by hashed client IP |
 | Tokens | only hashes stored; named per device; `lr-auth get\|del\|ls` |
 | Quality gates | phpstan level 7, rector, php-cs-fixer, phpunit; Go: `go vet`, `golangci-lint`, `gofumpt`, `go test`; pre-commit hook runs `make precommit` |
+
+## License
+
+Copyright (C) 2026 Schorsch3000
+
+Linkrot is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is
+distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text. Every release archive
+contains it.
+
+The dependencies keep their own licenses, all compatible with the GPL: `bacon/bacon-qr-code` (BSD-2-Clause),
+`dasprid/enum` (BSD-2-Clause), `league/commonmark` and `league/config` (BSD-3-Clause), `dflydev/dot-access-data` (MIT),
+`nette/schema` and `nette/utils` (BSD-3-Clause or GPL), `psr/event-dispatcher` and the `symfony` polyfill and contracts (MIT),
+`spf13/cobra` and `spf13/pflag` (Apache-2.0 / BSD-3-Clause), `pelletier/go-toml`
+(MIT), `inconshreveable/mousetrap` (Apache-2.0). Development tools are not shipped.

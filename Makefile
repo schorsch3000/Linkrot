@@ -3,7 +3,7 @@ PARTS := $(patsubst %/Makefile,%,$(wildcard server/Makefile cli/Makefile))
 
 TARGETS := install build dist run test lint audit repro fmt clean precommit
 
-.PHONY: $(TARGETS) install-hooks
+.PHONY: $(TARGETS) install-hooks showcase
 
 # `run` is deliberately not forwarded: server and cli are started separately.
 $(filter-out run,$(TARGETS)):
@@ -15,3 +15,8 @@ run:
 install-hooks:
 	git config core.hooksPath .githooks
 	@echo "git hooks enabled (.githooks)"
+
+# The images of the README (docs/img): screenshots with headless Chromium and a recording of the CLI. Not part of the
+# other targets, it needs a browser and node.
+showcase:
+	docs/showcase/build.sh

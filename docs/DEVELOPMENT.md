@@ -21,6 +21,8 @@ cli/
   go.mod                 module github.com/schorsch3000/Linkrot
   cmd/ internal/
 docs/
+  img/                   the images of the README (made by `make showcase`, committed)
+  showcase/              what makes them: build.sh, screenshots.mjs, record.py (development only, not shipped)
 ```
 
 ## Makefiles
@@ -57,6 +59,24 @@ Go:
 
 - `go vet`, `golangci-lint`, `gofumpt` (formatter), `go test ./...`
 - cobra for the command line, no other heavy dependencies
+
+## The images of the README
+
+`make showcase` (root Makefile, `docs/showcase/build.sh`) makes everything in `docs/img/`: screenshots of the pages and a
+recording of a terminal session. Nothing is staged by hand: it builds the CLI, starts the PHP server on a throwaway data
+directory with two hosts, uploads sample files through the API and applies a theme, a few Markdown pages and taglines.
+
+- **Screenshots** (`screenshots.mjs`): headless Chromium through `playwright-core`, light and dark, at 2x. The browser is
+  told that `files.example.com` is this machine (`--host-resolver-rules`), so the pages show the URLs a deployment shows.
+- **Recording** (`record.py`): a bash in a pseudo-terminal, typed at the speed of a person, the real `lr` and `curl`, colors
+  and progress bar included. It writes an asciicast (`demo.cast`, playable with `asciinema play`), `svg-term` renders the
+  animated `demo.svg` that the README embeds. The only edit is cosmetic and documented in the script: the origin of the
+  local server (`http://localhost:<port>`) is shown as `https://files.example.com`.
+- **Needs** go, php (with apcu and pdo_sqlite), python3, node with npm (`npm ci` runs in `docs/showcase`, the packages are
+  pinned in its `package-lock.json`) and a Chromium: `CHROMIUM=/path/to/chromium make showcase` if it is not on the `PATH`.
+  In a container Chromium runs with `--no-sandbox`.
+
+Run it again when the look of the pages changes, and commit the images. It is not part of `make precommit` or CI.
 
 ## End-to-end tests
 
