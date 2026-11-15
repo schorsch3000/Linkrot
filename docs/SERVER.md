@@ -255,7 +255,10 @@ sorted by `order`, then link text); the empty start page of `show_startpage` off
   unchanged), then `index.json`, under `pages/pages.lock`; files are written atomically (temp file and rename).
 - **Strict.** The renderer refuses what it would otherwise have to guess about: raw HTML (also stripped by the library as
   a second line of defense), links with a scheme other than https, http, mailto and tel, images other than https,
-  `data:image/png|gif|jpeg|webp;base64` and paths on the server, and `//host` URLs. The error names the line. Nesting is
+  `data:image/png|gif|jpeg|webp;base64` and paths on the server, and `//host` URLs. A destination is judged as a browser
+  could come to read it (percent-decoded, leading control characters and spaces dropped, tab and line breaks removed), so
+  `java&#9;script:` or `&#1;javascript:` are refused as well, and so is any control character in a URL. The error names the
+  line. Nesting is
   limited. External links get `rel="nofollow noopener noreferrer"`, images `loading="lazy"` and `referrerpolicy="no-referrer"`,
   headings move down one level. Tables, strikethrough and autolinks are on.
 - **Serving.** A request only reads `index.json` (for the footer) and the `.html` of the page, never the Markdown, and does

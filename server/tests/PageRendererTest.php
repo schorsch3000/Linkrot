@@ -105,6 +105,92 @@ final class PageRendererTest extends TestCase
         }
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function disguisedDestinations(): iterable
+    {
+        yield 'control character before the scheme' => ['[x](&#1;javascript:alert(1))'];
+        yield 'tab inside the scheme' => ['[x](java&#9;script:alert(1))'];
+        yield 'line feed inside the scheme' => ['[x](java&#10;script:alert(1))'];
+        yield 'raw tab inside the scheme in angle brackets' => ["[x](<java\tscript:alert(1)>)"];
+        yield 'form feed before the scheme' => ["[x](<\x0cjavascript:alert(1)>)"];
+        yield 'space before the scheme' => ['[x](&#32;javascript:alert(1))'];
+        yield 'letter of the scheme percent-encoded' => ['[x](java%73cript:alert(1))'];
+        yield 'colon percent-encoded' => ['[x](javascript%3Aalert(1))'];
+        yield 'protocol relative, slash percent-encoded' => ['[x](%2F/evil.example/)'];
+        yield 'reference definition' => ["[x][a]\n\n[a]: &#1;javascript:alert(1)"];
+        yield 'control character anywhere' => ['[x](/a&#1;b)'];
+        yield 'image with a control character' => ['![x](&#1;https://x.example/a.png)'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('disguisedDestinations')]
+    public function testDisguisedDestinationsAreRefused(string $markdown): void
+    {
+        try {
+            $html = $this->render($markdown);
+            self::fail('accepted: ' . $markdown . ' as ' . $html);
+        } catch (InvalidCustomFile $e) {
+            self::assertStringContainsString('not allowed', $e->getMessage());
+        }
+    }
+
+    /**
+     * The property that matters, independent of how the check works: whatever is accepted, a browser that normalizes the
+     * URL (leading control characters and spaces dropped, tab and line breaks removed) must not find a scheme in it that
+     * can run code.
+     */
+    public function testNothingAcceptedCanBecomeACodeScheme(): void
+    {
+        $destinations = [];
+        foreach (array_merge(range(0, 32), [160]) as $code) {
+            $destinations[] = "&#$code;javascript:alert(1)";
+            $destinations[] = "&#$code;data:text/html;base64,PHNjcmlwdD4=";
+        }
+        foreach ([9, 10, 13] as $code) {
+            foreach (range(1, 9) as $at) {
+                $destinations[] = substr('javascript', 0, $at) . "&#$code;" . substr('javascript', $at) . ':alert(1)';
+            }
+        }
+        $accepted = 0;
+        foreach ($destinations as $destination) {
+            foreach (["[x]($destination)", "![x]($destination)"] as $markdown) {
+                try {
+                    $html = $this->render($markdown);
+                } catch (InvalidCustomFile) {
+                    continue;
+                }
+                ++$accepted;
+                if (preg_match('~(?:href|src)="([^"]*)"~', $html, $m) !== 1) {
+                    self::fail($markdown . ' gave ' . $html);
+                }
+                $url = preg_replace('~[\t\n\r]~', '', ltrim(html_entity_decode($m[1]), "\x00..\x20")) ?? '';
+                self::assertDoesNotMatchRegularExpression('~^(javascript|data|vbscript):~i', $url, $markdown . ' became ' . $url);
+            }
+        }
+        self::assertGreaterThan(0, count($destinations));
+        self::assertSame(0, $accepted, 'none of these should be accepted at all');
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function ordinaryDestinations(): iterable
+    {
+        yield 'path with an encoded space' => ['[x](/page/a%20b)', 'href="/page/a%20b"'];
+        yield 'anchor' => ['[x](#top)', 'href="#top"'];
+        yield 'query' => ['[x](?q=1)', 'href="?q=1"'];
+        yield 'relative path' => ['[x](page.html)', 'href="page.html"'];
+        yield 'encoded umlaut' => ['[x](/caf%C3%A9)', 'href="/caf%C3%A9"'];
+        yield 'https with query' => ['[x](https://example.org/a?b=c&d=e)', 'href="https://example.org/a?b=c&amp;d=e"'];
+        yield 'mailto' => ['[x](mailto:a@b.example)', 'href="mailto:a@b.example"'];
+        yield 'tel' => ['[x](tel:+4912345)', 'href="tel:+4912345"'];
+        yield 'space inside, angle brackets' => ['[x](<my page>)', 'href="my%20page"'];
+        yield 'image on this server' => ['![x](/assets/a%20b.png)', 'src="/assets/a%20b.png"'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('ordinaryDestinations')]
+    public function testOrdinaryDestinationsStillWork(string $markdown, string $expected): void
+    {
+        self::assertStringContainsString($expected, $this->render($markdown));
+    }
+
     public function testManyProblemsAreSummarized(): void
     {
         $markdown = implode("\n\n", array_fill(0, 8, '<b>x</b>'));

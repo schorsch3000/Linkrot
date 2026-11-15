@@ -31,7 +31,7 @@ use Linkrot\Custom\InvalidCustomFile;
  */
 final class PageRenderer
 {
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     /** How many problems an error message names. */
     private const int REPORTED = 5;
@@ -122,15 +122,36 @@ final class PageRenderer
         return '';
     }
 
+    /**
+     * The URL the way a browser, or any decoding step after this one, may come to see it: percent-decoded, leading
+     * control characters and spaces dropped, tab and line breaks removed. The check looks at that and not at the literal
+     * text: the parser already percent-encodes control characters (so `&#1;javascript:` reaches us as `%01javascript:`,
+     * which a browser reads as a relative path), but what protects is the scheme the URL could end up with, not a detail
+     * of the library. Null if the URL has a control character even after that: nothing needs one.
+     */
+    private function normalize(string $url): ?string
+    {
+        $decoded = rawurldecode($url);
+        if (preg_match('~[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]~', $decoded) === 1) {
+            return null;
+        }
+        $decoded = preg_replace('~[\t\n\r]~', '', $decoded) ?? '';
+
+        // spaces, other invisible characters and the replacement character (what a decoded NUL turns into) at the ends:
+        // a browser keeps some of them, which makes the URL a harmless relative one, but none of them belongs there
+        return preg_replace('~^[\x00-\x20\p{Z}\p{Cf}\x{FFFD}]+|[\x00-\x20\p{Z}\p{Cf}\x{FFFD}]+$~u', '', $decoded)
+            ?? trim($decoded, "\x00..\x20"); // not UTF-8 (a legacy %E9): only the plain ones
+    }
+
     private function scheme(string $url): ?string
     {
-        return preg_match('~^([a-z][a-z0-9+.-]*):~i', trim($url), $m) === 1 ? strtolower($m[1]) : null;
+        return preg_match('~^([a-z][a-z0-9+.-]*):~i', $url, $m) === 1 ? strtolower($m[1]) : null;
     }
 
     private function linkAllowed(string $url): bool
     {
-        $url = trim($url);
-        if (str_starts_with($url, '//')) {
+        $url = $this->normalize($url);
+        if ($url === null || str_starts_with($url, '//')) {
             return false;
         }
 
@@ -139,15 +160,15 @@ final class PageRenderer
 
     private function imageAllowed(string $url): bool
     {
-        $url = trim($url);
-        if (str_starts_with($url, '//')) {
+        $normalized = $this->normalize($url);
+        if ($normalized === null || str_starts_with($normalized, '//')) {
             return false;
         }
 
-        return match ($this->scheme($url)) {
-            null => str_starts_with($url, '/'),
+        return match ($this->scheme($normalized)) {
+            null => str_starts_with($normalized, '/'),
             'https' => true,
-            'data' => preg_match('~^data:image/(png|gif|jpeg|webp);base64,[A-Za-z0-9+/=]+$~i', $url) === 1,
+            'data' => preg_match('~^data:image/(png|gif|jpeg|webp);base64,[A-Za-z0-9+/=]+$~i', trim($url)) === 1,
             default => false,
         };
     }
