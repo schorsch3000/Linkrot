@@ -17,7 +17,8 @@ require __DIR__ . '/../vendor/autoload.php';
  */
 $root = getenv('LINKROT_DATA') ?: __DIR__ . '/../../app_data';
 try {
-    $from = Tenants::load($root . '/' . Tenants::FILE_NAME)->mailFrom;
+    $tenants = Tenants::load($root . '/' . Tenants::FILE_NAME);
+    $from = $tenants->mailFrom;
 } catch (Throwable $e) {
     fwrite(STDERR, 'check-mail: ' . $e->getMessage() . "\n");
     exit(2);
@@ -31,7 +32,7 @@ $interactive = stream_isatty(STDIN);
 $check = new MailCheck(
     $root . '/mail-verified.json',
     $from,
-    new SendmailMailer($from),
+    new SendmailMailer($from, $tenants->mailName),
     static function (string $prompt) use ($interactive): ?string {
         if (!$interactive) {
             return null;

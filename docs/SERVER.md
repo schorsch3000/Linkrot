@@ -52,8 +52,13 @@ return [
     ],
     // optional: the sender of the mails (codes for tokens by mail, see Authentication)
     'mail' => ['from' => 'linkrot@example.com'],
+    // or with a name that mail programs show: 'from' => 'Linkrot <linkrot@example.com>'
 ];
 ```
+
+`mail.from` is a plain address, or a name and an address in angle brackets. The name may not contain quotes, angle
+brackets, backslashes or control characters (it is put into the `From` header as it is, so there is nothing to escape),
+non-ASCII names are encoded for the header. Anything else, such as a list of addresses, is refused when the file is read.
 
 The `Host` header of a request is normalized (lower case, port and trailing dot removed) and must equal an entry of the
 list. Any other host, including a malformed one, is answered with `421 Misdirected Request` before anything under

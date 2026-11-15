@@ -34,7 +34,7 @@ try {
         return;
     }
     $dataDir = $dataRoot . '/' . $host;
-    $mailer = $tenants->mailFrom === null ? null : new SendmailMailer($tenants->mailFrom);
+    $mailer = $tenants->mailFrom === null ? null : new SendmailMailer($tenants->mailFrom, $tenants->mailName);
     $app = new App(Config::load($dataDir . '/config.php', Config::baseUrlFor($host, $request->headers['host'] ?? null)), $dataDir, $host, mailer: $mailer);
 } catch (Throwable $e) {
     error_log('linkrot: ' . $e->getMessage());

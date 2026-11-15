@@ -21,9 +21,16 @@ final readonly class Tenants
 
     /**
      * @param list<string> $hosts normalized hostnames
-     * @param string|null $mailFrom sender of the mails (codes for self-service tokens); null: the server sends no mail
+     * @param string|null $mailFrom address of the sender of the mails (codes for self-service tokens); null: the server sends no mail
+     * @param string|null $mailName display name of the sender, if there is one
      */
-    public function __construct(public array $hosts, public ?string $mailFrom = null) {}
+    public function __construct(public array $hosts, public ?string $mailFrom = null, public ?string $mailName = null) {}
+
+    /** What mail.from says, as it is written in the file: `address` or `Name <address>`. */
+    public function mailSender(): ?string
+    {
+        return $this->mailFrom === null ? null : ($this->mailName === null ? $this->mailFrom : "{$this->mailName} <{$this->mailFrom}>");
+    }
 
     /** A plain address (name@domain): no display name, no comma, nothing that could end up as a second header or recipient. */
     public static function isValidEmail(string $address): bool
@@ -74,23 +81,34 @@ final readonly class Tenants
             $hosts[] = $host;
         }
 
-        return new self($hosts, self::mailFrom($values['mail'] ?? null));
+        [$from, $name] = self::mailFrom($values['mail'] ?? null);
+
+        return new self($hosts, $from, $name);
     }
 
-    private static function mailFrom(mixed $mail): ?string
+    /**
+     * mail.from is an address, or `Name <address>`: the name is shown by mail programs as the sender.
+     *
+     * @return array{string|null, string|null} address and display name
+     */
+    private static function mailFrom(mixed $mail): array
     {
         if ($mail === null) {
-            return null;
+            return [null, null];
         }
         if (!is_array($mail) || array_diff(array_map(strval(...), array_keys($mail)), ['from']) !== []) {
             throw new InvalidArgumentException("global config: mail must be an array with the key 'from'");
         }
         $from = $mail['from'] ?? null;
-        if (!is_string($from) || !self::isValidEmail($from)) {
-            throw new InvalidArgumentException('global config: mail.from must be an address like linkrot@example.com');
+        if (is_string($from) && self::isValidEmail($from)) {
+            return [$from, null];
+        }
+        // the name stays plain too: no quotes, angle brackets, backslashes or control characters, so it needs no escaping
+        if (is_string($from) && preg_match('~^([^<>"\\\\\x00-\x1f\x7f]{1,64}?)\s*<([^<>\s]+)>$~Du', $from, $m) === 1 && self::isValidEmail($m[2]) && trim($m[1]) !== '') {
+            return [$m[2], trim($m[1])];
         }
 
-        return $from;
+        throw new InvalidArgumentException("global config: mail.from must be an address like linkrot@example.com or Linkrot <linkrot@example.com>");
     }
 
     /** The configured host a Host header refers to, or null (answer 421). */
@@ -114,7 +132,7 @@ final readonly class Tenants
             return false;
         }
         $hosts[] = $normalized;
-        $mail = $current->mailFrom === null ? '' : "    'mail' => ['from' => '{$current->mailFrom}'],\n";
+        $mail = $current->mailFrom === null ? '' : '    \'mail\' => [\'from\' => ' . var_export($current->mailSender(), true) . "],\n";
         $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $hosts)) . "    ],\n" . $mail . "];\n";
         if (file_put_contents($file, $php, LOCK_EX) === false) {
             throw new InvalidArgumentException("cannot write $file");
