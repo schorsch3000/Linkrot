@@ -93,8 +93,20 @@ final readonly class PageStore
             return null;
         }
         $html = @file_get_contents($this->path($slug, 'html'));
+        if ($html !== false) {
+            return $html;
+        }
 
-        return $html === false ? null : $html;
+        // the cache could not be written (or is being made): render this page from its source
+        $source = $this->source($slug);
+        if ($source === null) {
+            return null;
+        }
+        try {
+            return $this->make($slug, $source)[1];
+        } catch (InvalidCustomFile) {
+            return ''; // refused by today's rules, as in rebuild(): listed, not shown
+        }
     }
 
     /**
@@ -239,19 +251,33 @@ final readonly class PageStore
         ), $html];
     }
 
-    /** @return array<string, PageMeta> by slug */
+    /**
+     * What the public pages read (every one of them, for the footer). It never throws and never waits: the index and the
+     * rendered files are only a cache. If it has to be made again (missing, damaged or from an older renderer) the first
+     * visitor does that, and everybody else, and everybody when the cache cannot be written, renders in memory.
+     *
+     * @return array<string, PageMeta> by slug
+     */
     private function index(): array
     {
         $index = $this->readIndex();
         if ($index !== null) {
             return $index;
         }
-        // missing, damaged or from an older renderer: render again from the sources (nothing to do without a folder)
         if (!is_dir($this->dir)) {
             return [];
         }
+        try {
+            $made = $this->tryLocked($this->currentIndex(...));
+            if ($made !== null) {
+                return $made;
+            }
+            // somebody else is making it right now: do not queue behind them
+        } catch (\Throwable $e) {
+            error_log('linkrot pages: the cache cannot be made, rendering without it: ' . $e->getMessage());
+        }
 
-        return $this->locked($this->currentIndex(...));
+        return $this->renderSources()[0];
     }
 
     /**
@@ -290,7 +316,23 @@ final readonly class PageStore
     /** @return array<string, PageMeta> */
     private function rebuild(): array
     {
-        $index = [];
+        [$index, $rendered] = $this->renderSources();
+        foreach ($rendered as $slug => $html) {
+            $this->writeAtomic($this->path($slug, 'html'), $html);
+        }
+        $this->saveIndex($index);
+
+        return $index;
+    }
+
+    /**
+     * Renders every source, writes nothing.
+     *
+     * @return array{array<string, PageMeta>, array<string, string>} the index and the HTML by slug
+     */
+    private function renderSources(): array
+    {
+        $index = $rendered = [];
         foreach (glob($this->dir . '/*.md') ?: [] as $file) {
             $slug = basename($file, '.md');
             $source = @file_get_contents($file);
@@ -304,12 +346,11 @@ final readonly class PageStore
                 $meta = new PageMeta($slug, $slug, $slug, 100, false, 'en', false, PageRenderer::VERSION, ($this->clock)());
                 $html = '';
             }
-            $this->writeAtomic($this->path($slug, 'html'), $html);
+            $rendered[$slug] = $html;
             $index[$slug] = $meta;
         }
-        $this->saveIndex($index);
 
-        return $index;
+        return [$index, $rendered];
     }
 
     /** @param array<string, PageMeta> $index */
@@ -344,6 +385,31 @@ final readonly class PageStore
         }
     }
 
+    /**
+     * Like locked(), but gives up at once if somebody else holds the lock.
+     *
+     * @template T
+     *
+     * @param Closure(): T $work
+     *
+     * @return T|null null if the lock was taken by another process
+     */
+    private function tryLocked(Closure $work): mixed
+    {
+        $lock = @fopen($this->dir . '/pages.lock', 'c') ?: throw new RuntimeException('cannot open the pages lock');
+        if (!flock($lock, LOCK_EX | LOCK_NB)) {
+            fclose($lock);
+
+            return null;
+        }
+        try {
+            return $work();
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
     private function ensureDir(): void
     {
         if (!is_dir($this->dir) && !@mkdir($this->dir, 0o775, true) && !is_dir($this->dir)) {
@@ -354,7 +420,7 @@ final readonly class PageStore
     private function writeAtomic(string $path, string $content): void
     {
         $tmp = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
-        if (file_put_contents($tmp, $content) === false || !@rename($tmp, $path)) {
+        if (@file_put_contents($tmp, $content) === false || !@rename($tmp, $path)) {
             @unlink($tmp);
             throw new RuntimeException("cannot write $path");
         }

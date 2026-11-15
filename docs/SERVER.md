@@ -269,7 +269,11 @@ sorted by `order`, then link text); the empty start page of `show_startpage` off
 - **Cache is disposable.** `.md` is the truth. If `index.json` is missing or damaged, or was made by an older
   `PageRenderer::VERSION` (raised whenever the output for the same Markdown can change, for example with a library update),
   the next request renders every page again from its `.md`. A page the stricter rules no longer accept stays downloadable
-  and listed, as a draft.
+  and listed, as a draft. Public routes never fail or wait because of the cache: the first request makes it, a request
+  that finds the lock taken (another process is making it) or the directory not writable renders in memory for itself
+  and logs the reason (`linkrot pages: the cache cannot be made...`), so downloads keep working; only an upload (`PUT`)
+  that cannot be stored fails, with a `500`. If the logs keep saying it, fix the permissions of `pages/`: every request
+  then pays for rendering.
 - **Start page.** A published page with `replaces_startpage: true` (a fifth key of the head, a boolean) is not a footer
   link (`PageStore::footer()` leaves it out) but one of `PageStore::startpage()`: `/` shows these pages, if there are any
   and `show_startpage` is on, instead of the about page, in the order of the footer, in one card split by `<hr>`
