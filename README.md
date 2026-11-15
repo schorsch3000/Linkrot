@@ -41,23 +41,23 @@ take over the start page.
 <table>
   <tr>
     <td><img src="docs/img/themed-download.png" alt="A download page with a custom warm theme, custom tagline and footer links" width="100%"></td>
-    <td><img src="docs/img/minimal-download.png" alt="The same download page with the headline, the tagline and the commands for a terminal switched off" width="100%"></td>
+    <td><img src="docs/img/imprint.png" alt="A Markdown page rendered in the same theme: an imprint with a table" width="100%"></td>
   </tr>
   <tr>
     <td align="center">own colors, own taglines, footer links</td>
-    <td align="center">the same page, stripped down with switches</td>
+    <td align="center">an imprint, written in Markdown</td>
   </tr>
   <tr>
-    <td><img src="docs/img/imprint.png" alt="A Markdown page rendered in the same theme: an imprint with a table" width="100%"></td>
+    <td><img src="docs/img/minimal-download.png" alt="The same download page with the headline, the tagline and the commands for a terminal switched off" width="100%"></td>
     <td><img src="docs/img/startpage.png" alt="The start page replaced by a Markdown page of the host" width="100%"></td>
   </tr>
   <tr>
-    <td align="center">an imprint, written in Markdown</td>
+    <td align="center">the same page as above, stripped down with switches</td>
     <td align="center">a start page of your own</td>
   </tr>
 </table>
 
-The second picture is the first one with five of the six switches off. Each one hides one thing, on every page of the host:
+The third picture is the first one with five of the six switches off. Each one hides one thing, on every page of the host:
 
 - `show_taglines`: the tagline at the bottom of the pages, and the `X-Rot` header of downloads
 - `show_title`: the "linkrot" headline with the logo
