@@ -179,7 +179,12 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   to the project on GitHub. Static text only: no script, no commands and nothing about the files or the configuration of
   the instance. With `show_startpage` off it is an empty page (`200`, empty body). Never cached (`Cache-Control:
   no-store`), so a changed setting is visible at once.
-- `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`, and a "From a terminal" section with the `linkrot down` command, the curl command and the SHA-256 (each with a copy button; each line and, without any line, the whole section can be switched off, see [Appearance](#appearance)). No expiry shown. If `{name}` does
+- `GET /file/{id}/{name}`: simple page with filename, size, a download button and a QR button (needs the script) that opens a modal with the QR code of the page itself, generated on the server as inline SVG with `bacon/bacon-qr-code`, and a "From a terminal" section with the `linkrot down` command, the curl command and the SHA-256 (each with a copy button; each line and, without any line, the whole section can be switched off, see [Appearance](#appearance)). No expiry shown. The icon and its colour follow
+  the extension of the name (`FileKind`): image, video, subtitles, audio, archive, secret (`age`, `gpg`, `pem`, ...), code,
+  document, sheet, slides, e-book, disk, program, 3D mesh (`stl`, `3mf`, `obj`, ...), CAD (`step`, `dxf`, ...), G-code
+  (`gcode`, `bgcode`), database, map, font, C64 and other retro machines, and a plain page for everything else. Related
+  kinds share a colour (the office formats are blue, 3D and printing magenta) and differ by their drawing; the exact
+  extension is shown next to the size. If `{name}` does
   not match the stored name, answer `302` to the canonical URL. Everything is HTML-escaped and the page is served
   with a strict CSP (`default-src 'none'; img-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'`:
   stylesheet and script come from this origin only, `htdocs/assets/page.css` and `page.js`, there is no inline script and

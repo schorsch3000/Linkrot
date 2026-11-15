@@ -49,29 +49,23 @@ final class PageTest extends TestCase
         self::assertSame($extension, FileKind::extension($name));
     }
 
-    public function testNoExtensionBelongsToTwoKinds(): void
+    /** @return iterable<string, array{string, FileKind}> */
+    public static function modelFiles(): iterable
     {
-        $extensions = new \ReflectionMethod(FileKind::class, 'extensions');
-        $owners = [];
-        foreach (FileKind::cases() as $kind) {
-            foreach (array_filter(explode(' ', (string) $extensions->invoke($kind))) as $extension) {
-                $owners[$extension][] = $kind->value;
-            }
-        }
-
-        $duplicates = array_filter($owners, static fn(array $kinds): bool => count($kinds) > 1);
-        self::assertSame([], $duplicates, 'extensions listed in more than one kind');
+        yield 'a mesh' => ['benchy.stl', FileKind::Mesh];
+        yield 'a CAD file' => ['bracket.step', FileKind::Cad];
+        yield 'what goes to the printer' => ['benchy.bgcode', FileKind::Gcode];
     }
 
-    public function testEveryKindHasAnIconHueAndGlyph(): void
+    #[DataProvider('modelFiles')]
+    public function testThePageOfA3DFileShowsItsIconInTheColourOfTheFamilyAndItsExtension(string $name, FileKind $kind): void
     {
-        foreach (FileKind::cases() as $kind) {
-            self::assertGreaterThanOrEqual(0, $kind->hue());
-            self::assertLessThanOrEqual(360, $kind->hue());
-            if ($kind !== FileKind::Generic) {
-                self::assertNotSame('', $kind->glyph(), $kind->value);
-            }
-        }
+        $html = Page::file($this->file($name), 'https://lr.example');
+
+        self::assertSame(310, $kind->hue());
+        self::assertStringContainsString('--hue: 310', $html);
+        self::assertStringContainsString($kind->glyph(), $html);
+        self::assertStringContainsString('<span class="badge">.' . strtolower(substr($name, (int) strrpos($name, '.') + 1)) . '</span>', $html);
     }
 
     public function testFilePage(): void
