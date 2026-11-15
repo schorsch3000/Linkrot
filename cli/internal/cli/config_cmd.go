@@ -66,16 +66,7 @@ func (a *App) configCommand() *cobra.Command {
 					}
 					c.Token = token
 				}
-				save := config.Save
-				if allowUnsafe {
-					save = config.SaveLoose
-				}
-				err := save(path, c)
-				var unsafe *config.UnsafeFileError
-				if errors.As(err, &unsafe) {
-					return fmt.Errorf("%w: run `chmod 600 %s` first, or pass --allow-unsafe-file to write it anyway", err, unsafe.Path)
-				}
-				return err
+				return saveConfig(path, c, allowUnsafe)
 			}
 			server := c.Server
 			if server == "" {
@@ -91,6 +82,20 @@ func (a *App) configCommand() *cobra.Command {
 	cmd.Flags().Lookup("token").NoOptDefVal = promptToken
 	cmd.Flags().BoolVar(&allowUnsafe, "allow-unsafe-file", false, "write the token even into a config file (behind a symlink) that others can read")
 	return cmd
+}
+
+// saveConfig writes the config file; a token is not written into a file that others can read unless allowUnsafe.
+func saveConfig(path string, c config.Config, allowUnsafe bool) error {
+	save := config.Save
+	if allowUnsafe {
+		save = config.SaveLoose
+	}
+	err := save(path, c)
+	var unsafe *config.UnsafeFileError
+	if errors.As(err, &unsafe) {
+		return fmt.Errorf("%w: run `chmod 600 %s` first, or pass --allow-unsafe-file to write it anyway", err, unsafe.Path)
+	}
+	return err
 }
 
 // readToken takes the first line of r, trimmed.

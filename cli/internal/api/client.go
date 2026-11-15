@@ -249,7 +249,9 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader, le
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 	req.Header.Set("Accept", "application/json")
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
@@ -463,4 +465,57 @@ func parseRetryAfter(s string, now time.Time) time.Duration {
 		return min(max(t.Sub(now), 0), MaxRetryAfter)
 	}
 	return 0
+}
+
+// AuthStart asks the server to mail a code to email (POST /api/v1/auth/start). The server answers alike whether or not
+// the address belongs to the host, and takes a few seconds to do so. The client needs no token.
+func (c *Client) AuthStart(ctx context.Context, email string) (*AuthChallenge, error) {
+	body, err := json.Marshal(map[string]string{"email": email})
+	if err != nil {
+		return nil, err
+	}
+	var out AuthChallenge
+	return &out, c.do(ctx, http.MethodPost, "/api/v1/auth/start", bytes.NewReader(body), int64(len(body)), "application/json", nil, &out)
+}
+
+// AuthVerify trades the code from the mail for a management session. Wrong, used and expired codes are all an *Error
+// with Code invalid_code.
+func (c *Client) AuthVerify(ctx context.Context, challenge, code string) (*AuthSession, error) {
+	body, err := json.Marshal(map[string]string{"challenge": challenge, "code": code})
+	if err != nil {
+		return nil, err
+	}
+	var out AuthSession
+	return &out, c.do(ctx, http.MethodPost, "/api/v1/auth/verify", bytes.NewReader(body), int64(len(body)), "application/json", nil, &out)
+}
+
+// Tokens lists the API tokens of the host. Needs a management session as the client's Token.
+func (c *Client) Tokens(ctx context.Context) ([]Token, error) {
+	var out struct {
+		Tokens []Token `json:"tokens"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/tokens", nil, 0, "", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Tokens, nil
+}
+
+// CreateToken makes a token with the same rights as any other and returns it; this is the only time it is shown.
+func (c *Client) CreateToken(ctx context.Context, name string) (string, error) {
+	body, err := json.Marshal(map[string]string{"name": name})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/v1/tokens", bytes.NewReader(body), int64(len(body)), "application/json", nil, &out); err != nil {
+		return "", err
+	}
+	return out.Token, nil
+}
+
+// DeleteToken revokes a token.
+func (c *Client) DeleteToken(ctx context.Context, name string) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/tokens/"+url.PathEscape(name), nil, 0, "", nil, nil)
 }

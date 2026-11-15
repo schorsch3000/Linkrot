@@ -46,6 +46,8 @@ type FakeServer struct {
 	Pages map[string]string
 	// Quota is reported by GET /api/v1/files when set.
 	Quota *api.Quota
+	// Auth is the state of the mailed codes and the token management.
+	Auth SelfService
 }
 
 type fakeFile struct {
@@ -139,6 +141,10 @@ func (s *FakeServer) serve(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	if strings.HasPrefix(path, "/dl/") {
 		s.download(w, r)
+		return
+	}
+	if strings.HasPrefix(path, "/api/v1/auth/") || strings.HasPrefix(path, "/api/v1/tokens") {
+		s.selfService(w, r, path)
 		return
 	}
 	if r.Header.Get("Authorization") != "Bearer "+s.Token {

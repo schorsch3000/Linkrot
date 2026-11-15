@@ -68,6 +68,7 @@ const (
 	CodeNotFound          = "not_found"
 	CodeUnauthorized      = "unauthorized"
 	CodeRateLimited       = "rate_limited"
+	CodeInvalidCode       = "invalid_code"
 )
 
 // Error is an error answer of the server.
@@ -152,4 +153,23 @@ type Page struct {
 	ReplacesStartpage bool   `json:"replaces_startpage"`
 	URL               string `json:"url"`
 	UpdatedAt         int64  `json:"updated_at"`
+}
+
+// AuthChallenge is the answer to a request for a code: the same for every address, so it does not tell whether a mail
+// was sent.
+type AuthChallenge struct {
+	Challenge string `json:"challenge"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// AuthSession is a management session: it may manage the tokens of the host, for ExpiresIn seconds.
+type AuthSession struct {
+	Session   string `json:"session"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// Token is an API token as listed: its name, never the secret.
+type Token struct {
+	Name       string `json:"name"`
+	LastUsedAt *int64 `json:"last_used_at"`
 }

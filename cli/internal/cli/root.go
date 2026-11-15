@@ -39,6 +39,9 @@ type App struct {
 	// ReadSecret asks for a line without echoing it; nil asks on the terminal. Replaced in tests.
 	ReadSecret func(prompt string) (string, error)
 
+	// ReadLine asks for a line (the mailed code); nil asks on the terminal. Replaced in tests.
+	ReadLine func(prompt string) (string, error)
+
 	// Copy puts text into a clipboard selection; Sleep waits between retries. Both are replaced in tests.
 	Copy  func(selection, text string) error
 	Sleep func(ctx context.Context, d time.Duration) error
@@ -147,7 +150,7 @@ func (a *App) NewRoot() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return withCode(ExitUsage, err) })
 	root.CompletionOptions.DisableDefaultCmd = false
 
-	root.AddCommand(a.configCommand(), a.customCommand(), a.pageCommand(), a.upCommand(), a.lsCommand(), a.infoCommand(), a.setCommand(), a.rmCommand(), a.cleanupCommand(), a.downCommand())
+	root.AddCommand(a.configCommand(), a.customCommand(), a.pageCommand(), a.upCommand(), a.lsCommand(), a.infoCommand(), a.setCommand(), a.rmCommand(), a.cleanupCommand(), a.downCommand(), a.authCommand(), a.tokenCommand())
 	a.registerCompletions(root)
 	return root
 }

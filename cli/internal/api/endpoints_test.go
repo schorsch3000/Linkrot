@@ -257,3 +257,57 @@ func TestCustomFilesUseGetPutAndDelete(t *testing.T) {
 		t.Errorf("delete %+v get %+v", del, get)
 	}
 }
+
+func TestAuthCallsSendTheDocumentedJSONAndNoTokenWhenThereIsNone(t *testing.T) {
+	c, seen := newRecordingServer(t, 202, `{"challenge":"ch","expires_in":600}`)
+	c.Token = ""
+
+	ch, err := c.AuthStart(context.Background(), "me@example.com")
+
+	if err != nil || ch.Challenge != "ch" || ch.ExpiresIn != 600 {
+		t.Fatalf("%+v, %v", ch, err)
+	}
+	r := (*seen)[0]
+	if r.method != "POST" || r.path != "/api/v1/auth/start" || r.auth != "" || string(r.body) != `{"email":"me@example.com"}` {
+		t.Errorf("request %+v, body %s", r, r.body)
+	}
+
+	c, seen = newRecordingServer(t, 200, `{"session":"lm_s","expires_in":600}`)
+	c.Token = ""
+	s, err := c.AuthVerify(context.Background(), "ch", "ABCD-EFGH")
+	if err != nil || s.Session != "lm_s" {
+		t.Fatalf("%+v, %v", s, err)
+	}
+	r = (*seen)[0]
+	if r.path != "/api/v1/auth/verify" || string(r.body) != `{"challenge":"ch","code":"ABCD-EFGH"}` {
+		t.Errorf("request %+v, body %s", r, r.body)
+	}
+}
+
+func TestTokenCallsUseTheSessionAndEscapeTheName(t *testing.T) {
+	c, seen := newRecordingServer(t, 200, `{"tokens":[{"name":"a","last_used_at":5},{"name":"b","last_used_at":null}]}`)
+	c.Token = "lm_s"
+	tokens, err := c.Tokens(context.Background())
+	if err != nil || len(tokens) != 2 || *tokens[0].LastUsedAt != 5 || tokens[1].LastUsedAt != nil {
+		t.Fatalf("%+v, %v", tokens, err)
+	}
+	if r := (*seen)[0]; r.method != "GET" || r.path != "/api/v1/tokens" || r.auth != "Bearer lm_s" {
+		t.Errorf("request %+v", r)
+	}
+
+	c, seen = newRecordingServer(t, 201, `{"name":"a","token":"lr_secret"}`)
+	if token, err := c.CreateToken(context.Background(), "a"); err != nil || token != "lr_secret" {
+		t.Fatalf("%q, %v", token, err)
+	}
+	if r := (*seen)[0]; r.method != "POST" || r.path != "/api/v1/tokens" || string(r.body) != `{"name":"a"}` {
+		t.Errorf("request %+v, body %s", r, r.body)
+	}
+
+	c, seen = newRecordingServer(t, 204, ``)
+	if err := c.DeleteToken(context.Background(), "a/b"); err != nil {
+		t.Fatal(err)
+	}
+	if r := (*seen)[0]; r.method != "DELETE" || r.path != "/api/v1/tokens/a%2Fb" {
+		t.Errorf("request %+v", r)
+	}
+}

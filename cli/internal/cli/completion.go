@@ -150,7 +150,11 @@ func (a *App) registerCompletions(root *cobra.Command) {
 					sub.ValidArgsFunction = onlyFlags
 				}
 			}
-		case "config", "ls", "cleanup":
+		case "token":
+			for _, sub := range c.Commands() {
+				sub.ValidArgsFunction = onlyFlags
+			}
+		case "config", "ls", "cleanup", "auth":
 			c.ValidArgsFunction = onlyFlags
 		}
 		if f := c.Flags().Lookup("rm-after"); f != nil {

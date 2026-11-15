@@ -26,6 +26,8 @@ var ErrNotConfigured = errors.New("not configured: run `config --server <url>` a
 type Config struct {
 	Server string `toml:"server"`
 	Token  string `toml:"token"`
+	// Email is the address of the host, where the codes for `auth` and `token` go; remembered by `auth`.
+	Email string `toml:"email,omitempty"`
 }
 
 // Path returns the config file location: $LINKROT_CONFIG, else $XDG_CONFIG_HOME/linkrot/config.toml,
