@@ -109,24 +109,91 @@ final class DownloadTest extends AppTestCase
         // a second visitor (a link preview bot) must not unlink the file under the download that took the last use
         self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
         self::assertSame(404, $this->request('GET', "/file/$id/a.txt", auth: false)->status);
-        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=1-'], auth: false)->status);
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=0-'], auth: false)->status);
         self::assertSame(404, $this->call('GET', "/api/v1/files/$id")[0]);
 
         self::assertFileExists($this->dir . '/files/' . $id);
         self::assertSame(1, (int) \Linkrot\Database::query($this->app->db(), 'SELECT count(*) FROM files')->fetchColumn());
     }
 
+    private function usesLeft(string $id): int
+    {
+        return (int) \Linkrot\Database::query($this->app->db(), 'SELECT uses_left FROM files WHERE id = ' . $this->app->db()->quote($id))->fetchColumn();
+    }
+
     public function testHeadPageAndResumedRangesDoNotConsumeUses(): void
     {
-        $id = $this->upload('abcdef', extra: ['uses' => 1]);
+        $id = $this->upload('abcdef', extra: ['uses' => 2]);
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+        self::assertSame(1, $this->usesLeft($id));
 
         self::assertSame(200, $this->request('HEAD', "/dl/$id/a.txt", auth: false)->status);
         self::assertSame(200, $this->request('GET', "/file/$id/a.txt", auth: false)->status);
         self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=3-'], auth: false)->status);
-        self::assertSame(1, $this->call('GET', "/api/v1/files/$id")[1]['uses_left']);
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=3-4'], auth: false)->status);
+        self::assertSame(1, $this->usesLeft($id));
 
         self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=0-'], auth: false)->status);
         self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+    }
+
+    public function testTheLastUseCanBeResumedWithinTheWindowButNotAfterwards(): void
+    {
+        $id = $this->upload('abcdef', extra: ['uses' => 1]);
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", auth: false)->status);
+
+        $this->now += 1800;
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=3-'], auth: false)->status, 'an interrupted last download can continue');
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", auth: false)->status, 'but a new download cannot start');
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=0-'], auth: false)->status);
+
+        $this->now += 1801; // 1h and a second after the use
+        self::assertSame(404, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=3-'], auth: false)->status);
+    }
+
+    public function testAResumeOutsideTheWindowCountsAsAUse(): void
+    {
+        $id = $this->upload('abcdef', extra: ['uses' => 3]);
+        $this->request('GET', "/dl/$id/a.txt", auth: false);
+        $this->now += 3601;
+
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=3-'], auth: false)->status);
+
+        self::assertSame(1, $this->usesLeft($id));
+    }
+
+    public function testARangeBeforeAnyUseCountsAsAUse(): void
+    {
+        $id = $this->upload('abcdef', extra: ['uses' => 2]);
+
+        // nothing has been downloaded yet, so there is nothing to resume
+        self::assertSame(200, $this->request('GET', "/dl/$id/a.txt", ['range' => 'bytes=1-'], auth: false)->status);
+
+        self::assertSame(1, $this->usesLeft($id));
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function rangesThatAreNotASingleResume(): iterable
+    {
+        yield 'two ranges' => ['bytes=1-,0-0'];
+        yield 'blank before the start' => ['bytes= 0-'];
+        yield 'blank before a later start' => ['bytes= 3-'];
+        yield 'other unit' => ['items=3-'];
+        yield 'no start' => ['bytes=-3'];
+        yield 'garbage' => ['bytes=x-'];
+        yield 'start zero' => ['bytes=000-'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('rangesThatAreNotASingleResume')]
+    public function testOnlyASingleRangeThatStartsAfterZeroResumes(string $range): void
+    {
+        $id = $this->upload('abcdef', extra: ['uses' => 3]);
+        $this->request('GET', "/dl/$id/a.txt", auth: false);
+        self::assertSame(2, $this->usesLeft($id));
+
+        $this->request('GET', "/dl/$id/a.txt", ['range' => $range], auth: false);
+
+        self::assertSame(1, $this->usesLeft($id));
     }
 
     public function testPhpModeStreamsTheFile(): void

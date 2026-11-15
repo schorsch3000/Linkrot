@@ -41,6 +41,33 @@ final readonly class FileCatalog
         return $file;
     }
 
+    /**
+     * A file whose last use is gone but was counted less than `$window` seconds ago: the download that took it may
+     * be resumed. Anything else answers null like findLive.
+     */
+    public function findResumable(string $id, int $window): ?FileRecord
+    {
+        if (!FileId::isValid($id)) {
+            return null;
+        }
+        $file = $this->files->find($id);
+        $now = ($this->clock)();
+        if (!$file instanceof FileRecord || !$file->isReady() || !$file->isExhausted() || $file->lastUseAt === null) {
+            return null;
+        }
+        if ($file->expiresAt !== null && $file->expiresAt <= $now) {
+            return null;
+        }
+
+        return $this->isWithinResumeWindow($file, $window) ? $file : null;
+    }
+
+    /** Was a use counted less than `$window` seconds ago? Then the continuation of that download is free. */
+    public function isWithinResumeWindow(FileRecord $file, int $window): bool
+    {
+        return $file->lastUseAt !== null && ($this->clock)() - $file->lastUseAt < $window;
+    }
+
     /** Takes one use, atomically, and notes when (the cleanup waits a grace period after the last one). False if none is left. */
     public function consumeUse(string $id): bool
     {

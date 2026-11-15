@@ -76,6 +76,17 @@ final class CleanupTest extends AppTestCase
         self::assertFileDoesNotExist($this->path($id));
     }
 
+    public function testAnExhaustedFileFromBeforeLastUseAtIsJudgedByUpdatedAt(): void
+    {
+        $id = $this->upload('one', extra: ['uses' => 1]);
+        $this->request('GET', "/dl/$id/a.txt", auth: false);
+        Database::query($this->app->db(), 'UPDATE files SET last_use_at = NULL'); // as migrated from schema 3
+        $this->now += 3601;
+
+        self::assertSame(1, $this->cleanup()['rows_deleted']);
+        self::assertFileDoesNotExist($this->path($id));
+    }
+
     public function testRemovesStaleUploadsOnly(): void
     {
         $stale = $this->call('POST', '/api/v1/files', ['name' => 'a', 'size' => 5, 'sha256' => str_repeat('a', 64)])[1]['id'];

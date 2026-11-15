@@ -65,10 +65,10 @@ final readonly class FileRepository
             ->execute([$name, $rmAfter, $expiresAt, $usesLeft, $now, $id]);
     }
 
-    /** Takes one use, atomically; `updated_at` tells the cleanup when the last one went. False if none is left (or the file is unknown). */
+    /** Takes one use, atomically; `last_use_at` tells when (resume window, cleanup grace). False if none is left (or the file is unknown). */
     public function consumeUse(string $id, int $now): bool
     {
-        $update = $this->pdo->prepare('UPDATE files SET uses_left = uses_left - 1, updated_at = ? WHERE id = ? AND uses_left > 0');
+        $update = $this->pdo->prepare('UPDATE files SET uses_left = uses_left - 1, last_use_at = ? WHERE id = ? AND uses_left > 0');
         $update->execute([$now, $id]);
 
         return $update->rowCount() === 1;

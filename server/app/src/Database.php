@@ -9,7 +9,7 @@ use PDO;
 /** SQLite connection and schema management. */
 final class Database
 {
-    public const int SCHEMA_VERSION = 3;
+    public const int SCHEMA_VERSION = 4;
 
     private const array MIGRATIONS = [
         1 => <<<'SQL'
@@ -67,6 +67,8 @@ final class Database
             CREATE INDEX files_status_updated ON files (status, updated_at);
             CREATE INDEX files_expires ON files (expires_at);
             SQL,
+        // When the last use was counted: a resumed download is free for a while after it, and the cleanup waits after the last use.
+        4 => 'ALTER TABLE files ADD COLUMN last_use_at INTEGER',
     ];
 
     /** Opens the connection (busy timeout, exceptions). The schema is neither created nor checked here. */

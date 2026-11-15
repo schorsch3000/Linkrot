@@ -198,13 +198,17 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   the header is just missing.
 - A file is only served if it is `ready`, not past `expires_at` and not exhausted. A file that is past its time
   is treated as **not found** and removed on the spot.
-- **Uses.** A `GET` counts as a use if it has no `Range` header or a range starting at 0. `HEAD` and the
-  `/file` page do not count. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1
-  WHERE uses_left > 0`), so concurrent downloads cannot exceed the limit. When `uses_left` reaches 0 the file is
-  treated as expired for all following requests (including a resumed `Range` request); the physical deletion is
-  left to the cleanup, which removes it once `orphan_row_timeout` has passed since the last use. Neither a later
-  request nor a cleanup run right after the last use unlinks the file, because that could break the download that
-  just consumed it before nginx has opened the file.
+- **Uses.** `--uses` is a convenience limit, not access control. A `GET` takes a use; `HEAD` and the `/file`
+  page do not. The decrement is one atomic statement (`UPDATE ... SET uses_left = uses_left - 1 WHERE
+  uses_left > 0`), so concurrent downloads cannot exceed the limit, and it notes the time in `last_use_at`.
+  The continuation of an interrupted download is free: a single range that starts after byte 0 (`bytes=N-` or
+  `bytes=N-M`) does not take a use as long as a use was counted less than `orphan_row_timeout` ago (default 1h).
+  Every other kind of range request (`bytes=0-`, several ranges, blanks, other units) and a range outside the window
+  take a use like a plain `GET`, and so does a range on a file that was never downloaded. When `uses_left` reaches 0
+  the file is not found for all following requests, except for such a continuation inside the window; the
+  physical deletion is left to the cleanup, which removes it once `orphan_row_timeout` has passed since the last
+  use. Neither a later request nor a cleanup run right after the last use unlinks the file, because that could
+  break the download that just consumed it before nginx has opened the file.
 - Config switch `download_mode = xaccel|php`. `php` streams the file from PHP; it exists for development and
   end-to-end tests with `php -S` and must not be used in production.
 

@@ -21,6 +21,7 @@ final readonly class FileRecord
         public int $rmAfter,
         public ?int $expiresAt,
         public ?int $usesLeft,
+        public ?int $lastUseAt = null,
     ) {}
 
     /** @param array<array-key, mixed> $row */
@@ -39,6 +40,7 @@ final readonly class FileRecord
             rmAfter: (int) $row['rm_after'],
             expiresAt: $row['expires_at'] === null ? null : (int) $row['expires_at'],
             usesLeft: $row['uses_left'] === null ? null : (int) $row['uses_left'],
+            lastUseAt: ($row['last_use_at'] ?? null) === null ? null : (int) $row['last_use_at'],
         );
     }
 

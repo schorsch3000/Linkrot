@@ -6,6 +6,7 @@ namespace Linkrot\Api;
 
 use Linkrot\Config;
 use Linkrot\DownloadMode;
+use Linkrot\Duration;
 use Linkrot\FileName;
 use Linkrot\Files\FileCatalog;
 use Linkrot\Files\FileRecord;
@@ -56,11 +57,15 @@ final readonly class DownloadController
     public function download(Request $request, string $id): Response
     {
         $file = $this->downloadable($id);
+        $resume = $this->isResume($request);
         if (!$file instanceof \Linkrot\Files\FileRecord) {
-            return $this->notFound();
-        }
-        // HEAD and ranges that do not start at 0 (resumed downloads) never consume a use.
-        if ($request->method === 'GET' && $file->usesLeft !== null && $this->startsAtBeginning($request) && !$this->catalog->consumeUse($file->id)) {
+            // The last use is gone, but the download that took it may still be running and be resumed.
+            $file = $resume ? $this->catalog->findResumable($id, $this->resumeWindow()) : null;
+            if (!$file instanceof \Linkrot\Files\FileRecord) {
+                return $this->notFound();
+            }
+        } elseif ($request->method === 'GET' && $file->usesLeft !== null && (!$resume || !$this->catalog->isWithinResumeWindow($file, $this->resumeWindow())) && !$this->catalog->consumeUse($file->id)) {
+            // HEAD and the continuation of a download that was counted a moment ago are free, everything else takes a use.
             return $this->notFound();
         }
 
@@ -90,11 +95,17 @@ final readonly class DownloadController
         return $file instanceof \Linkrot\Files\FileRecord && $file->isReady() ? $file : null;
     }
 
-    private function startsAtBeginning(Request $request): bool
+    /** A single range that starts after byte 0 and nothing else: what a client sends to continue an interrupted download. */
+    private function isResume(Request $request): bool
     {
         $range = $request->header('range');
 
-        return $range === null || preg_match('~^bytes=0*-~', $range) === 1;
+        return $range !== null && preg_match('~^bytes=[1-9][0-9]*-[0-9]*$~D', $range) === 1;
+    }
+
+    private function resumeWindow(): int
+    {
+        return Duration::parse($this->config->orphanRowTimeout);
     }
 
     /** Same answer for unknown, expired, exhausted and incomplete files. */
