@@ -18,5 +18,11 @@ if [ -n "$running" ]; then
 	exit 0
 fi
 
-echo "no successful CI run for $GITHUB_SHA: merge to main or open a pull request first, and tag once CI is green" >&2
+found="$(runs | jq -r '[.[].conclusion | select(. != "")] | unique | join(", ")')"
+if [ -n "$found" ]; then
+	# e.g. a run cancelled because a newer push replaced it (cancel-in-progress): it proves nothing about this commit
+	echo "no successful CI run for $GITHUB_SHA, only: $found; re-run the CI workflow for this commit (or push a new one) and tag once it is green" >&2
+else
+	echo "no successful CI run for $GITHUB_SHA: merge to main or open a pull request first, and tag once CI is green" >&2
+fi
 exit 1

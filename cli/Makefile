@@ -8,7 +8,7 @@ GOFUMPT  := mvdan.cc/gofumpt@v0.12.0
 GOLANGCI := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 GOVULN   := golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
-.PHONY: install build dist run test lint audit repro fmt clean precommit
+.PHONY: install build dist run test release-test lint audit repro fmt clean precommit
 
 install:
 	go mod download
@@ -28,8 +28,14 @@ run:
 test:
 	go test ./...
 
+# The scripts that make a release: dist.sh (archive times, temporary files, checksums, independence of the builder) and
+# require-ci.sh (against a fake gh)
+release-test:
+	scripts/dist-test.sh
+	../.github/scripts/require-ci-test.sh
+
 lint:
-	shellcheck scripts/dist.sh
+	shellcheck scripts/dist.sh scripts/dist-test.sh ../.github/scripts/*.sh
 	go vet ./...
 	golangci-lint run ./...
 	@out="$$(gofumpt -l .)"; test -z "$$out" || { echo "gofumpt would change:"; echo "$$out"; exit 1; }
@@ -39,11 +45,12 @@ lint:
 audit:
 	go run $(GOVULN) ./...
 
-# The release archives must be bit for bit the same whoever builds them: build twice with different umasks and compare.
+# The release archives must be bit for bit the same whoever builds them: build twice, the second time with another umask,
+# time zone and locale, and compare.
 repro:
 	@set -e; v=0.0.0-repro; \
 	$(MAKE) --no-print-directory dist VERSION=$$v >/dev/null; a=$$(sha256sum dist/SHA256SUMS | cut -d' ' -f1); \
-	(umask 077; $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null); b=$$(sha256sum dist/SHA256SUMS | cut -d' ' -f1); \
+	(umask 077; TZ=Asia/Tokyo LC_ALL=C.UTF-8 $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null); b=$$(sha256sum dist/SHA256SUMS | cut -d' ' -f1); \
 	if [ "$$a" = "$$b" ]; then echo "reproducible: $$a"; else echo "NOT reproducible: $$a != $$b"; exit 1; fi
 
 fmt:
@@ -52,4 +59,4 @@ fmt:
 clean:
 	rm -rf bin dist
 
-precommit: lint test
+precommit: lint test release-test
