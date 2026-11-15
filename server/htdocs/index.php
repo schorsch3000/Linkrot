@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Linkrot\App;
 use Linkrot\Config;
 use Linkrot\Http\Request;
+use Linkrot\Mail\SendmailMailer;
 use Linkrot\Tenants;
 
 // php -S (development, end-to-end tests) hands every request to this script: let it serve the static files itself.
@@ -33,7 +34,8 @@ try {
         return;
     }
     $dataDir = $dataRoot . '/' . $host;
-    $app = new App(Config::load($dataDir . '/config.php', Config::baseUrlFor($host, $request->headers['host'] ?? null)), $dataDir, $host);
+    $mailer = $tenants->mailFrom === null ? null : new SendmailMailer($tenants->mailFrom);
+    $app = new App(Config::load($dataDir . '/config.php', Config::baseUrlFor($host, $request->headers['host'] ?? null)), $dataDir, $host, mailer: $mailer);
 } catch (Throwable $e) {
     error_log('linkrot: ' . $e->getMessage());
     http_response_code(500);

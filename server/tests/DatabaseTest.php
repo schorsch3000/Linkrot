@@ -33,7 +33,7 @@ final class DatabaseTest extends TestCase
         self::assertSame(Database::SCHEMA_VERSION, (int) Database::query($pdo, 'PRAGMA user_version')->fetchColumn());
         self::assertSame('wal', Database::query($pdo, 'PRAGMA journal_mode')->fetchColumn());
         $tables = Database::query($pdo, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")->fetchAll(\PDO::FETCH_COLUMN);
-        self::assertSame(['files', 'meta', 'tokens'], $tables);
+        self::assertSame(['challenges', 'files', 'meta', 'sessions', 'tokens'], $tables);
     }
 
     public function testOpenAloneNeitherCreatesNorChecksTheSchema(): void

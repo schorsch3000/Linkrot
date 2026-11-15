@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Linkrot;
 
 use Closure;
+use Linkrot\Api\AuthController;
 use Linkrot\Api\CustomController;
 use Linkrot\Api\DownloadController;
 use Linkrot\Api\FileController;
@@ -13,11 +14,15 @@ use Linkrot\Api\HomeController;
 use Linkrot\Api\PageController;
 use Linkrot\Api\PagesController;
 use Linkrot\Api\SettingsController;
+use Linkrot\Api\TokensController;
 use Linkrot\Api\UploadController;
 use Linkrot\Auth\ApcuRateLimiter;
 use Linkrot\Auth\Authenticator;
+use Linkrot\Auth\BearerVerifier;
+use Linkrot\Auth\ChallengeStore;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
+use Linkrot\Auth\SessionStore;
 use Linkrot\Auth\TokenStore;
 use Linkrot\Custom\CssStore;
 use Linkrot\Custom\CustomStore;
@@ -29,6 +34,7 @@ use Linkrot\Files\FileStore;
 use Linkrot\Http\Request;
 use Linkrot\Http\Response;
 use Linkrot\Http\Router;
+use Linkrot\Mail\Mailer;
 use Linkrot\Pages\PageRenderer;
 use Linkrot\Pages\PageStore;
 use Linkrot\Web\AppearanceStore;
@@ -49,6 +55,9 @@ final class App
         public readonly string $host,
         private ?RateLimiter $limiter = null,
         ?Closure $clock = null,
+        private readonly ?Mailer $mailer = null,
+        private ?RateLimiter $authLimiter = null,
+        private readonly float $authDelay = AuthController::START_DURATION,
     ) {
         $this->clock = $clock ?? time(...);
         $this->router = new Router();
@@ -133,6 +142,7 @@ final class App
                 ? ['ran' => true, 'rows_deleted' => $result->rowsDeleted, 'files_deleted' => $result->filesDeleted]
                 : ['ran' => false]);
         }));
+        $this->registerSelfService();
         $this->router->add('POST', '/api/v1/files/{id}/seal', $this->authed(
             static fn(Request $request, array $params): Response => $upload()->seal($request, $params['id']),
         ));
@@ -141,16 +151,46 @@ final class App
         ));
     }
 
+    /** Tokens by mail: a code to the address of the host, a session for it, and the token routes that need one. */
+    private function registerSelfService(): void
+    {
+        $auth = fn(): AuthController => new AuthController(
+            $this->config,
+            new ChallengeStore($this->db()),
+            new SessionStore($this->db(), $this->clock),
+            $this->mailer,
+            $this->authLimiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $this->host . ':auth'),
+            $this->host,
+            $this->authDelay,
+        );
+        $tokens = fn(): TokensController => new TokensController(new TokenStore($this->db()), $this->mailer, $this->config->email, $this->host);
+        $this->router->add('POST', '/api/v1/auth/start', fn(Request $request): Response => $auth()->start($request, ($this->clock)()));
+        $this->router->add('POST', '/api/v1/auth/verify', fn(Request $request): Response => $auth()->verify($request, ($this->clock)()));
+        $this->router->add('GET', '/api/v1/tokens', $this->authed(
+            static fn(Request $request, array $params): Response => $tokens()->list(),
+            fn(): BearerVerifier => new SessionStore($this->db(), $this->clock),
+        ));
+        $this->router->add('POST', '/api/v1/tokens', $this->authed(
+            static fn(Request $request, array $params): Response => $tokens()->create($request),
+            fn(): BearerVerifier => new SessionStore($this->db(), $this->clock),
+        ));
+        $this->router->add('DELETE', '/api/v1/tokens/{name}', $this->authed(
+            static fn(Request $request, array $params): Response => $tokens()->delete($request, $params['name']),
+            fn(): BearerVerifier => new SessionStore($this->db(), $this->clock),
+        ));
+    }
+
     /**
      * @param callable(Request, array<string, string>): Response $handler
+     * @param (Closure(): BearerVerifier)|null $verifier which tokens open the route: API tokens unless said otherwise
      *
      * @return Closure(Request, array<string, string>): Response
      */
-    private function authed(callable $handler): Closure
+    private function authed(callable $handler, ?Closure $verifier = null): Closure
     {
-        return function (Request $request, array $params) use ($handler): Response {
+        return function (Request $request, array $params) use ($handler, $verifier): Response {
             $guard = new Guard(
-                new Authenticator(new TokenStore($this->db())),
+                new Authenticator($verifier instanceof \Closure ? $verifier() : new TokenStore($this->db())),
                 $this->limiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $this->host),
             );
 

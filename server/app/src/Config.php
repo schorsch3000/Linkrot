@@ -30,6 +30,7 @@ final readonly class Config
         public int $rateLimitWindow = 900,
         public DownloadMode $downloadMode = DownloadMode::Xaccel,
         public int $quota = 0,
+        public ?string $email = null,
     ) {
         if (!preg_match('~^https?://[^/\s]+(/\S*)?$~D', $baseUrl)) {
             throw new InvalidArgumentException('config: base URL must be an https URL');
@@ -45,6 +46,9 @@ final readonly class Config
         }
         if ($maxFileSize < 0 || $rateLimitAttempts < 1 || $rateLimitWindow < 1) {
             throw new InvalidArgumentException('config: max_file_size, rate_limit_* out of range');
+        }
+        if ($email !== null && !Tenants::isValidEmail($email)) {
+            throw new InvalidArgumentException('config: email must be an address like me@example.com');
         }
         if ($defaultUses !== null && $defaultUses < 1) {
             throw new InvalidArgumentException('config: default_uses must be null (unlimited) or >= 1');
@@ -91,7 +95,7 @@ final readonly class Config
         $known = [
             'chunk_size', 'max_file_size', 'default_rm_after', 'max_rm_after', 'default_uses',
             'cleanup_interval', 'upload_timeout', 'orphan_row_timeout', 'rate_limit_attempts',
-            'rate_limit_window', 'download_mode', 'quota',
+            'rate_limit_window', 'download_mode', 'quota', 'email',
         ];
         if (array_key_exists('base_url', $values)) {
             throw new InvalidArgumentException('config: base_url is gone, the share links are built from the host in global-config.php: remove it');
@@ -124,6 +128,7 @@ final readonly class Config
                 ? (DownloadMode::tryFrom($mode) ?? throw new InvalidArgumentException('config: download_mode must be xaccel or php'))
                 : throw new InvalidArgumentException('config: download_mode must be xaccel or php'),
             quota: self::quota($values),
+            email: self::email($values),
         );
     }
 
@@ -159,6 +164,21 @@ final readonly class Config
         } catch (InvalidArgumentException $e) {
             throw new InvalidArgumentException('config: quota: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * The address that may mint and manage tokens by mail: lower case, so that what a client types is compared as is.
+     *
+     * @param array<array-key, mixed> $values
+     */
+    private static function email(array $values): ?string
+    {
+        $value = $values['email'] ?? null;
+        if ($value !== null && !is_string($value)) {
+            throw new InvalidArgumentException('config: email must be a string');
+        }
+
+        return $value === null ? null : strtolower($value);
     }
 
     /** @param array<array-key, mixed> $values */

@@ -20,6 +20,7 @@ abstract class AppTestCase extends TestCase
     protected App $app;
     protected string $token;
     protected int $now = 1_000_000;
+    protected RecordingMailer $mailer;
 
     protected function config(): Config
     {
@@ -31,12 +32,16 @@ abstract class AppTestCase extends TestCase
         $this->dir = sys_get_temp_dir() . '/linkrot-test-' . bin2hex(random_bytes(6));
         mkdir($this->dir);
         Database::openMigrated($this->dir . '/linkrot.sqlite');
+        $this->mailer = new RecordingMailer();
         $this->app = new App(
             $this->config(),
             $this->dir,
             'lr.example',
             new InMemoryRateLimiter(10, 900, fn(): int => $this->now),
             fn(): int => $this->now,
+            $this->mailer,
+            new InMemoryRateLimiter(10, 900, fn(): int => $this->now),
+            0.0,
         );
         $this->token = new TokenStore($this->app->db())->create('test');
     }

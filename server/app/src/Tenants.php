@@ -19,8 +19,17 @@ final readonly class Tenants
 {
     public const string FILE_NAME = 'global-config.php';
 
-    /** @param list<string> $hosts normalized hostnames */
-    public function __construct(public array $hosts) {}
+    /**
+     * @param list<string> $hosts normalized hostnames
+     * @param string|null $mailFrom sender of the mails (codes for self-service tokens); null: the server sends no mail
+     */
+    public function __construct(public array $hosts, public ?string $mailFrom = null) {}
+
+    /** A plain address (name@domain): no display name, no comma, nothing that could end up as a second header or recipient. */
+    public static function isValidEmail(string $address): bool
+    {
+        return strlen($address) <= 254 && preg_match('~^[A-Za-z0-9._%+-]+@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$~D', $address) === 1;
+    }
 
     /** Lower-case hostname without port and trailing dot, or null if it is not a plain hostname (or IPv4 address). */
     public static function normalize(string $host): ?string
@@ -44,7 +53,7 @@ final readonly class Tenants
         if (!is_array($values)) {
             throw new InvalidArgumentException("global config: $file must return an array with a hosts list");
         }
-        $unknown = array_diff(array_map(strval(...), array_keys($values)), ['hosts']);
+        $unknown = array_diff(array_map(strval(...), array_keys($values)), ['hosts', 'mail']);
         if ($unknown !== []) {
             throw new InvalidArgumentException('global config: unknown keys: ' . implode(', ', $unknown));
         }
@@ -65,7 +74,23 @@ final readonly class Tenants
             $hosts[] = $host;
         }
 
-        return new self($hosts);
+        return new self($hosts, self::mailFrom($values['mail'] ?? null));
+    }
+
+    private static function mailFrom(mixed $mail): ?string
+    {
+        if ($mail === null) {
+            return null;
+        }
+        if (!is_array($mail) || array_diff(array_map(strval(...), array_keys($mail)), ['from']) !== []) {
+            throw new InvalidArgumentException("global config: mail must be an array with the key 'from'");
+        }
+        $from = $mail['from'] ?? null;
+        if (!is_string($from) || !self::isValidEmail($from)) {
+            throw new InvalidArgumentException('global config: mail.from must be an address like linkrot@example.com');
+        }
+
+        return $from;
     }
 
     /** The configured host a Host header refers to, or null (answer 421). */
@@ -83,12 +108,14 @@ final readonly class Tenants
         if ($normalized === null) {
             throw new InvalidArgumentException("not a plain hostname: $host");
         }
-        $hosts = is_file($file) ? self::load($file)->hosts : [];
+        $current = is_file($file) ? self::load($file) : new self([]);
+        $hosts = $current->hosts;
         if (in_array($normalized, $hosts, true)) {
             return false;
         }
         $hosts[] = $normalized;
-        $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $hosts)) . "    ],\n];\n";
+        $mail = $current->mailFrom === null ? '' : "    'mail' => ['from' => '{$current->mailFrom}'],\n";
+        $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $hosts)) . "    ],\n" . $mail . "];\n";
         if (file_put_contents($file, $php, LOCK_EX) === false) {
             throw new InvalidArgumentException("cannot write $file");
         }

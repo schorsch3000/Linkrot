@@ -9,7 +9,7 @@ use PDO;
 /** SQLite connection and schema management. */
 final class Database
 {
-    public const int SCHEMA_VERSION = 4;
+    public const int SCHEMA_VERSION = 5;
 
     private const array MIGRATIONS = [
         1 => <<<'SQL'
@@ -69,6 +69,21 @@ final class Database
             SQL,
         // When the last use was counted: a resumed download is free for a while after it, and the cleanup waits after the last use.
         4 => 'ALTER TABLE files ADD COLUMN last_use_at INTEGER',
+        // Self-service tokens: a code that was mailed (only its hash, a few guesses) and the short management session it buys.
+        5 => <<<'SQL'
+            CREATE TABLE IF NOT EXISTS challenges (
+                id         TEXT PRIMARY KEY,
+                code_hash  TEXT NOT NULL,
+                attempts   INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            ) STRICT;
+            CREATE TABLE IF NOT EXISTS sessions (
+                hash       TEXT PRIMARY KEY,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            ) STRICT;
+            SQL,
     ];
 
     /** Opens the connection (busy timeout, exceptions). The schema is neither created nor checked here. */

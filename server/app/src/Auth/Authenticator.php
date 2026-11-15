@@ -9,7 +9,7 @@ use Linkrot\Http\Request;
 /** Extracts the bearer token from a request and checks it. */
 final readonly class Authenticator
 {
-    public function __construct(private TokenStore $tokens) {}
+    public function __construct(private BearerVerifier $tokens) {}
 
     /** @return string|null name of the token if the request is authenticated */
     public function authenticate(Request $request): ?string

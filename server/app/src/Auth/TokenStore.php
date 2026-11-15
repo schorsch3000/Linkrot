@@ -12,7 +12,7 @@ use PDO;
  * API tokens. All tokens belong to the same single user; they exist so that every device can have its own and a
  * compromised one can be revoked without rotating anything else. Only sha256(token) is stored.
  */
-final readonly class TokenStore
+final readonly class TokenStore implements BearerVerifier
 {
     public const string PREFIX = 'lr_';
     public const int MAX_NAME_LENGTH = 32;
@@ -50,6 +50,19 @@ final readonly class TokenStore
         }
 
         return $token;
+    }
+
+    public function exists(string $name): bool
+    {
+        $select = $this->pdo->prepare('SELECT 1 FROM tokens WHERE name = ?');
+        $select->execute([$name]);
+
+        return $select->fetchColumn() !== false;
+    }
+
+    public function count(): int
+    {
+        return (int) Database::query($this->pdo, 'SELECT COUNT(*) FROM tokens')->fetchColumn();
     }
 
     public function delete(string $name): bool
