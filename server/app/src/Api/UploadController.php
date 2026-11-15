@@ -450,6 +450,9 @@ final readonly class UploadController
         return Response::json($file->toArray($this->config->baseUrl) + ['chunk_size' => $this->config->chunkSize]);
     }
 
+    /** SQLSTATE of a violated PRIMARY KEY or UNIQUE constraint (an id that is taken, a sha256 that is there already). */
+    private const string CONSTRAINT_VIOLATION = '23000';
+
     private function insert(string $name, int $size, string $sha256, int $rmAfter, ?int $uses, int $now): Response
     {
         for ($attempt = 0; $attempt < 5; ++$attempt) {
@@ -458,6 +461,9 @@ final readonly class UploadController
             try {
                 $this->files->insert($file);
             } catch (PDOException $e) {
+                if ($e->getCode() !== self::CONSTRAINT_VIOLATION) {
+                    throw $e; // busy, read-only, disk full ...: another id would not help, and every try can wait for the busy timeout
+                }
                 // A concurrent create of the same file won the race, or the id collided.
                 $winner = $this->files->findBySha256($sha256);
                 if ($winner instanceof \Linkrot\Files\FileRecord) {
