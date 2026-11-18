@@ -13,7 +13,7 @@ use InvalidArgumentException;
  */
 final readonly class Config
 {
-    public const int MIN_CHUNK_SIZE = 10_000_000;
+    public const int MIN_CHUNK_SIZE = 1_000_000;
     public const int MAX_CHUNK_SIZE = 100_000_000;
 
     public function __construct(
@@ -106,7 +106,7 @@ final readonly class Config
         }
         $chunkSize = $values['chunk_size'] ?? null;
         if (is_int($chunkSize) && ($chunkSize < self::MIN_CHUNK_SIZE || $chunkSize > self::MAX_CHUNK_SIZE)) {
-            throw new InvalidArgumentException('config: chunk_size must be within 10-100 MB');
+            throw new InvalidArgumentException('config: chunk_size must be within 1-100 MB');
         }
 
         $defaults = new self($baseUrl);

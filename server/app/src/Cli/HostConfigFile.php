@@ -22,7 +22,7 @@ final class HostConfigFile
         'default_uses' => 'download limit if the client names none, null: unlimited',
         'max_file_size' => 'largest single file in bytes, 0: unlimited',
         'quota' => 'most data the host may hold: "100gb", "1tb" or bytes, 0: unlimited',
-        'chunk_size' => 'bytes per upload chunk, 10-100 MB',
+        'chunk_size' => 'bytes per upload chunk, 1-100 MB (as big as the web server lets through: fewer requests)',
         'cleanup_interval' => 'minimum time between lazy cleanups',
         'upload_timeout' => 'unfinished uploads without activity are removed after this',
         'orphan_row_timeout' => 'grace period for rows without data and for expired or used-up files',

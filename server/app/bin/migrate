@@ -30,7 +30,7 @@ foreach ($hosts as $host) {
         continue;
     }
     try {
-        $pdo = Database::openMigrated("$root/$host/linkrot.sqlite");
+        $pdo = Database::openMigrated("$root/$host/linkrot.sqlite", $tenants->sqliteJournal);
     } catch (Throwable $e) {
         fwrite(STDERR, "migrate: $host: " . $e->getMessage() . "\n");
         $failed = true;

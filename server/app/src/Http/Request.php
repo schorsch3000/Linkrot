@@ -58,6 +58,11 @@ final readonly class Request
             }
             $server[$key] = $value;
         }
+        // Apache with PHP as CGI/FastCGI drops the Authorization header; the .htaccess of the shared hosting archive passes
+        // it on through mod_rewrite, which puts it here.
+        if (!isset($headers['authorization']) && isset($server['REDIRECT_HTTP_AUTHORIZATION']) && $server['REDIRECT_HTTP_AUTHORIZATION'] !== '') {
+            $headers['authorization'] = $server['REDIRECT_HTTP_AUTHORIZATION'];
+        }
         $query = [];
         foreach ($_GET as $key => $value) {
             if (is_string($value)) {

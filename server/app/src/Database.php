@@ -101,10 +101,10 @@ final class Database
     }
 
     /** For the installation (`app/bin/migrate`), development and tests: opens and brings the schema up to date. */
-    public static function openMigrated(string $path): PDO
+    public static function openMigrated(string $path, string $journal = Tenants::JOURNAL_WAL): PDO
     {
         $pdo = self::open($path);
-        self::migrate($pdo);
+        self::migrate($pdo, $journal);
 
         return $pdo;
     }
@@ -120,6 +120,33 @@ final class Database
         self::assertCurrent($pdo);
 
         return $pdo;
+    }
+
+    /**
+     * For installations without a shell (the shared hosting archive, `auto_migrate` in linkrot-paths.php): an upgrade
+     * is new files over the old ones, so the first request after it migrates. One request does the work under a lock,
+     * the others wait for it. A database that does not exist is left alone (a host is created by the setup).
+     */
+    public static function migrateIfOutdated(string $path, string $journal = Tenants::JOURNAL_WAL): void
+    {
+        if (!is_file($path) || self::schemaVersion(self::open($path)) === self::SCHEMA_VERSION) {
+            return;
+        }
+        $lock = fopen($path . '.migrate-lock', 'c');
+        if ($lock === false) {
+            throw new \RuntimeException("cannot create the lock file $path.migrate-lock");
+        }
+        try {
+            flock($lock, LOCK_EX);
+            $pdo = self::open($path);
+            if (self::schemaVersion($pdo) < self::SCHEMA_VERSION) {
+                error_log('linkrot: migrating ' . $path . ' to schema version ' . self::SCHEMA_VERSION);
+                self::migrate($pdo, $journal);
+            }
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     public static function schemaVersion(PDO $pdo): int
@@ -142,9 +169,11 @@ final class Database
         return $pdo->query($sql) ?: throw new \RuntimeException('query failed: ' . $sql);
     }
 
-    public static function migrate(PDO $pdo): void
+    /** @param string $journal Tenants::JOURNAL_WAL or JOURNAL_DELETE (global-config.php sqlite_journal) */
+    public static function migrate(PDO $pdo, string $journal = Tenants::JOURNAL_WAL): void
     {
-        $pdo->exec('PRAGMA journal_mode = WAL'); // a property of the database file, not of the connection
+        // a property of the database file, not of the connection; switching it needs the file to itself, as here
+        $pdo->exec($journal === Tenants::JOURNAL_DELETE ? 'PRAGMA journal_mode = DELETE' : 'PRAGMA journal_mode = WAL');
         $current = self::schemaVersion($pdo);
         foreach (self::MIGRATIONS as $version => $sql) {
             if ($version <= $current) {

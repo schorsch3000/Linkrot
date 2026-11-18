@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Linkrot\App;
 use Linkrot\Config;
+use Linkrot\Database;
 use Linkrot\Http\Request;
 use Linkrot\Mail\SendmailMailer;
 use Linkrot\Tenants;
@@ -17,9 +18,21 @@ if (PHP_SAPI === 'cli-server') {
     }
 }
 
-require __DIR__ . '/../app/vendor/autoload.php';
+// Where code and data are: next to htdocs (the release tarball), or what the setup of the shared hosting archive wrote
+// into linkrot-paths.php (['app' => ..., 'data' => ..., 'auto_migrate' => true]).
+$paths = is_file(__DIR__ . '/linkrot-paths.php') ? require __DIR__ . '/linkrot-paths.php' : [];
+$paths = is_array($paths) ? $paths : [];
+$appRoot = is_string($paths['app'] ?? null) ? $paths['app'] : __DIR__ . '/../app';
+if (!is_file($appRoot . '/vendor/autoload.php')) {
+    http_response_code(503);
+    header('Content-Type: application/json');
+    echo '{"error":{"code":"not_set_up","message":"linkrot is not set up yet (shared hosting: open /setup.php)"}}';
 
-$dataRoot = getenv('LINKROT_DATA') ?: __DIR__ . '/../app_data';
+    return;
+}
+require $appRoot . '/vendor/autoload.php';
+
+$dataRoot = is_string($paths['data'] ?? null) ? $paths['data'] : (getenv('LINKROT_DATA') ?: __DIR__ . '/../app_data');
 $request = Request::fromGlobals();
 
 try {
@@ -34,6 +47,10 @@ try {
         return;
     }
     $dataDir = $dataRoot . '/' . $host;
+    if (($paths['auto_migrate'] ?? false) === true) {
+        // no shell to run install.sh: the first request after an upgrade migrates
+        Database::migrateIfOutdated($dataDir . '/linkrot.sqlite', $tenants->sqliteJournal);
+    }
     $mailer = $tenants->mailFrom === null ? null : new SendmailMailer($tenants->mailFrom, $tenants->mailName);
     $app = new App(Config::load($dataDir . '/config.php', Config::baseUrlFor($host, $request->headers['host'] ?? null)), $dataDir, $host, mailer: $mailer);
 } catch (Throwable $e) {

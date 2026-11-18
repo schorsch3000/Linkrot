@@ -53,8 +53,15 @@ return [
     // optional: the sender of the mails (codes for tokens by mail, see Authentication)
     'mail' => ['from' => 'linkrot@example.com'],
     // or with a name that mail programs show: 'from' => 'Linkrot <linkrot@example.com>'
+    // optional: 'delete' instead of 'wal' for the journal of the databases (network file systems)
+    'sqlite_journal' => 'wal',
 ];
 ```
+
+`sqlite_journal` is the journal of the databases: `wal` (the default; readers never wait for a writer) or `delete`, the
+classic rollback journal. WAL needs shared memory next to the database file, which a network file system (NFS, as on
+many shared hosting servers) cannot provide reliably: there the databases can break, and `delete` is the safe choice.
+`app/bin/migrate` (and with it `install.sh`) switches existing databases when the value changes.
 
 `mail.from` is a plain address, or a name and an address in angle brackets. The name may not contain quotes, angle
 brackets, backslashes or control characters (it is put into the `From` header as it is, so there is nothing to escape),
@@ -192,7 +199,7 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
    (`upload_timeout` after the last chunk).
 
 PHP limits are irrelevant because the body is read raw from `php://input` (no multipart) and chunks are small
-(10-100 MB range, default 32 MiB). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.
+(1-100 MB range, default 32 MiB; small chunks are for web servers that limit the request body, as on shared hosting). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.
 
 ## Download
 
@@ -429,7 +436,7 @@ authentication itself:
 
 | key | default | meaning |
 | --- | --- | --- |
-| `chunk_size` | 32 MiB | must be within 10-100 MB |
+| `chunk_size` | 32 MiB | must be within 1-100 MB |
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
 | `quota` | 0 (unlimited) | most data this host may hold at once, as a size: `100`, `100b`, `100kb`, `100mb`, `100gb`, `1tb` (decimal units, case does not matter) or an integer (bytes). Counts every live file and running upload (a sized upload with its full size from the start, a streaming one with what it has received); expired files the cleanup has not removed yet do not count. Uploads over it are refused with `507 quota_exceeded`. Concurrent creates can overshoot it by what they reserve in the same moment |
 | `default_rm_after` | `1w` | lifetime if the client does not ask for one |

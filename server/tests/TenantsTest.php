@@ -112,6 +112,29 @@ final class TenantsTest extends TestCase
         self::assertSame(['a.example', 'b.example'], Tenants::load($this->file)->hosts);
     }
 
+    public function testTheJournalIsReadAndKeptWhenAHostIsEnrolled(): void
+    {
+        file_put_contents($this->file, "<?php return ['hosts' => ['a.example'], 'mail' => ['from' => 'Linkrot <lr@a.example>'], 'sqlite_journal' => 'delete'];\n");
+        self::assertSame(Tenants::JOURNAL_DELETE, Tenants::load($this->file)->sqliteJournal);
+
+        self::assertTrue(Tenants::enroll($this->file, 'b.example'));
+
+        $tenants = Tenants::load($this->file);
+        self::assertSame(['a.example', 'b.example'], $tenants->hosts);
+        self::assertSame(Tenants::JOURNAL_DELETE, $tenants->sqliteJournal);
+        self::assertSame('Linkrot <lr@a.example>', $tenants->mailSender());
+    }
+
+    public function testTheJournalIsWalByDefaultAndNothingElse(): void
+    {
+        $this->write("['a.example']");
+        self::assertSame(Tenants::JOURNAL_WAL, Tenants::load($this->file)->sqliteJournal);
+
+        file_put_contents($this->file, "<?php return ['hosts' => ['a.example'], 'sqlite_journal' => 'memory'];\n");
+        $this->expectException(InvalidArgumentException::class);
+        Tenants::load($this->file);
+    }
+
     public function testEnrollRejectsPaths(): void
     {
         $this->expectException(InvalidArgumentException::class);

@@ -27,7 +27,7 @@ import (
 	"github.com/schorsch3000/Linkrot/internal/config"
 )
 
-const fileSize = 25_000_000 // three chunks with the minimum chunk size of 10 MB
+const fileSize = 25_000_000 // three chunks of the 10 MB that newStack configures
 
 // stack is a running server and how to reach it.
 type stack struct {
@@ -131,7 +131,7 @@ func newStack(t *testing.T, withNginx bool) *stack {
 	if withNginx {
 		mode = "xaccel"
 	}
-	phpConfig := fmt.Sprintf("<?php return ['download_mode' => %q];\n", mode)
+	phpConfig := fmt.Sprintf("<?php return ['download_mode' => %q, 'chunk_size' => 10_000_000];\n", mode)
 	if err := os.WriteFile(filepath.Join(data, "config.php"), []byte(phpConfig), 0o600); err != nil {
 		t.Fatal(err)
 	}
