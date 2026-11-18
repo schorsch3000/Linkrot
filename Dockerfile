@@ -12,6 +12,7 @@ FROM alpine:${ALPINE_VERSION} AS build
 ARG LINKROT_VERSION=dev
 RUN apk add --no-cache bash jq make \
         php84 php84-phar php84-openssl php84-zip php84-mbstring php84-iconv php84-ctype php84-pdo_sqlite php84-pecl-apcu \
+        php84-xmlwriter \
     && { [ -e /usr/bin/php ] || ln -s php84 /usr/bin/php; }
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 WORKDIR /src
@@ -31,7 +32,7 @@ LABEL org.opencontainers.image.title="linkrot" \
 
 RUN apk add --no-cache tini bash nginx msmtp acme.sh curl openssl ca-certificates \
         php84 php84-fpm php84-opcache php84-openssl php84-mbstring php84-iconv php84-ctype php84-pdo_sqlite \
-        php84-pecl-apcu \
+        php84-pecl-apcu php84-xmlwriter \
     && { [ -e /usr/bin/php ] || ln -s php84 /usr/bin/php; } \
     && { [ -e /usr/sbin/php-fpm ] || ln -s php-fpm84 /usr/sbin/php-fpm; }
 
