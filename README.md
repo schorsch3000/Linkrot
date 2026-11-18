@@ -136,6 +136,9 @@ docker compose up -d
 ./linkrot-admin                # add a host, create a token
 ```
 
+Without a shell, on shared hosting: unpack `linkrot-shared-<version>.zip` into the document root and open
+`https://<host>/setup.php`, see [docs/SHARED-HOSTING.md](docs/SHARED-HOSTING.md).
+
 Or from the tarball, shortened (the whole story, nginx included, is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
 
 ```
@@ -177,6 +180,7 @@ sudo -u www-data LINKROT_HOST=files.example.com /srv/linkrot/app/bin/lr-auth get
 | [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, static pages, public URLs, errors |
 | [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, `page`, ...), flags, config file, exit codes, completion |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
+| [docs/SHARED-HOSTING.md](docs/SHARED-HOSTING.md) | the server on a webspace without a shell: the zip, `setup.php`, what it tests |
 | [docs/DOCKER.md](docs/DOCKER.md) | the server as a docker compose stack: image, TLS modes, mail, `linkrot-admin` |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions, the README images |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |

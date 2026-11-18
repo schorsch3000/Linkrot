@@ -5,7 +5,8 @@ has the server tarball, CLI archives for all usual platforms and a `SHA256SUMS` 
 
 ## Server
 
-With docker: [DOCKER.md](DOCKER.md), the rest of this section is not needed. Without:
+With docker: [DOCKER.md](DOCKER.md); on shared hosting without a shell: [SHARED-HOSTING.md](SHARED-HOSTING.md). The rest of
+this section is for a server of your own:
 
 Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `pdo_sqlite`,
 `mbstring`, `ctype`, `iconv`, `xmlwriter` (the QR code of the download page; `composer install` checks all of them), and

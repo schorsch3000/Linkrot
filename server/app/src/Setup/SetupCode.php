@@ -68,7 +68,11 @@ final readonly class SetupCode
 
             return false;
         }
-        @chmod($path, 0o600);
+        // Readable for its owner only, if that is who uploaded the files (PHP runs as the FTP user). Where PHP runs as a
+        // user of its own (mod_php), the FTP user could not read it then: there it stays readable for others, like
+        // everything else PHP writes on such a server.
+        $uploader = @fileowner($this->dir . '/setup.php');
+        @chmod($path, $uploader === false || $uploader === @fileowner($path) ? 0o600 : 0o644);
 
         return true;
     }
