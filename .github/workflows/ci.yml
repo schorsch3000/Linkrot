@@ -165,7 +165,7 @@ jobs:
         if: always()
         run: |
           docker logs webspace 2>&1 | tail -100
-          docker exec webspace sh -c 'umask; ls -la /var/www /var/www/html; ls -la /var/www/linkrot-data /var/www/html/linkrot-data 2>&1'
+          docker exec webspace sh -c 'umask; ls -la /var/www /var/www/html; ls -la /var/www/linkrot-data /var/www/html/linkrot-data 2>&1' || true
 
   container:
     name: Container image (build, compose file, end-to-end against the image)

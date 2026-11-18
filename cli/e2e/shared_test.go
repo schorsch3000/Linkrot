@@ -148,7 +148,15 @@ func sharedRemote(t *testing.T) *stack {
 	data := filepath.Join(root, "linkrot-data", "127.0.0.1")
 	if _, err := os.Stat(data); err != nil {
 		outside := err
-		matches, _ := filepath.Glob(filepath.Join(root, "*", "linkrot-data", "127.0.0.1"))
+		// only the document roots are listed: linkrot-data is 0711 on purpose, it can be entered but not read, and
+		// filepath.Glob reads every folder of the pattern
+		var matches []string
+		docroots, _ := filepath.Glob(filepath.Join(root, "*"))
+		for _, docroot := range docroots {
+			if candidate := filepath.Join(docroot, "linkrot-data", "127.0.0.1"); isDir(candidate) {
+				matches = append(matches, candidate)
+			}
+		}
 		if len(matches) != 1 {
 			listing, _ := exec.CommandContext(t.Context(), "ls", "-laR", root).CombinedOutput() //nolint:gosec // test path
 			t.Fatalf("no data folder next to or below the document root (%v); %s:\n%s", outside, root, listing)
@@ -307,4 +315,9 @@ func setUpShared(t *testing.T, url string, readCode func() string) string {
 		t.Fatalf("the probes still answer after finish: %d", status)
 	}
 	return token
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
