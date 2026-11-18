@@ -106,3 +106,60 @@ jobs:
       - run: composer --working-dir=server/app install --no-interaction
       - run: go test ./e2e/ -count=1 -v
         working-directory: cli
+
+  container:
+    name: Container image (build, compose file, end-to-end against the image)
+    runs-on: ubuntu-latest
+    env:
+      LINKROT_E2E_REQUIRED: "1"
+      LINKROT_E2E_IMAGE: linkrot-e2e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - name: compose.yaml is valid
+        run: docker compose -f compose.yaml config --quiet
+
+      - run: docker build -t "$LINKROT_E2E_IMAGE" .
+
+      - name: Every TLS mode starts with a valid nginx configuration
+        run: |
+          set -euo pipefail
+          for mode in off file acme; do
+            d="$(mktemp -d)"
+            mkdir "$d/data" "$d/certs"
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=test -days 1 \
+              -keyout "$d/certs/privkey.pem" -out "$d/certs/fullchain.pem" 2>/dev/null
+            chmod 644 "$d/certs/privkey.pem"
+            id="$(docker run -d --user "$(id -u):$(id -g)" -v "$d/data:/srv/linkrot/app_data" -v "$d/certs:/certs:ro" \
+              -e LINKROT_TLS="$mode" -e LINKROT_ACME_EMAIL=ci@example.com "$LINKROT_E2E_IMAGE")"
+            ok=0
+            for _ in $(seq 60); do
+              if docker exec "$id" wget -q -O /dev/null http://127.0.0.1:8080/_ping; then ok=1; break; fi
+              sleep 1
+            done
+            docker logs "$id"
+            docker rm -f "$id" >/dev/null
+            [ "$ok" = 1 ] || { echo "LINKROT_TLS=$mode does not come up"; exit 1; }
+          done
+
+      - name: End to end against the image
+        run: go test ./e2e/ -count=1 -run TestEndToEndContainer -v
+        working-directory: cli
+
+  # Every push to main is published as ghcr.io/<owner>/linkrot:edge, once all checks passed.
+  edge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [server, cli, e2e, container]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image.yml
+    with:
+      version: edge

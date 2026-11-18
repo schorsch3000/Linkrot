@@ -4,7 +4,8 @@ name: Release
 #   linkrot-server-<version>.tar.gz   server: htdocs/ + app/ (no vendor/, run composer install on deployment)
 #   linkrot_<version>_<os>_<arch>     CLI archives for linux, macOS, windows and freebsd
 #   SHA256SUMS
-# Every file also gets a signed build provenance attestation.
+#   ghcr.io/<owner>/linkrot:<version> (and :1.2, :1, :latest for a release that is no pre-release), see image.yml
+# Every file and the image also get a signed build provenance attestation.
 
 on:
   push:
@@ -21,6 +22,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,6 +32,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: .github/scripts/require-ci.sh
+      - id: v
+        run: echo "version=$(.github/scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
 
   server-dist:
     runs-on: ubuntu-latest
@@ -62,6 +67,18 @@ jobs:
             cli/dist/*.tar.gz
             cli/dist/*.zip
           if-no-files-found: error
+
+  # after the GitHub release, so that an image never exists for a release that failed
+  image:
+    needs: [ci-passed, release]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.ci-passed.outputs.version }}
 
   release:
     needs: [ci-passed, server-dist, cli-dist]
