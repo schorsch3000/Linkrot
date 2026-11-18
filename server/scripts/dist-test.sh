@@ -61,6 +61,14 @@ printf "<?php return [];\n" >"$hd/config.php"
 out="$("$root/app/install.sh" --no-network-check 2>&1)"
 grep -q "is valid" <<<"$out" || { echo "valid config not accepted:" >&2; echo "$out" >&2; exit 1; }
 
+# the container image has the dependencies already: --no-composer migrates and checks without composer
+mkdir "$root/fake-bin"
+printf '#!/bin/sh\necho "composer must not run" >&2\nexit 1\n' >"$root/fake-bin/composer"
+chmod +x "$root/fake-bin/composer"
+out="$(PATH="$root/fake-bin:$PATH" "$root/app/install.sh" --no-composer --no-network-check --no-mail-check 2>&1)" ||
+	{ echo "install.sh --no-composer failed:" >&2; echo "$out" >&2; exit 1; }
+grep -q "is valid" <<<"$out" || { echo "install.sh --no-composer did not check the config:" >&2; echo "$out" >&2; exit 1; }
+
 # a new release may render Markdown differently: install.sh throws the rendered pages away, never the Markdown
 mkdir -p "$hd/pages"
 printf 'Hello\n' >"$hd/pages/imprint.md"

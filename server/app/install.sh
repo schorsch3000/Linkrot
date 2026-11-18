@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
 # Installs the production dependencies and checks the setup. Run after unpacking a release, and again after
 # every upgrade.
-# usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check]
+# usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check] [--no-composer]
 #   --add-host          enroll a host (a tenant): lists it in app_data/global-config.php and creates its data folder
+#   --no-composer       the dependencies are installed already (the container image): only migrate and check
 #   --no-network-check  skip the round trip through https://<host> (offline installs, a host that cannot reach itself)
 #   --no-mail-check     do not offer to verify that mail.from can send mail
 set -euo pipefail
 
 network_check=1
 mail_check=1
+composer=1
 new_hosts=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--no-network-check) network_check=0 ;;
 	--no-mail-check) mail_check=0 ;;
+	--no-composer) composer=0 ;;
 	--add-host)
 		[ $# -ge 2 ] || {
 			echo "install.sh: --add-host needs a hostname" >&2
@@ -23,7 +26,7 @@ while [ $# -gt 0 ]; do
 		shift
 		;;
 	*)
-		echo "usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check]" >&2
+		echo "usage: install.sh [--add-host <hostname>]... [--no-network-check] [--no-mail-check] [--no-composer]" >&2
 		exit 2
 		;;
 	esac
@@ -32,12 +35,13 @@ done
 
 cd "$(dirname "$0")"
 
-command -v composer >/dev/null 2>&1 || {
-	echo "install.sh: composer is required: https://getcomposer.org" >&2
-	exit 1
-}
-
-composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --classmap-authoritative
+if [ "$composer" = 1 ]; then
+	command -v composer >/dev/null 2>&1 || {
+		echo "install.sh: composer is required: https://getcomposer.org" >&2
+		exit 1
+	}
+	composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --classmap-authoritative
+fi
 
 # app_data lives next to app/ and is never touched by a deployment (LINKROT_DATA overrides it, as for the server).
 # It holds global-config.php (the hosts) and one folder per host.
