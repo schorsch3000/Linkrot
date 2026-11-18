@@ -6,6 +6,7 @@ namespace Linkrot\Tests;
 
 use Linkrot\Database;
 use Linkrot\SchemaOutdatedException;
+use Linkrot\Tenants;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 
@@ -34,6 +35,38 @@ final class DatabaseTest extends TestCase
         self::assertSame('wal', Database::query($pdo, 'PRAGMA journal_mode')->fetchColumn());
         $tables = Database::query($pdo, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")->fetchAll(\PDO::FETCH_COLUMN);
         self::assertSame(['challenges', 'files', 'meta', 'sessions', 'tokens'], $tables);
+    }
+
+    public function testTheJournalCanBeTheClassicOneAndSwitchedBack(): void
+    {
+        $pdo = Database::openMigrated($this->file, Tenants::JOURNAL_DELETE);
+        self::assertSame('delete', Database::query($pdo, 'PRAGMA journal_mode')->fetchColumn());
+        unset($pdo);
+
+        $pdo = Database::openMigrated($this->file);
+        self::assertSame('wal', Database::query($pdo, 'PRAGMA journal_mode')->fetchColumn());
+    }
+
+    public function testMigrateIfOutdatedBringsAnOldDatabaseUpAndLeavesTheRestAlone(): void
+    {
+        unlink($this->file);
+        Database::migrateIfOutdated($this->file);
+        self::assertFileDoesNotExist($this->file, 'no database, nothing to do: the setup creates it');
+
+        $pdo = Database::openMigrated($this->file);
+        $pdo->exec('PRAGMA user_version = 4');
+        unset($pdo);
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            Database::migrateIfOutdated($this->file);
+        } finally {
+            ini_set('error_log', (string) $log);
+        }
+        self::assertSame(Database::SCHEMA_VERSION, Database::schemaVersion(Database::openCurrent($this->file)));
+
+        Database::migrateIfOutdated($this->file);
+        self::assertSame(Database::SCHEMA_VERSION, Database::schemaVersion(Database::open($this->file)));
+        @unlink($this->file . '.migrate-lock');
     }
 
     public function testOpenAloneNeitherCreatesNorChecksTheSchema(): void

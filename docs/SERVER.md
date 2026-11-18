@@ -2,7 +2,7 @@
 
 PHP 8.4 and SQLite, served by nginx + php-fpm. No framework: a small PSR-4 router and handlers. Runtime
 dependencies are PHP extensions only (all of them declared in `composer.json` under `require`, e.g.
-`ext-pdo_sqlite`, `ext-apcu`, `ext-hash`).
+`ext-pdo_sqlite`, `ext-hash`; `ext-apcu` is suggested, see [Rate limiting](#rate-limiting)).
 
 There is no user management. The server consists of
 
@@ -53,8 +53,15 @@ return [
     // optional: the sender of the mails (codes for tokens by mail, see Authentication)
     'mail' => ['from' => 'linkrot@example.com'],
     // or with a name that mail programs show: 'from' => 'Linkrot <linkrot@example.com>'
+    // optional: 'delete' instead of 'wal' for the journal of the databases (network file systems)
+    'sqlite_journal' => 'wal',
 ];
 ```
+
+`sqlite_journal` is the journal of the databases: `wal` (the default; readers never wait for a writer) or `delete`, the
+classic rollback journal. WAL needs shared memory next to the database file, which a network file system (NFS, as on
+many shared hosting servers) cannot provide reliably: there the databases can break, and `delete` is the safe choice.
+`app/bin/migrate` (and with it `install.sh`) switches existing databases when the value changes.
 
 `mail.from` is a plain address, or a name and an address in angle brackets. The name may not contain quotes, angle
 brackets, backslashes or control characters (it is put into the `From` header as it is, so there is nothing to escape),
@@ -192,7 +199,7 @@ Details of the HTTP protocol are in [API.md](API.md). Server side behaviour:
    (`upload_timeout` after the last chunk).
 
 PHP limits are irrelevant because the body is read raw from `php://input` (no multipart) and chunks are small
-(10-100 MB range, default 32 MiB). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.
+(1-100 MB range, default 32 MiB; small chunks are for web servers that limit the request body, as on shared hosting). nginx `client_max_body_size` must be at least `chunk_size + 32` plus margin.
 
 ## Download
 
@@ -239,8 +246,18 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   physical deletion is left to the cleanup, which removes it once `orphan_row_timeout` has passed since the last
   use. Neither a later request nor a cleanup run right after the last use unlinks the file, because that could
   break the download that just consumed it before nginx has opened the file.
-- Config switch `download_mode = xaccel|php`. `php` streams the file from PHP; it exists for development and
-  end-to-end tests with `php -S` and must not be used in production.
+- Config switch `download_mode`, who sends the bytes once PHP has said yes:
+  - `xaccel` (default): nginx, through `X-Accel-Redirect` to its internal `/_files/` location.
+  - `xsendfile`: Apache with mod_xsendfile (`X-Sendfile` with the path of the file); the host must allow the data
+    folder (`XSendFilePath`).
+  - `litespeed`: LiteSpeed (`X-LiteSpeed-Location` with the URI of the file), so the data must be below the document
+    root and must not be reachable directly; otherwise the download answers `500` and logs why.
+  - `php`: PHP streams the file itself in blocks of 1 MiB, with single ranges (`206`, `416`; several ranges get the
+    whole file) and no time limit, and stops when the client is gone. For shared hosting without any of the above, and
+    for development with `php -S`. The front controller closes all output buffers first, so the file never ends up in
+    memory.
+
+  The setup of the shared hosting archive finds out which of them works ([SHARED-HOSTING.md](SHARED-HOSTING.md)).
 
 ## Appearance
 
@@ -403,7 +420,10 @@ nginx has a fixed `limit_req` which only protects against DoS. On top of that th
 authentication itself:
 
 - storage is **APCu** (`apcu_inc` is atomic and shared between php-fpm workers); no database and no session files,
-  because both come with locking
+  because both come with locking. Without APCu (shared hosting) the counters are in `app_data/<host>/ratelimit.sqlite`,
+  a database of their own, so that somebody hammering the server with wrong tokens never holds a lock of
+  `linkrot.sqlite`. It waits at most 250 ms for a lock and fails open (the attempt is let through and logged): tokens have
+  256 bits and every mailed code only a few guesses, the limiter is not what keeps them safe
 - key `rl:` + `sha256(client ip)`; IPv6 addresses are reduced to their `/64` first; the address is `REMOTE_ADDR`
   (the operator configures nginx `real_ip` if there is a proxy)
 - fixed window: default 10 failed attempts per 15 minutes, configurable, hard limit: further requests get
@@ -416,7 +436,7 @@ authentication itself:
 
 | key | default | meaning |
 | --- | --- | --- |
-| `chunk_size` | 32 MiB | must be within 10-100 MB |
+| `chunk_size` | 32 MiB | must be within 1-100 MB |
 | `max_file_size` | 0 (unlimited) | upper bound for a single file |
 | `quota` | 0 (unlimited) | most data this host may hold at once, as a size: `100`, `100b`, `100kb`, `100mb`, `100gb`, `1tb` (decimal units, case does not matter) or an integer (bytes). Counts every live file and running upload (a sized upload with its full size from the start, a streaming one with what it has received); expired files the cleanup has not removed yet do not count. Uploads over it are refused with `507 quota_exceeded`. Concurrent creates can overshoot it by what they reserve in the same moment |
 | `default_rm_after` | `1w` | lifetime if the client does not ask for one |
@@ -427,7 +447,7 @@ authentication itself:
 | `orphan_row_timeout` | `1h` | grace period: rows without a data file are removed after it, expired and used-up files are deleted this long after the expiry or the last use, and the last download of a used-up file can still be resumed inside it |
 | `rate_limit_attempts` / `rate_limit_window` | 10 / 15 min | failed-auth limiter; the requests for a code and the wrong codes are counted the same way, with counters of their own |
 | `email` | none | the one address that may get a code to manage the tokens, see [Tokens by mail](#tokens-by-mail); needs `mail.from` in `global-config.php` |
-| `download_mode` | `xaccel` | `xaccel` or `php` (development only) |
+| `download_mode` | `xaccel` | `xaccel` (nginx), `xsendfile` (Apache mod_xsendfile), `litespeed` or `php` (PHP sends the file), see [Download](#download) |
 
 ### Durations
 

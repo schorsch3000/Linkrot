@@ -258,5 +258,6 @@ final class DownloadTest extends AppTestCase
         self::assertSame($this->dir . '/files/' . $id, $response->streamPath);
         self::assertSame('5', $response->headers['Content-Length']);
         self::assertArrayNotHasKey('X-Accel-Redirect', $response->headers);
+        // more in DownloadModesTest
     }
 }

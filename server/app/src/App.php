@@ -23,6 +23,7 @@ use Linkrot\Auth\ChallengeStore;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\RateLimiter;
 use Linkrot\Auth\SessionStore;
+use Linkrot\Auth\SqliteRateLimiter;
 use Linkrot\Auth\TokenStore;
 use Linkrot\Custom\CssStore;
 use Linkrot\Custom\CustomStore;
@@ -159,7 +160,7 @@ final class App
             new ChallengeStore($this->db()),
             new SessionStore($this->db(), $this->clock),
             $this->mailer,
-            $this->authLimiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $this->host . ':auth'),
+            $this->authLimiter ??= $this->newLimiter($this->host . ':auth'),
             $this->host,
             $this->authDelay,
         );
@@ -191,11 +192,21 @@ final class App
         return function (Request $request, array $params) use ($handler, $verifier): Response {
             $guard = new Guard(
                 new Authenticator($verifier instanceof \Closure ? $verifier() : new TokenStore($this->db())),
-                $this->limiter ??= new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $this->host),
+                $this->limiter ??= $this->newLimiter($this->host),
             );
 
             return $guard->check($request) ?? $handler($request, $params);
         };
+    }
+
+    /** APCu where there is one; without it (shared hosting) a SQLite database of its own, never the one of the files. */
+    private function newLimiter(string $namespace): RateLimiter
+    {
+        if (function_exists('apcu_enabled') && apcu_enabled()) {
+            return new ApcuRateLimiter($this->config->rateLimitAttempts, $this->config->rateLimitWindow, $namespace);
+        }
+
+        return new SqliteRateLimiter($this->dataDir . '/' . SqliteRateLimiter::FILE_NAME, $this->config->rateLimitAttempts, $this->config->rateLimitWindow, $namespace, $this->clock);
     }
 
     public function router(): Router

@@ -101,6 +101,21 @@ final class RequestTest extends TestCase
         self::assertArrayNotHasKey('SOME_ARRAY', $request->server);
     }
 
+    public function testTheAuthorizationThatModRewritePassesOnIsUsed(): void
+    {
+        $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REDIRECT_HTTP_AUTHORIZATION' => 'Bearer lr_cgi'];
+        self::assertSame('Bearer lr_cgi', Request::fromGlobals()->header('authorization'));
+
+        $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'HTTP_AUTHORIZATION' => 'Bearer lr_real', 'REDIRECT_HTTP_AUTHORIZATION' => 'Bearer lr_cgi'];
+        self::assertSame('Bearer lr_real', Request::fromGlobals()->header('authorization'), 'the header itself wins');
+
+        $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'HTTP_AUTHORIZATION' => '', 'REDIRECT_HTTP_AUTHORIZATION' => 'Bearer lr_cgi'];
+        self::assertSame('Bearer lr_cgi', Request::fromGlobals()->header('authorization'), 'the empty one the rewrite rule sets is none');
+
+        $_SERVER = ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/', 'REDIRECT_HTTP_AUTHORIZATION' => ''];
+        self::assertNull(Request::fromGlobals()->header('authorization'), 'an empty one (no header in the request) is none');
+    }
+
     public function testFromGlobalsDefaults(): void
     {
         $_SERVER = [];

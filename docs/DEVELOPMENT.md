@@ -9,9 +9,12 @@ server/
   Makefile
   app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/ (`lr-auth`, `migrate`,
                          `check-config`, `check-install`, `check-mail`, `pages-cache-clear`, `hosts`),
-                         composer.json + composer.lock (all used PHP extensions are listed under `require`),
+                         composer.json + composer.lock (all used PHP extensions are listed under `require`, the optional
+                         `apcu` under `suggest`),
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
+  shared/                what only the shared hosting zip has: setup.php, the .htaccess files (docs/SHARED-HOSTING.md);
+                         the setup itself is app/src/Setup/
   htdocs/index.php   front controller
   htdocs/assets/     page.css and page.js of the pages (a release build renames them after their content); the
                          custom stylesheets of the hosts are not here but in app_data/<host>/custom/
@@ -39,6 +42,7 @@ Client and server each have a Makefile with the usual targets:
 | `install` | install dependencies (`composer install` / `go mod download`, tools) |
 | `build` | server: nothing to compile, assemble the deployable tree in `build/dist`; cli: `go build` into `bin/` |
 | `dist` | release artefacts: server `build/linkrot-server-$(VERSION).tar.gz`, cli `dist/*` for all platforms (`make dist VERSION=1.2.3`) |
+| `shared`, `shared-dist`, `shared-test` | server only: the shared hosting tree (`build/shared`), its zip `build/linkrot-shared-$(VERSION).zip` (reproducible, checked by `repro`), and a check of the unpacked zip |
 | `dist-test` | server only: unpacks the tarball like a deployment and runs `app/install.sh` on it, also end to end against `php -S` (CI runs it) |
 | `coverage` | server only: the line coverage of `app/src` as text (needs Xdebug or PCOV) |
 | `preview` | server only: sample download pages for every icon type, to open in a browser (`build/preview/index.html`) |
@@ -92,6 +96,11 @@ Run it again when the look of the pages changes, and commit the images. It is no
 `cli/e2e` runs the real CLI code against the real server: once on `php -S` directly and once behind nginx, which
 covers the `X-Accel-Redirect` path (ranges, security headers, the internal location). They are part of `make -C cli test`
 and are skipped if php, the server dependencies (`make -C server install`), APCu or nginx are missing.
+`TestEndToEndShared` sets up the shared hosting archive through `setup.php` (with the probes of `setup.js` done in Go)
+and runs the same against it: with `LINKROT_E2E_SHARED=server/build/shared` (after `make -C server shared`) on `php -S`
+without APCu, behind a router that does what the `.htaccess` does, once with the data next to the document root and once
+below it; with `LINKROT_E2E_SHARED_URL`, `_ROOT` and `_CODE` against a real web server (the CI job `shared`: Apache
+with mod_php from `php:8.4-apache`).
 `TestEndToEndContainer` runs the same against the container image, the way `compose.yaml` starts it (`LINKROT_TLS=off`,
 the data folder bind-mounted, the host enrolled with `linkrot-admin`); it needs docker and the image:
 
@@ -106,7 +115,9 @@ APCu), the CLI's `precommit` plus a cross-compile of every release platform, and
 `LINKROT_E2E_REQUIRED=1` so that missing prerequisites fail instead of skip), and the container job: `compose.yaml`
 must be valid, the image is built, started once in every TLS mode (`off`, `file` with a self-signed certificate, `acme`
 without reaching a CA) until its healthcheck answers, and the end-to-end tests run against it. A push to `main` then
-publishes the image as `ghcr.io/<owner>/linkrot:edge` (job `edge`, `.github/workflows/image.yml`). Tool versions of the Go linters are pinned in
+publishes the image as `ghcr.io/<owner>/linkrot:edge` (job `edge`, `.github/workflows/image.yml`). The job `shared` runs
+the shared hosting zip on Apache (mod_php, `.htaccess`, no APCu), once with the data next to the document root and once
+below it, and the end-to-end tests through `setup.php` against it. Tool versions of the Go linters are pinned in
 `cli/Makefile`.
 
 Both jobs also run `make audit` (`composer audit --locked`, `govulncheck`), which **fails on any known vulnerability**; since
@@ -129,6 +140,8 @@ is green). The builds run next to it, the CLI platforms in parallel, and the rel
 - `linkrot_<version>_<os>_<arch>.tar.gz` / `.zip`: the CLI for linux (amd64, arm64, armv7, 386), macOS (amd64, arm64),
   windows (amd64, arm64, 386, as zip) and freebsd (amd64, arm64). Static binaries, built with `-trimpath`; the version is
   shown by `--version`.
+- `linkrot-shared-<version>.zip`: the server for shared hosting, the contents of a document root with `linkrot-app/`
+  (the code, `vendor/` included) and `setup.php` ([SHARED-HOSTING.md](SHARED-HOSTING.md))
 - the container image `ghcr.io/<owner>/linkrot:<version>`, for a release that is no pre-release also `MAJOR.MINOR`,
   `MAJOR` and `latest` (`image.yml`, after the release job; amd64 and arm64, with an attestation in the registry)
 - `SHA256SUMS` for all of them, and a signed build provenance attestation for every file (`actions/attest-build-provenance`,

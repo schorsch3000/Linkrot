@@ -5,8 +5,11 @@ PORT     ?= 8080
 VERSION  ?= dev
 DIST     := build/dist
 TARBALL  := build/linkrot-server-$(VERSION).tar.gz
+SHARED   := build/shared
+ZIP      := build/linkrot-shared-$(VERSION).zip
+MTIME    := $(shell git log -1 --format=%ct 2>/dev/null || echo 0)
 
-.PHONY: install build dist dist-test preview run test coverage lint audit repro fmt clean precommit
+.PHONY: install build dist dist-test shared shared-dist shared-test preview run test coverage lint audit repro fmt clean precommit
 
 install:
 	composer --working-dir=app install --no-interaction
@@ -39,6 +42,34 @@ dist: build
 dist-test: dist
 	scripts/dist-test.sh $(TARBALL)
 
+# Shared hosting (no shell): what goes into the document root, the code with its dependencies in linkrot-app/, the
+# setup page and the .htaccess files (shared/). docs/SHARED-HOSTING.md.
+shared: build
+	rm -rf $(SHARED)
+	mkdir -p $(SHARED)/linkrot-app
+	cp -r $(DIST)/htdocs/. $(SHARED)/
+	cp -r $(DIST)/app/. $(SHARED)/linkrot-app/
+	composer --working-dir=$(SHARED)/linkrot-app install --no-dev --no-interaction --no-progress --prefer-dist \
+		--optimize-autoloader --classmap-authoritative --quiet
+	cp shared/setup.php $(SHARED)/setup.php
+	cp shared/htaccess $(SHARED)/.htaccess
+	cp shared/app.htaccess $(SHARED)/linkrot-app/.htaccess
+
+# The zip of it, reproducible: sorted, fixed times (UTC, zip stores local time) and permissions, no extra attributes.
+shared-dist: shared
+	find $(SHARED) -type d -exec chmod 755 {} + && find $(SHARED) -type f -exec chmod 644 {} +
+	find $(SHARED)/linkrot-app/bin -type f ! -name '*.php' -exec chmod 755 {} +
+	chmod 755 $(SHARED)/linkrot-app/install.sh
+	find $(SHARED) -exec env TZ=UTC touch -h -d @$(MTIME) {} +
+	rm -f $(ZIP)
+	cd $(SHARED) && find . -mindepth 1 -type f | sed 's|^\./||' | LC_ALL=C sort | TZ=UTC zip -X -q -@ ../../$(ZIP)
+	@if unzip -Z1 $(ZIP) | grep -qE '(^|/)(tests?|vendor/phpunit|vendor/phpstan)(/|$$)'; then echo "the zip contains files that do not belong into it"; exit 1; fi
+	@echo $(ZIP)
+
+# Unpacks the zip like a user and checks its layout and that it runs without APCu (needs no composer).
+shared-test: shared-dist
+	scripts/shared-test.sh $(ZIP)
+
 # Sample pages of the download site for every icon type, to open in a browser (build/preview/index.html).
 preview:
 	php scripts/preview.php
@@ -52,15 +83,17 @@ run: install
 
 test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
+	@# once more without APCu, as on shared hosting: the limiter falls back to SQLite
+	php -d apc.enable_cli=0 $(BIN)/phpunit --filter 'RateLimiter'
 
 # Needs Xdebug (or PCOV). The line coverage of app/src as text.
 coverage:
 	XDEBUG_MODE=coverage php -d apc.enable_cli=1 $(BIN)/phpunit --coverage-text
 
 lint:
-	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh scripts/build-assets.sh
+	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh scripts/build-assets.sh scripts/shared-test.sh
 	cd .. && shellcheck -x -s sh docker/lib.sh docker/linkrot-start docker/linkrot-tls docker/linkrot-admin linkrot-admin
-	@if command -v node >/dev/null; then node --check htdocs/assets/page.js; else echo 'node not found, page.js is not syntax checked'; fi
+	@if command -v node >/dev/null; then node --check htdocs/assets/page.js && node --check app/src/Setup/assets/setup.js; else echo 'node not found, page.js and setup.js are not syntax checked'; fi
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
 	$(BIN)/php-cs-fixer fix --dry-run --diff
@@ -74,7 +107,11 @@ repro:
 	@set -e; v=0.0.0-repro; t=build/linkrot-server-$$v.tar.gz; \
 	rm -rf build; $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null; a=$$(sha256sum $$t | cut -d' ' -f1); \
 	(umask 077; rm -rf build; $(MAKE) --no-print-directory dist VERSION=$$v >/dev/null); b=$$(sha256sum $$t | cut -d' ' -f1); \
-	if [ "$$a" = "$$b" ]; then echo "reproducible: $$a"; else echo "NOT reproducible: $$a != $$b"; exit 1; fi
+	if [ "$$a" = "$$b" ]; then echo "reproducible: $$a"; else echo "NOT reproducible: $$a != $$b"; exit 1; fi; \
+	z=build/linkrot-shared-$$v.zip; \
+	$(MAKE) --no-print-directory shared-dist VERSION=$$v >/dev/null; a=$$(sha256sum $$z | cut -d' ' -f1); \
+	(umask 077; rm -rf build/shared $$z; $(MAKE) --no-print-directory shared-dist VERSION=$$v >/dev/null); b=$$(sha256sum $$z | cut -d' ' -f1); \
+	if [ "$$a" = "$$b" ]; then echo "reproducible: $$a ($$z)"; else echo "NOT reproducible: $$a != $$b ($$z)"; exit 1; fi
 
 fmt:
 	$(BIN)/rector process --no-progress-bar

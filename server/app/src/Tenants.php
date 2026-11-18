@@ -19,12 +19,21 @@ final readonly class Tenants
 {
     public const string FILE_NAME = 'global-config.php';
 
+    /** The journal of the databases: WAL (default, readers never wait), or DELETE where WAL cannot work (network file systems). */
+    public const string JOURNAL_WAL = 'wal';
+    public const string JOURNAL_DELETE = 'delete';
+
     /**
      * @param list<string> $hosts normalized hostnames
      * @param string|null $mailFrom address of the sender of the mails (codes for self-service tokens); null: the server sends no mail
      * @param string|null $mailName display name of the sender, if there is one
      */
-    public function __construct(public array $hosts, public ?string $mailFrom = null, public ?string $mailName = null) {}
+    public function __construct(
+        public array $hosts,
+        public ?string $mailFrom = null,
+        public ?string $mailName = null,
+        public string $sqliteJournal = self::JOURNAL_WAL,
+    ) {}
 
     /** What mail.from says, as it is written in the file: `address` or `Name <address>`. */
     public function mailSender(): ?string
@@ -60,7 +69,7 @@ final readonly class Tenants
         if (!is_array($values)) {
             throw new InvalidArgumentException("global config: $file must return an array with a hosts list");
         }
-        $unknown = array_diff(array_map(strval(...), array_keys($values)), ['hosts', 'mail']);
+        $unknown = array_diff(array_map(strval(...), array_keys($values)), ['hosts', 'mail', 'sqlite_journal']);
         if ($unknown !== []) {
             throw new InvalidArgumentException('global config: unknown keys: ' . implode(', ', $unknown));
         }
@@ -82,8 +91,12 @@ final readonly class Tenants
         }
 
         [$from, $name] = self::mailFrom($values['mail'] ?? null);
+        $journal = $values['sqlite_journal'] ?? self::JOURNAL_WAL;
+        if (!in_array($journal, [self::JOURNAL_WAL, self::JOURNAL_DELETE], true)) {
+            throw new InvalidArgumentException("global config: sqlite_journal must be 'wal' or 'delete'");
+        }
 
-        return new self($hosts, $from, $name);
+        return new self($hosts, $from, $name, $journal);
     }
 
     /**
@@ -132,13 +145,20 @@ final readonly class Tenants
             return false;
         }
         $hosts[] = $normalized;
-        $mail = $current->mailFrom === null ? '' : '    \'mail\' => [\'from\' => ' . var_export($current->mailSender(), true) . "],\n";
-        $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $hosts)) . "    ],\n" . $mail . "];\n";
+        new self($hosts, $current->mailFrom, $current->mailName, $current->sqliteJournal)->save($file);
+
+        return true;
+    }
+
+    /** Writes the file from these values (the setup of the shared hosting archive changes mail.from and the journal). */
+    public function save(string $file): void
+    {
+        $mail = $this->mailFrom === null ? '' : '    \'mail\' => [\'from\' => ' . var_export($this->mailSender(), true) . "],\n";
+        $journal = $this->sqliteJournal === self::JOURNAL_WAL ? '' : "    'sqlite_journal' => " . var_export($this->sqliteJournal, true) . ",\n";
+        $php = "<?php\n\nreturn [\n    'hosts' => [\n" . implode('', array_map(static fn(string $h): string => "        '$h',\n", $this->hosts)) . "    ],\n" . $mail . $journal . "];\n";
         if (file_put_contents($file, $php, LOCK_EX) === false) {
             throw new InvalidArgumentException("cannot write $file");
         }
-
-        return true;
     }
 
     /**

@@ -47,7 +47,10 @@ jobs:
       - name: Release tarball has the expected layout and installs
         run: make -C server dist-test VERSION=ci
 
-      - name: Release tarball is reproducible
+      - name: Shared hosting zip has the expected layout and runs without APCu
+        run: make -C server shared-test VERSION=ci
+
+      - name: Release tarball and shared hosting zip are reproducible
         run: make -C server repro
 
   cli:
@@ -104,8 +107,65 @@ jobs:
           sudo systemctl stop nginx # the tests start their own instance on free ports
 
       - run: composer --working-dir=server/app install --no-interaction
+      # the shared hosting archive, unpacked: TestEndToEndShared sets it up through setup.php and runs it on php -S
+      - run: make -C server shared VERSION=ci
       - run: go test ./e2e/ -count=1 -v
         working-directory: cli
+        env:
+          LINKROT_E2E_SHARED: ${{ github.workspace }}/server/build/shared
+
+  shared:
+    name: Shared hosting zip on Apache (mod_php, .htaccess, no APCu), data ${{ matrix.data }} the document root
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        data: [outside, inside]
+    env:
+      LINKROT_E2E_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite, sqlite3, mbstring, ctype
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - run: make -C server shared VERSION=ci
+
+      # The webspace: /var/www of the container, the archive unpacked into its document root html/. Apache's user may
+      # always write the document root; next to it only with data=outside, so that inside puts the data below it.
+      - name: Apache with the archive
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/webspace"
+          mkdir -p "$root/html"
+          cp -r server/build/shared/. "$root/html/"
+          chmod 777 "$root/html"
+          if [ "${{ matrix.data }}" = outside ]; then chmod 777 "$root"; else chmod 755 "$root"; fi
+          docker run -d --name webspace -p 127.0.0.1:8080:80 -v "$root:/var/www" php:8.4-apache \
+            bash -c "a2enmod rewrite >/dev/null && sed -ri 's#AllowOverride None#AllowOverride All#' /etc/apache2/apache2.conf && exec apache2-foreground"
+          for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8080/setup.php && break; sleep 1; done
+          echo "LINKROT_E2E_SHARED_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: End to end through setup.php
+        run: go test ./e2e/ -count=1 -run 'TestEndToEndShared$' -v
+        working-directory: cli
+        env:
+          LINKROT_E2E_SHARED_URL: http://127.0.0.1:8080
+          LINKROT_E2E_SHARED_CODE: docker exec webspace cat /var/www/html/setup-code.php
+
+      - name: Log of Apache and the webspace as Apache sees it
+        if: always()
+        run: |
+          docker logs webspace 2>&1 | tail -100
+          docker exec webspace sh -c 'umask; ls -la /var/www /var/www/html; ls -la /var/www/linkrot-data /var/www/html/linkrot-data 2>&1' || true
 
   container:
     name: Container image (build, compose file, end-to-end against the image)
@@ -154,7 +214,7 @@ jobs:
   # Every push to main is published as ghcr.io/<owner>/linkrot:edge, once all checks passed.
   edge:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [server, cli, e2e, container]
+    needs: [server, cli, e2e, shared, container]
     permissions:
       contents: read
       packages: write

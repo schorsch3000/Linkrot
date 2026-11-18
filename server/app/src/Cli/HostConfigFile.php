@@ -22,13 +22,13 @@ final class HostConfigFile
         'default_uses' => 'download limit if the client names none, null: unlimited',
         'max_file_size' => 'largest single file in bytes, 0: unlimited',
         'quota' => 'most data the host may hold: "100gb", "1tb" or bytes, 0: unlimited',
-        'chunk_size' => 'bytes per upload chunk, 10-100 MB',
+        'chunk_size' => 'bytes per upload chunk, 1-100 MB (as big as the web server lets through: fewer requests)',
         'cleanup_interval' => 'minimum time between lazy cleanups',
         'upload_timeout' => 'unfinished uploads without activity are removed after this',
         'orphan_row_timeout' => 'grace period for rows without data and for expired or used-up files',
         'rate_limit_attempts' => 'failed attempts per window before a client address is blocked',
         'rate_limit_window' => 'that window in seconds',
-        'download_mode' => "'xaccel' (nginx hands out the file) or 'php' (development only)",
+        'download_mode' => "'xaccel' (nginx sends the file), 'xsendfile' (Apache mod_xsendfile), 'litespeed' or 'php' (PHP streams it)",
     ];
 
     private const string BANNER = <<<'TXT'

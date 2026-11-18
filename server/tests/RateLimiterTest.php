@@ -10,6 +10,7 @@ use Linkrot\Auth\ClientKey;
 use Linkrot\Auth\Guard;
 use Linkrot\Auth\InMemoryRateLimiter;
 use Linkrot\Auth\RateLimiter;
+use Linkrot\Auth\SqliteRateLimiter;
 use Linkrot\Auth\TokenStore;
 use Linkrot\Database;
 use Linkrot\Http\Request;
@@ -106,5 +107,80 @@ final class RateLimiterTest extends TestCase
 
         self::assertNotNull($one->blockedFor('192.0.2.9'));
         self::assertNull($two->blockedFor('192.0.2.9'));
+    }
+
+    private function sqliteFile(): string
+    {
+        $path = sys_get_temp_dir() . '/linkrot-ratelimit-' . bin2hex(random_bytes(6)) . '.sqlite';
+        register_shutdown_function(static fn(): bool => @unlink($path));
+
+        return $path;
+    }
+
+    public function testSqliteBlocksAfterAttemptsAndExpiresLikeTheOthers(): void
+    {
+        $limiter = new SqliteRateLimiter($this->sqliteFile(), 3, 900, 'lr.example', fn(): int => $this->now);
+
+        for ($i = 0; $i < 3; ++$i) {
+            self::assertNull($limiter->blockedFor('192.0.2.1'));
+            $limiter->recordFailure('192.0.2.1');
+        }
+        self::assertSame(900, $limiter->blockedFor('192.0.2.1'));
+        self::assertNull($limiter->blockedFor('192.0.2.2'));
+
+        $this->now += 400;
+        self::assertSame(500, $limiter->blockedFor('192.0.2.1'));
+
+        $this->now += 500;
+        self::assertNull($limiter->blockedFor('192.0.2.1'));
+        $limiter->recordFailure('192.0.2.1');
+        self::assertNull($limiter->blockedFor('192.0.2.1'), 'a new window starts from zero');
+    }
+
+    public function testSqliteTenantsDoNotShareAttemptsAndOldWindowsAreRemoved(): void
+    {
+        $path = $this->sqliteFile();
+        $one = new SqliteRateLimiter($path, 1, 60, 'one.example', fn(): int => $this->now);
+        $two = new SqliteRateLimiter($path, 1, 60, 'two.example', fn(): int => $this->now);
+
+        $one->recordFailure('192.0.2.9');
+        self::assertNotNull($one->blockedFor('192.0.2.9'));
+        self::assertNull($two->blockedFor('192.0.2.9'));
+
+        $this->now += 61;
+        $two->recordFailure('192.0.2.10');
+        $rows = Database::query(new PDO('sqlite:' . $path), 'SELECT count(*) FROM windows')->fetchColumn();
+        self::assertSame(1, $rows, 'the window that is over was removed by the next failure');
+    }
+
+    public function testSqliteFailsOpenWhenItsDatabaseIsUnusable(): void
+    {
+        $limiter = new SqliteRateLimiter('/nonexistent/folder/ratelimit.sqlite', 1, 60, '', fn(): int => $this->now);
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $limiter->recordFailure('192.0.2.1');
+            $limiter->recordFailure('192.0.2.1');
+            self::assertNull($limiter->blockedFor('192.0.2.1'));
+        } finally {
+            ini_set('error_log', (string) $log);
+        }
+    }
+
+    public function testSqliteDoesNotWaitForALockOfItsDatabase(): void
+    {
+        $path = $this->sqliteFile();
+        $limiter = new SqliteRateLimiter($path, 1, 60, '', fn(): int => $this->now);
+        $limiter->recordFailure('192.0.2.1');
+        $holder = new PDO('sqlite:' . $path, options: [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $holder->exec('BEGIN EXCLUSIVE');
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $started = microtime(true);
+            $limiter->recordFailure('192.0.2.2');
+            self::assertLessThan(2.0, microtime(true) - $started);
+        } finally {
+            ini_set('error_log', (string) $log);
+            $holder->exec('ROLLBACK');
+        }
     }
 }
