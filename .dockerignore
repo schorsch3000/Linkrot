@@ -1,0 +1,11 @@
+# The image is built from server/, docker/ and LICENSE only.
+*
+!LICENSE
+!server/
+!docker/
+server/app/vendor/
+server/app_data/
+server/build/
+server/tests/
+server/.php-cs-fixer.cache
+server/.phpunit.cache/

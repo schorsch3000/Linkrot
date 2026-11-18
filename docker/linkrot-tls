@@ -1,0 +1,117 @@
+#!/bin/sh
+# The certificate of the container (LINKROT_TLS = acme or file).
+# usage: linkrot-tls sync     acme: get a certificate for all hosts of global-config.php if there is none, or if the
+#                             hosts changed; started by linkrot-start, and by linkrot-admin after a host was added
+#        linkrot-tls reload   write nginx.conf again and reload nginx (acme.sh runs it after a renewal)
+#        linkrot-tls watch    runs forever: acme renews twice a day, file reloads nginx when the mounted files change
+set -eu
+# shellcheck source=docker/lib.sh
+. "${LINKROT_LIB:-/usr/local/lib/linkrot/lib.sh}"
+
+export LE_WORKING_DIR="$ACME_HOME" LE_CONFIG_HOME="$ACME_HOME"
+
+acme() {
+	acme.sh --config-home "$ACME_HOME" --cert-home "$ACME_HOME/certs" --no-color "$@"
+}
+
+# The hosts a public CA can issue for: no localhost, no IP addresses, no names without a dot.
+acme_domains() {
+	hosts_list | while IFS= read -r host; do
+		case "$host" in
+		localhost | *.localhost | *:* | *[!a-z0-9.-]* | *.) continue ;;
+		*.*) ;;
+		*) continue ;;
+		esac
+		case "$host" in
+		*[!0-9.]*) printf '%s\n' "$host" ;;
+		esac
+	done | sort -u
+}
+
+reload() {
+	nginx_conf
+	if [ -s "$LINKROT_RUN/nginx.pid" ]; then
+		nginx_reload
+	fi
+}
+
+sync() {
+	[ "$LINKROT_TLS" = acme ] || return 0
+	domains="$(acme_domains)"
+	if [ -z "$domains" ]; then
+		say "acme: no host that a CA can issue for yet; add one with linkrot-admin"
+		return 0
+	fi
+	if [ -s "$ACME_CERT" ] && [ "$domains" = "$(cat "$ACME_HOME/domains" 2>/dev/null)" ]; then
+		return 0
+	fi
+
+	mkdir -p "$ACME_HOME/live" "$ACME_WEBROOT"
+	chmod 700 "$ACME_HOME"
+	server="${LINKROT_ACME_SERVER:-letsencrypt}"
+	main="$(printf '%s\n' "$domains" | head -n 1)"
+	names="$(printf '%s' "$domains" | tr '\n' ' ')"
+	set -- --issue --server "$server" -w "$ACME_WEBROOT" --keylength ec-256
+	for domain in $domains; do
+		set -- "$@" -d "$domain"
+	done
+	# a changed list of hosts: a new certificate, even if the old one is not due yet
+	[ ! -s "$ACME_CERT" ] || set -- "$@" --force
+
+	say "acme: requesting a certificate for $names from $server"
+	acme --register-account -m "${LINKROT_ACME_EMAIL:?}" --server "$server" >/dev/null || die "acme: cannot register the account at $server"
+	status=0
+	acme "$@" || status=$?
+	# 2: the certificate is there and not due yet
+	[ "$status" = 0 ] || [ "$status" = 2 ] || die "acme: no certificate (acme.sh exit $status, see above); the hosts must point to this machine and port 80 must reach the container"
+	acme --install-cert -d "$main" --ecc --fullchain-file "$ACME_CERT" --key-file "$ACME_KEY" \
+		--reloadcmd "/usr/local/bin/linkrot-tls reload" >/dev/null || die "acme: cannot install the certificate"
+	printf '%s\n' "$domains" >"$ACME_HOME/domains"
+	say "acme: certificate installed for $names"
+	reload
+}
+
+# The modification times of the mounted certificate and key, following symlinks (certbot's live/ folder).
+file_stamp() {
+	stat -L -c '%Y %s' "$(tls_cert)" "$(tls_key)" 2>/dev/null || true
+}
+
+watch() {
+	case "$LINKROT_TLS" in
+	acme)
+		while :; do
+			sleep 43200
+			# renews what is due (and runs linkrot-tls reload for it), then picks up hosts added by hand
+			acme --cron || say "acme: renewal failed, trying again in 12 hours"
+			(
+				flock 9
+				sync
+			) || true
+		done
+		;;
+	file)
+		stamp="$(file_stamp)"
+		while :; do
+			sleep 60
+			now="$(file_stamp)"
+			if [ "$now" != "$stamp" ]; then
+				stamp="$now"
+				say "the certificate changed, reloading nginx"
+				reload || say "nginx did not take the new certificate, it keeps the old one"
+			fi
+		done
+		;;
+	esac
+}
+
+case "${1:-}" in
+sync | reload | watch)
+	exec 9>"$LINKROT_RUN/tls.lock"
+	[ "$1" = watch ] || flock 9
+	"$1"
+	;;
+*)
+	echo "usage: linkrot-tls sync|reload|watch" >&2
+	exit 2
+	;;
+esac

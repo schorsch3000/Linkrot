@@ -1,0 +1,191 @@
+#!/bin/sh
+# Maintenance of the container: a numbered menu, or one tool of app/bin directly.
+# usage: linkrot-admin                          the menu
+#        linkrot-admin hosts [add|rewrite] ...   app/bin/hosts; after "add" the database is created (and the
+#                                               certificate requested again with LINKROT_TLS=acme)
+#        linkrot-admin lr-auth|check-config|check-install|check-mail|migrate|pages-cache-clear ...
+#                                               the tool of app/bin as it is (LINKROT_HOST=<host> picks the host)
+#        linkrot-admin install                  app/install.sh: migrate, clear the page cache, check the configuration
+set -eu
+# shellcheck source=docker/lib.sh
+. "${LINKROT_LIB:-/usr/local/lib/linkrot/lib.sh}"
+
+bin="$LINKROT_ROOT/app/bin"
+
+# migrates (creates the database of a new host), clears the page cache, checks every config.php
+install() {
+	"$LINKROT_ROOT/app/install.sh" --no-composer --no-network-check --no-mail-check "$@"
+}
+
+add_host() {
+	"$bin/hosts" add "$@"
+	install
+	if [ "$LINKROT_TLS" = acme ]; then
+		linkrot-tls sync || say "no certificate yet, linkrot-tls tries again in 12 hours (or: linkrot-admin tls-sync)"
+	fi
+}
+
+# --- the menu ---
+
+# Reads one line into $answer; end of input quits.
+ask() {
+	printf '%s' "$1"
+	if ! IFS= read -r answer; then
+		echo
+		exit 0
+	fi
+}
+
+pause() {
+	echo
+	ask "Enter to continue "
+}
+
+# Lets the user pick a host; sets $host. With "all" as $1 there is an extra choice for all hosts ($host empty).
+# Returns 1 if there is nothing to pick or the user went back.
+pick_host() {
+	hosts="$(hosts_list)"
+	if [ -z "$hosts" ]; then
+		echo "No host yet, add one first."
+		return 1
+	fi
+	count="$(printf '%s\n' "$hosts" | wc -l)"
+	if [ "$count" = 1 ] && [ "${1:-}" != all ]; then
+		host="$hosts"
+		return 0
+	fi
+	echo
+	printf '%s\n' "$hosts" | awk '{ printf "  %2d) %s\n", NR, $0 }'
+	[ "${1:-}" != all ] || echo "   a) all hosts"
+	echo "   b) back"
+	while :; do
+		ask "host: "
+		case "$answer" in
+		a | A)
+			if [ "${1:-}" = all ]; then
+				host=""
+				return 0
+			fi
+			;;
+		b | B | "") return 1 ;;
+		*[!0-9]*) ;;
+		*)
+			if [ "$answer" -ge 1 ] && [ "$answer" -le "$count" ]; then
+				host="$(printf '%s\n' "$hosts" | sed -n "${answer}p")"
+				return 0
+			fi
+			;;
+		esac
+		echo "pick a number from the list (b: back)"
+	done
+}
+
+menu_add() {
+	ask "hostname (as in the links, e.g. files.example.com): "
+	[ -n "$answer" ] || return 0
+	name="$answer"
+	ask "address for tokens by mail (empty: none): "
+	if [ -n "$answer" ]; then
+		add_host "$name" --email "$answer"
+	else
+		add_host "$name"
+	fi
+}
+
+menu_rewrite() {
+	pick_host all || return 0
+	if [ -n "$host" ]; then
+		"$bin/hosts" rewrite "$host"
+	else
+		"$bin/hosts" rewrite
+	fi
+}
+
+menu_token_new() {
+	pick_host || return 0
+	ask "name of the device (e.g. my-laptop): "
+	[ -n "$answer" ] || return 0
+	echo "The token for $answer on $host, shown only once:"
+	LINKROT_HOST="$host" "$bin/lr-auth" get "$answer" || return
+	echo "On the device: lr config --server https://$host --token"
+}
+
+menu_token_rm() {
+	pick_host || return 0
+	LINKROT_HOST="$host" "$bin/lr-auth" ls
+	ask "name of the token to remove (empty: none): "
+	[ -z "$answer" ] || LINKROT_HOST="$host" "$bin/lr-auth" del "$answer"
+}
+
+menu_check_install() {
+	pick_host || return 0
+	LINKROT_HOST="$host" "$bin/check-install"
+}
+
+menu() {
+	while :; do
+		cat <<EOF
+
+linkrot admin (TLS: $LINKROT_TLS, data: $LINKROT_DATA)
+
+   1) list the hosts
+   2) add a host
+   3) rewrite config.php (one host or all)
+   4) list the tokens of a host
+   5) create a token
+   6) remove a token
+   7) check the installation (migrate, page cache, every config.php)
+   8) end-to-end check of a host (through its public URL)
+   9) check that mail can be sent
+  10) request the certificate again (LINKROT_TLS=acme)
+   q) quit
+EOF
+		ask "> "
+		status=0
+		case "$answer" in
+		1) hosts_list || status=$? ;;
+		2) menu_add || status=$? ;;
+		3) menu_rewrite || status=$? ;;
+		4) if pick_host; then LINKROT_HOST="$host" "$bin/lr-auth" ls || status=$?; fi ;;
+		5) menu_token_new || status=$? ;;
+		6) menu_token_rm || status=$? ;;
+		7) install || status=$? ;;
+		8) menu_check_install || status=$? ;;
+		9) "$bin/check-mail" || status=$? ;;
+		10) linkrot-tls sync || status=$? ;;
+		q | Q) exit 0 ;;
+		"") continue ;;
+		*)
+			echo "pick one of the numbers, or q"
+			continue
+			;;
+		esac
+		[ "$status" = 0 ] || echo "(failed, exit $status)"
+		pause
+	done
+}
+
+if [ $# -eq 0 ]; then
+	menu
+fi
+
+tool="$1"
+shift
+case "$tool" in
+hosts)
+	if [ "${1:-}" = add ]; then
+		shift
+		add_host "$@"
+	else
+		exec "$bin/hosts" "$@"
+	fi
+	;;
+lr-auth | check-config | check-install | check-mail | migrate | pages-cache-clear) exec "$bin/$tool" "$@" ;;
+install) install "$@" ;;
+tls-sync) exec linkrot-tls sync ;;
+-h | --help | help) sed -n '2,8s/^# \{0,1\}//p' "$0" ;;
+*)
+	echo "linkrot-admin: unknown tool '$tool' (linkrot-admin --help)" >&2
+	exit 2
+	;;
+esac

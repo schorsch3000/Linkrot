@@ -1,0 +1,130 @@
+#!/bin/sh
+# Entry point of the container: checks app_data, migrates the databases, writes the configuration of nginx and msmtp,
+# then runs php-fpm, nginx and the TLS helper. Stops all of them when one of the two servers ends.
+set -eu
+# shellcheck source=docker/lib.sh
+. "${LINKROT_LIB:-/usr/local/lib/linkrot/lib.sh}"
+
+umask 022
+mkdir -p "$LINKROT_RUN/nginx" "$ACME_WEBROOT"
+chmod 700 "$LINKROT_RUN"
+export LINKROT_PHP_WORKERS="${LINKROT_PHP_WORKERS:-8}"
+
+case "$LINKROT_TLS" in
+off | file | acme) ;;
+*) die "LINKROT_TLS must be off, file or acme, not '$LINKROT_TLS'" ;;
+esac
+
+# app_data is a bind mount: it must belong to the user the container runs as (compose.yaml: user).
+probe="$LINKROT_DATA/.linkrot-write-test.$$"
+if ! (: >"$probe") 2>/dev/null; then
+	die "$LINKROT_DATA is not writable for uid $(id -u) (gid $(id -g)). On the docker host: chown -R $(id -u):$(id -g) ./app_data, or set user: in compose.yaml to the owner of the folder."
+fi
+rm -f "$probe"
+
+# msmtp for PHP's mail() (tokens by mail), only if a relay is configured.
+if [ -n "${LINKROT_SMTP_HOST:-}" ]; then
+	(
+		umask 077
+		if [ -n "${LINKROT_SMTP_PASSWORD_FILE:-}" ]; then
+			cat "$LINKROT_SMTP_PASSWORD_FILE" >"$LINKROT_RUN/smtp-password" || die "cannot read LINKROT_SMTP_PASSWORD_FILE"
+		else
+			printf '%s\n' "${LINKROT_SMTP_PASSWORD:-}" >"$LINKROT_RUN/smtp-password"
+		fi
+	)
+	case "${LINKROT_SMTP_TLS:-starttls}" in
+	starttls) tls=on starttls=on port=587 ;;
+	tls) tls=on starttls=off port=465 ;;
+	off) tls=off starttls=off port=25 ;;
+	*) die "LINKROT_SMTP_TLS must be starttls, tls or off" ;;
+	esac
+	(
+		umask 077
+		{
+			echo 'defaults'
+			echo "tls $tls"
+			echo "tls_starttls $starttls"
+			echo 'tls_trust_file /etc/ssl/certs/ca-certificates.crt'
+			echo 'syslog off'
+			echo 'account default'
+			echo "host $LINKROT_SMTP_HOST"
+			echo "port ${LINKROT_SMTP_PORT:-$port}"
+			if [ -n "${LINKROT_SMTP_USER:-}" ]; then
+				echo 'auth on'
+				echo "user $LINKROT_SMTP_USER"
+				# passwordeval: no quoting rules for the password
+				echo "passwordeval cat $LINKROT_RUN/smtp-password"
+			else
+				echo 'auth off'
+			fi
+		} >"$LINKROT_RUN/msmtprc"
+	)
+	unset LINKROT_SMTP_PASSWORD
+fi
+
+case "$LINKROT_TLS" in
+file)
+	for f in "$(tls_cert)" "$(tls_key)"; do
+		[ -r "$f" ] || die "LINKROT_TLS=file: cannot read $f (mount the certificate and the key, readable for uid $(id -u); LINKROT_TLS_CERT and LINKROT_TLS_KEY name other files)"
+	done
+	;;
+acme)
+	[ -n "${LINKROT_ACME_EMAIL:-}" ] || die "LINKROT_TLS=acme needs LINKROT_ACME_EMAIL, the address of the account at the CA"
+	;;
+esac
+
+# The databases to the schema of this release, the cached pages away, the configurations checked (app/install.sh
+# without composer: the dependencies are part of the image). The end-to-end check is linkrot-admin's.
+if [ -f "$LINKROT_DATA/global-config.php" ]; then
+	"$LINKROT_ROOT/app/install.sh" --no-composer --no-network-check --no-mail-check ||
+		say "the installation check failed (see above); the server answers 503 schema_outdated until it passes"
+else
+	cat >&2 <<MSG
+
+================================================================================
+ No host is set up yet: every request is answered with "server misconfigured".
+ Enroll the first one (one per hostname the server answers to):
+
+     docker compose exec linkrot linkrot-admin
+
+ or without the menu: docker compose exec linkrot linkrot-admin hosts add files.example.com
+================================================================================
+
+MSG
+fi
+
+nginx_conf
+nginx -t -q -e stderr -c "$NGINX_CONF" || die "the generated nginx configuration is broken: $NGINX_CONF"
+
+pids=""
+stop() {
+	trap - TERM INT
+	# shellcheck disable=SC2086 # a list of pids
+	kill $pids 2>/dev/null || true
+	wait
+	exit "${1:-0}"
+}
+trap 'stop 0' TERM INT
+
+php-fpm -F -y /etc/linkrot/php-fpm.conf &
+fpm=$!
+nginx -e stderr -c "$NGINX_CONF" &
+web=$!
+pids="$fpm $web"
+
+if [ "$LINKROT_TLS" != off ]; then
+	(
+		[ "$LINKROT_TLS" != acme ] || linkrot-tls sync || true
+		exec linkrot-tls watch
+	) &
+	pids="$pids $!"
+fi
+say "running: TLS $LINKROT_TLS, data in $LINKROT_DATA"
+
+# Either server gone: stop the rest, the restart policy of the stack brings the container back.
+while kill -0 "$fpm" 2>/dev/null && kill -0 "$web" 2>/dev/null; do
+	sleep 2 &
+	wait $! || true
+done
+say "php-fpm or nginx stopped, stopping the container"
+stop 1

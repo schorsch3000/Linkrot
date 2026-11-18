@@ -1,0 +1,51 @@
+# Linkrot as a docker compose stack: one container with nginx and php-fpm, the data in ./app_data next to this file.
+# docs/DOCKER.md has the details. In short:
+#
+#   mkdir -p app_data && sudo chown 1000:1000 app_data   (or set user: below to the owner of the folder)
+#   docker compose up -d
+#   ./linkrot-admin                                      the menu: add a host, create a token, ...
+#
+# Pick one of the three TLS modes below (LINKROT_TLS) and leave the others commented out.
+
+services:
+  linkrot:
+    image: ghcr.io/schorsch3000/linkrot:latest
+    # development: build the image from this checkout instead (docker compose up -d --build)
+    # build: .
+    restart: unless-stopped
+    # owner of ./app_data; the container runs as this user, never as root
+    user: "1000:1000"
+    environment:
+      # --- TLS: acme (Let's Encrypt, http-01), file (your own certificate) or off (your proxy does TLS) ---
+      LINKROT_TLS: acme
+      LINKROT_ACME_EMAIL: you@example.com
+      # LINKROT_ACME_SERVER: letsencrypt_test   # the staging CA, for trying things out
+
+      # LINKROT_TLS: file
+      # LINKROT_TLS_CERT: /certs/fullchain.pem   # the defaults, reloaded when the files change
+      # LINKROT_TLS_KEY: /certs/privkey.pem
+
+      # LINKROT_TLS: "off"
+      # LINKROT_TRUSTED_PROXIES: "172.16.0.0/12"   # who may set the client address (default: private networks)
+      # LINKROT_REAL_IP_HEADER: X-Forwarded-For
+
+      # --- mail (tokens by mail, optional): an SMTP relay, and mail.from in app_data/global-config.php ---
+      # LINKROT_SMTP_HOST: smtp.example.com
+      # LINKROT_SMTP_PORT: "587"
+      # LINKROT_SMTP_TLS: starttls                 # starttls, tls (port 465) or off
+      # LINKROT_SMTP_USER: linkrot@example.com
+      # LINKROT_SMTP_PASSWORD: secret             # or LINKROT_SMTP_PASSWORD_FILE: /run/secrets/smtp
+
+      # --- tuning ---
+      # LINKROT_PHP_WORKERS: "8"                   # at most this many requests at once
+      # LINKROT_ACCESS_LOG: "on"
+    ports:
+      # acme and file: 80 and 443. off: only 8080, for example "127.0.0.1:8080:8080" for a proxy on the same machine.
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ./app_data:/srv/linkrot/app_data
+      # LINKROT_TLS=file: the certificate and the key, readable for the user above
+      # - ./certs:/certs:ro
+      # or certbot's folder, with LINKROT_TLS_CERT=/etc/letsencrypt/live/<name>/fullchain.pem and LINKROT_TLS_KEY=.../privkey.pem
+      # - /etc/letsencrypt:/etc/letsencrypt:ro
