@@ -9,7 +9,8 @@ server/
   Makefile
   app/                   everything that is deployed as `app/`: src/ (PSR-4), bin/ (`lr-auth`, `migrate`,
                          `check-config`, `check-install`, `check-mail`, `pages-cache-clear`, `hosts`),
-                         composer.json + composer.lock (all used PHP extensions are listed under `require`),
+                         composer.json + composer.lock (all used PHP extensions are listed under `require`, the optional
+                         `apcu` under `suggest`),
                          install.sh (the deployment's `composer install --no-dev ...`),
                          vendor/ (not in git, not in the release)
   htdocs/index.php   front controller

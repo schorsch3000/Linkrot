@@ -2,7 +2,7 @@
 
 PHP 8.4 and SQLite, served by nginx + php-fpm. No framework: a small PSR-4 router and handlers. Runtime
 dependencies are PHP extensions only (all of them declared in `composer.json` under `require`, e.g.
-`ext-pdo_sqlite`, `ext-apcu`, `ext-hash`).
+`ext-pdo_sqlite`, `ext-hash`; `ext-apcu` is suggested, see [Rate limiting](#rate-limiting)).
 
 There is no user management. The server consists of
 
@@ -413,7 +413,10 @@ nginx has a fixed `limit_req` which only protects against DoS. On top of that th
 authentication itself:
 
 - storage is **APCu** (`apcu_inc` is atomic and shared between php-fpm workers); no database and no session files,
-  because both come with locking
+  because both come with locking. Without APCu (shared hosting) the counters are in `app_data/<host>/ratelimit.sqlite`,
+  a database of their own, so that somebody hammering the server with wrong tokens never holds a lock of
+  `linkrot.sqlite`. It waits at most 250 ms for a lock and fails open (the attempt is let through and logged): tokens have
+  256 bits and every mailed code only a few guesses, the limiter is not what keeps them safe
 - key `rl:` + `sha256(client ip)`; IPv6 addresses are reduced to their `/64` first; the address is `REMOTE_ADDR`
   (the operator configures nginx `real_ip` if there is a proxy)
 - fixed window: default 10 failed attempts per 15 minutes, configurable, hard limit: further requests get

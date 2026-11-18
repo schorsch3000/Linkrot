@@ -7,8 +7,10 @@ has the server tarball, CLI archives for all usual platforms and a `SHA256SUMS` 
 
 With docker: [DOCKER.md](DOCKER.md), the rest of this section is not needed. Without:
 
-Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `apcu`, `pdo_sqlite`,
-`mbstring`, `ctype`, `iconv`, `xmlwriter` (the QR code of the download page; `composer install` checks all of them).
+Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `pdo_sqlite`,
+`mbstring`, `ctype`, `iconv`, `xmlwriter` (the QR code of the download page; `composer install` checks all of them), and
+`apcu`, recommended: without it the counters of failed logins are in a SQLite file per host
+([SERVER.md](SERVER.md#rate-limiting)).
 
 1. Download `linkrot-server-<version>.tar.gz` and verify it against `SHA256SUMS`, and, for provenance, with
    `gh attestation verify linkrot-server-<version>.tar.gz --repo schorsch3000/Linkrot` (see [Verifying a release](#verifying-a-release)).

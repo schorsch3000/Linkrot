@@ -52,6 +52,8 @@ run: install
 
 test:
 	php -d apc.enable_cli=1 $(BIN)/phpunit
+	@# once more without APCu, as on shared hosting: the limiter falls back to SQLite
+	php -d apc.enable_cli=0 $(BIN)/phpunit --filter 'RateLimiter'
 
 # Needs Xdebug (or PCOV). The line coverage of app/src as text.
 coverage:
