@@ -58,9 +58,13 @@ final readonly class Request
             }
             $server[$key] = $value;
         }
+        if (($headers['authorization'] ?? null) === '') {
+            unset($headers['authorization']);
+        }
         // Apache with PHP as CGI/FastCGI drops the Authorization header; the .htaccess of the shared hosting archive passes
         // it on through mod_rewrite, which puts it here.
-        if (!isset($headers['authorization']) && isset($server['REDIRECT_HTTP_AUTHORIZATION']) && $server['REDIRECT_HTTP_AUTHORIZATION'] !== '') {
+        // (The rewrite rule also sets an empty HTTP_AUTHORIZATION for requests without the header: that is none.)
+        if (($headers['authorization'] ?? '') === '' && ($server['REDIRECT_HTTP_AUTHORIZATION'] ?? '') !== '') {
             $headers['authorization'] = $server['REDIRECT_HTTP_AUTHORIZATION'];
         }
         $query = [];

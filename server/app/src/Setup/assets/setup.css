@@ -1,0 +1,21 @@
+:root { color-scheme: light dark; --ok: #2e7d32; --warn: #b26a00; --error: #c62828; --line: #8884; }
+body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 0 16px; }
+main { max-width: 52rem; margin: 2rem auto 4rem; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid var(--line); }
+h3 { font-size: 1rem; margin-bottom: .25rem; }
+table { border-collapse: collapse; width: 100%; }
+td { border-bottom: 1px solid var(--line); padding: .25rem .5rem; vertical-align: top; }
+td:nth-child(2) { font-weight: 600; }
+.ok td:nth-child(2), li.ok { color: var(--ok); }
+.warn td:nth-child(2), li.warn { color: var(--warn); }
+.error td:nth-child(2), li.error { color: var(--error); }
+form { display: inline-block; margin: .25rem 0; }
+form + form { margin-left: .5rem; }
+input { font: inherit; }
+button { font: inherit; cursor: pointer; }
+.host { border: 1px solid var(--line); border-radius: 6px; padding: .25rem 1rem .75rem; margin: .75rem 0; }
+.output { white-space: pre-wrap; border-left: 4px solid var(--line); padding: .5rem 1rem; }
+.output.ok { border-color: var(--ok); }
+.output.error { border-color: var(--error); }
+code { word-break: break-all; }

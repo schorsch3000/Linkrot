@@ -516,19 +516,18 @@ func lifecycle(t *testing.T, s *stack) {
 	if resp.Header.Get("Content-Disposition") == "" || !strings.Contains(resp.Header.Get("Content-Disposition"), "renamed.bin") {
 		t.Fatalf("content-disposition %q", resp.Header.Get("Content-Disposition"))
 	}
-	if s.nginx {
-		if resp.StatusCode != 206 || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes 100-199/%d", fileSize) {
-			t.Fatalf("range through nginx: %d %q", resp.StatusCode, resp.Header.Get("Content-Range"))
-		}
-		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
-			t.Fatal("nosniff must be set by nginx for X-Accel responses")
-		}
-		if resp.Header.Get("X-Rot") == "" {
-			t.Fatal("the X-Rot tagline must get through nginx")
-		}
-		if r, _ := get(t, s.baseURL+"/_files/"+file.ID, nil); r.StatusCode != 404 {
-			t.Fatalf("internal location reachable: %d", r.StatusCode)
-		}
+	// the same whoever sends the file: nginx (X-Accel-Redirect) or PHP itself (download_mode php)
+	if resp.StatusCode != 206 || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes 100-199/%d", fileSize) {
+		t.Fatalf("range: %d %q", resp.StatusCode, resp.Header.Get("Content-Range"))
+	}
+	if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("nosniff must be set for downloads (by nginx for X-Accel responses)")
+	}
+	if resp.Header.Get("X-Rot") == "" {
+		t.Fatal("the X-Rot tagline must get through")
+	}
+	if r, _ := get(t, s.baseURL+"/_files/"+file.ID, nil); r.StatusCode != 404 {
+		t.Fatalf("internal location reachable: %d", r.StatusCode)
 	}
 
 	// uses: two, a resumed range is free once a use was counted, the last download works, then the link is dead
