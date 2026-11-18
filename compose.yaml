@@ -39,6 +39,8 @@ services:
       # --- tuning ---
       # LINKROT_PHP_WORKERS: "8"                   # at most this many requests at once
       # LINKROT_ACCESS_LOG: "on"
+      # LINKROT_RATE_LIMIT: "20"                   # requests per second and client (429 above), 0: off
+      # LINKROT_RATE_BURST: "40"
     ports:
       # acme and file: 80 and 443. off: only 8080, for example "127.0.0.1:8080:8080" for a proxy on the same machine.
       - "80:8080"

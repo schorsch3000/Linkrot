@@ -112,6 +112,7 @@ The proxy has to:
 - send the address of the client in `X-Forwarded-For` (or the header named by `LINKROT_REAL_IP_HEADER`, for example
   `X-Real-IP` or `CF-Connecting-IP`). The failed logins and the rate limits count per client address; without it every
   client is the proxy, and one locked-out client locks out everyone
+- if the proxy already limits requests per client, `LINKROT_RATE_LIMIT=0` switches off the one of the container
 - allow request bodies of at least `chunk_size` + 1 MB (default 32 MiB, up to 100 MB), and not time out a chunk upload
   before 300 s
 
@@ -181,6 +182,8 @@ everyone else.
 | `LINKROT_TRUSTED_PROXIES` | loopback and private networks | `off`: who may set the client address |
 | `LINKROT_REAL_IP_HEADER` | `X-Forwarded-For` | `off`: the header with the client address |
 | `LINKROT_SMTP_*` | | [Mail](#mail) |
+| `LINKROT_RATE_LIMIT` | 20 | requests per second and client address that nginx lets through (`429` above), `0`: no limit. DoS protection only, the failed logins are counted by the application |
+| `LINKROT_RATE_BURST` | 40 | requests above the rate that are let through at once |
 | `LINKROT_PHP_WORKERS` | 8 | most requests at once (php-fpm `pm.max_children`); a worker needs 20-30 MB while it runs |
 | `LINKROT_NGINX_WORKERS` | 1 | nginx worker processes |
 | `LINKROT_ACCESS_LOG` | `off` | `on`: nginx logs every request to the log of the container |

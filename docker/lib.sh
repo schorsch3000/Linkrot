@@ -43,6 +43,14 @@ hosts_list() {
 	php "$LINKROT_ROOT/app/bin/hosts"
 }
 
+# The rate limit per client address of nginx (DoS protection only; failed logins are counted by the application).
+# LINKROT_RATE_LIMIT requests per second, LINKROT_RATE_BURST more at once; 0 switches it off.
+nginx_limit() {
+	[ "${LINKROT_RATE_LIMIT:-20}" != 0 ] || return 0
+	echo "        limit_req zone=linkrot burst=${LINKROT_RATE_BURST:-40} nodelay;"
+	echo '        limit_req_status 429;'
+}
+
 # The location blocks of the application, the same as docs/nginx.conf.example.
 nginx_app() {
 	cat <<EOF
@@ -53,7 +61,7 @@ nginx_app() {
         client_max_body_size 101m;
         # PHP must see the finished body, so that no PHP runs while bytes are on the wire
         fastcgi_request_buffering on;
-        limit_req zone=linkrot burst=40 nodelay;
+$(nginx_limit)
 
         location / {
             try_files \$uri /index.php\$is_args\$args;
@@ -138,9 +146,11 @@ EOF
     uwsgi_temp_path $LINKROT_RUN/nginx/uwsgi;
     scgi_temp_path $LINKROT_RUN/nginx/scgi;
 
-    # DoS protection only; the failed logins are counted by the application
-    limit_req_zone \$binary_remote_addr zone=linkrot:1m rate=20r/s;
 EOF
+		if [ "${LINKROT_RATE_LIMIT:-20}" != 0 ]; then
+			echo
+			echo "    limit_req_zone \$binary_remote_addr zone=linkrot:1m rate=${LINKROT_RATE_LIMIT:-20}r/s;"
+		fi
 		if [ "$LINKROT_TLS" = off ]; then
 			# Behind the proxy of the user: the client address comes from its header, but only from proxies we trust.
 			echo

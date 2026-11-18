@@ -14,6 +14,14 @@ case "$LINKROT_TLS" in
 off | file | acme) ;;
 *) die "LINKROT_TLS must be off, file or acme, not '$LINKROT_TLS'" ;;
 esac
+number() {
+	case "$2" in
+	"" | *[!0-9]*) die "$1 must be a number, not '$2'" ;;
+	esac
+}
+number LINKROT_RATE_LIMIT "${LINKROT_RATE_LIMIT:-20}"
+number LINKROT_RATE_BURST "${LINKROT_RATE_BURST:-40}"
+number LINKROT_PHP_WORKERS "$LINKROT_PHP_WORKERS"
 
 # app_data is a bind mount: it must belong to the user the container runs as (compose.yaml: user).
 probe="$LINKROT_DATA/.linkrot-write-test.$$"

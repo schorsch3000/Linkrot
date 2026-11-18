@@ -31,6 +31,9 @@ func TestEndToEndContainer(t *testing.T) {
 	if r, _ := get(t, s.baseURL+"/_ping", nil); r.StatusCode != http.StatusForbidden {
 		t.Fatalf("ping from outside: %d, want 403", r.StatusCode)
 	}
+	if conf := docker(t, "exec", id, "cat", "/tmp/linkrot/nginx.conf"); !strings.Contains(conf, "rate=1000r/s") || !strings.Contains(conf, "burst=1000 nodelay") {
+		t.Fatalf("the rate limit of the variables is not in nginx.conf:\n%s", conf)
+	}
 
 	lifecycle(t, s)
 }
@@ -62,6 +65,8 @@ func newContainerStack(t *testing.T, image string) (*stack, string) {
 		"-p", fmt.Sprintf("127.0.0.1:%d:8080", port),
 		"-v", root+":/srv/linkrot/app_data",
 		"-e", "LINKROT_TLS=off",
+		// the CLI is faster than the default limit of nginx (20 requests a second); it is there, just higher
+		"-e", "LINKROT_RATE_LIMIT=1000", "-e", "LINKROT_RATE_BURST=1000",
 		image))
 	t.Cleanup(func() {
 		if t.Failed() {
