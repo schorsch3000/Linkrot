@@ -105,8 +105,12 @@ final readonly class SetupEnvironment
 
     private function usable(string $dir): bool
     {
-        if (!is_dir($dir) && !@mkdir($dir, 0o711) && !is_dir($dir)) {
-            return false;
+        if (!is_dir($dir)) {
+            if (!@mkdir($dir, 0o711) && !is_dir($dir)) {
+                return false;
+            }
+            // whatever the umask of the web server says: the way down to the files, no listing (as for the hosts)
+            @chmod($dir, 0o711);
         }
         $probe = $dir . '/.linkrot-write-test';
         if (@file_put_contents($probe, 'x') !== 1) {

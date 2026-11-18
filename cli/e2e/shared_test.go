@@ -147,9 +147,11 @@ func sharedRemote(t *testing.T) *stack {
 	// the setup puts the data next to the document root if it may, below it otherwise
 	data := filepath.Join(root, "linkrot-data", "127.0.0.1")
 	if _, err := os.Stat(data); err != nil {
+		outside := err
 		matches, _ := filepath.Glob(filepath.Join(root, "*", "linkrot-data", "127.0.0.1"))
 		if len(matches) != 1 {
-			t.Fatalf("no data folder below %s", root)
+			listing, _ := exec.CommandContext(t.Context(), "ls", "-laR", root).CombinedOutput() //nolint:gosec // test path
+			t.Fatalf("no data folder next to or below the document root (%v); %s:\n%s", outside, root, listing)
 		}
 		data = matches[0]
 		rel, _ := filepath.Rel(root, data)

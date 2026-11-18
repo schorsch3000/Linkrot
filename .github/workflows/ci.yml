@@ -161,9 +161,11 @@ jobs:
           LINKROT_E2E_SHARED_URL: http://127.0.0.1:8080
           LINKROT_E2E_SHARED_CODE: docker exec webspace cat /var/www/html/setup-code.php
 
-      - name: Log of Apache
+      - name: Log of Apache and the webspace as Apache sees it
         if: always()
-        run: docker logs webspace 2>&1 | tail -100
+        run: |
+          docker logs webspace 2>&1 | tail -100
+          docker exec webspace sh -c 'umask; ls -la /var/www /var/www/html; ls -la /var/www/linkrot-data /var/www/html/linkrot-data 2>&1'
 
   container:
     name: Container image (build, compose file, end-to-end against the image)

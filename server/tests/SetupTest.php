@@ -177,6 +177,20 @@ final class SetupTest extends TestCase
         self::assertStringContainsString('data-data-url=""', $page->body, 'outside the document root, there is no URL to try');
     }
 
+    public function testTheDataFolderCanBeEnteredWhateverTheUmaskOfTheWebServer(): void
+    {
+        $cookie = $this->login();
+        $umask = umask(0o077);
+        try {
+            $this->send('GET', cookie: $cookie);
+        } finally {
+            umask($umask);
+        }
+
+        clearstatcache();
+        self::assertSame(0o711, fileperms($this->base . '/linkrot-data') & 0o777);
+    }
+
     public function testWithoutWritePermissionNextToTheDocumentRootTheDataIsBelowItAndLocked(): void
     {
         chmod($this->base, 0o555);
