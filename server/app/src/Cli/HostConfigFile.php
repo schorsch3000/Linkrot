@@ -28,7 +28,7 @@ final class HostConfigFile
         'orphan_row_timeout' => 'grace period for rows without data and for expired or used-up files',
         'rate_limit_attempts' => 'failed attempts per window before a client address is blocked',
         'rate_limit_window' => 'that window in seconds',
-        'download_mode' => "'xaccel' (nginx hands out the file) or 'php' (development only)",
+        'download_mode' => "'xaccel' (nginx sends the file), 'xsendfile' (Apache mod_xsendfile), 'litespeed' or 'php' (PHP streams it)",
     ];
 
     private const string BANNER = <<<'TXT'

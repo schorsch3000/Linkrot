@@ -125,8 +125,8 @@ final readonly class Config
             rateLimitAttempts: self::int($values, 'rate_limit_attempts', $defaults->rateLimitAttempts),
             rateLimitWindow: self::int($values, 'rate_limit_window', $defaults->rateLimitWindow),
             downloadMode: is_string($mode)
-                ? (DownloadMode::tryFrom($mode) ?? throw new InvalidArgumentException('config: download_mode must be xaccel or php'))
-                : throw new InvalidArgumentException('config: download_mode must be xaccel or php'),
+                ? (DownloadMode::tryFrom($mode) ?? throw new InvalidArgumentException('config: download_mode must be ' . implode(', ', DownloadMode::names())))
+                : throw new InvalidArgumentException('config: download_mode must be ' . implode(', ', DownloadMode::names())),
             quota: self::quota($values),
             email: self::email($values),
         );

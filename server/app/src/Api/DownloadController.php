@@ -78,14 +78,85 @@ final readonly class DownloadController
             $headers[HeaderTaglines::HEADER] = HeaderTaglines::pick($file->id, $look->headerLines);
         }
 
-        if ($this->config->downloadMode === DownloadMode::Xaccel) {
-            return new Response(200, $headers + ['X-Accel-Redirect' => '/_files/' . $this->host . '/files/' . $file->id]);
+        $path = $this->store->path($file->id);
+
+        return match ($this->config->downloadMode) {
+            DownloadMode::Xaccel => new Response(200, $headers + ['X-Accel-Redirect' => '/_files/' . $this->host . '/files/' . $file->id]),
+            DownloadMode::Xsendfile => new Response(200, $headers + ['X-Sendfile' => $path]),
+            DownloadMode::Litespeed => $this->litespeed($request, $path, $headers),
+            DownloadMode::Php => $this->streamed($request, $path, (int) $file->size, $headers),
+        };
+    }
+
+    /**
+     * PHP sends the file itself, with a single range (resuming an interrupted download needs it). Several ranges and
+     * a malformed header get the whole file, as nginx does.
+     *
+     * @param array<string, string> $headers
+     */
+    private function streamed(Request $request, string $path, int $size, array $headers): Response
+    {
+        $headers['Accept-Ranges'] = 'bytes';
+        $range = self::range($request->header('range'), $size);
+        if ($range === false) {
+            return new Response(416, $headers + ['Content-Range' => "bytes */$size", 'Content-Length' => '0']);
+        }
+        $body = $request->method === 'GET' ? $path : null;
+        if ($range === null) {
+            return new Response(200, $headers + ['Content-Length' => (string) $size], streamPath: $body);
+        }
+        [$first, $last] = $range;
+        $length = $last - $first + 1;
+
+        return new Response(206, $headers + ['Content-Range' => "bytes $first-$last/$size", 'Content-Length' => (string) $length], streamPath: $body, streamOffset: $first, streamLength: $length);
+    }
+
+    /**
+     * The first and last byte of a single range, false if it cannot be satisfied (416), null if there is none to honour.
+     *
+     * @return array{int, int}|false|null
+     */
+    public static function range(?string $header, int $size): array|false|null
+    {
+        if ($header === null || preg_match('~^bytes=(\d*)-(\d*)$~iD', trim($header), $m) !== 1 || ($m[1] === '' && $m[2] === '')) {
+            return null;
+        }
+        if ($m[1] === '') {
+            // the last n bytes
+            $suffix = (int) $m[2];
+            if ($suffix === 0 || $size === 0) {
+                return false;
+            }
+
+            return [max(0, $size - $suffix), $size - 1];
+        }
+        $first = (int) $m[1];
+        $last = $m[2] === '' ? $size - 1 : min((int) $m[2], $size - 1);
+        if ($m[2] !== '' && (int) $m[2] < $first) {
+            return null;
         }
 
-        // Development only: PHP streams the file (no range support).
-        $headers['Content-Length'] = (string) $file->size;
+        return $first >= $size ? false : [$first, $last];
+    }
 
-        return new Response(200, $headers, streamPath: $request->method === 'GET' ? $this->store->path($file->id) : null);
+    /**
+     * LiteSpeed sends the file of an internal URI, so the file has to be below the document root (the setup checks
+     * that it cannot be fetched directly).
+     *
+     * @param array<string, string> $headers
+     */
+    private function litespeed(Request $request, string $path, array $headers): Response
+    {
+        $root = realpath($request->server['DOCUMENT_ROOT'] ?? '');
+        $file = realpath($path);
+        if ($root === false || $file === false || !str_starts_with($file, rtrim($root, '/') . '/')) {
+            error_log('linkrot: download_mode litespeed needs the data below the document root, ' . $path . ' is not');
+
+            return Response::error(500, 'internal', 'server misconfigured');
+        }
+        $uri = implode('/', array_map(rawurlencode(...), explode('/', substr($file, strlen(rtrim($root, '/'))))));
+
+        return new Response(200, $headers + ['X-LiteSpeed-Location' => $uri]);
     }
 
     private function downloadable(string $id): ?FileRecord

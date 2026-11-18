@@ -45,10 +45,20 @@ try {
     return;
 }
 
-$app->handle($request)->send();
+$response = $app->handle($request);
+if ($response->streamPath !== null) {
+    // A file goes straight to the client: an output buffer (output_buffering, a handler of the host) would collect it in
+    // memory, compression would hide its length.
+    @ini_set('zlib.output_compression', '0');
+    while (ob_get_level() > 0 && @ob_end_clean()) {
+    }
+}
+$response->send();
 
 // The response is out; the lazy cleanup must not delay the client.
 if (function_exists('fastcgi_finish_request')) {
     fastcgi_finish_request();
+} elseif (function_exists('litespeed_finish_request')) {
+    litespeed_finish_request();
 }
 $app->cleanupIfDue();

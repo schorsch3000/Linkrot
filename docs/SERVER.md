@@ -239,8 +239,18 @@ PHP limits are irrelevant because the body is read raw from `php://input` (no mu
   physical deletion is left to the cleanup, which removes it once `orphan_row_timeout` has passed since the last
   use. Neither a later request nor a cleanup run right after the last use unlinks the file, because that could
   break the download that just consumed it before nginx has opened the file.
-- Config switch `download_mode = xaccel|php`. `php` streams the file from PHP; it exists for development and
-  end-to-end tests with `php -S` and must not be used in production.
+- Config switch `download_mode`, who sends the bytes once PHP has said yes:
+  - `xaccel` (default): nginx, through `X-Accel-Redirect` to its internal `/_files/` location.
+  - `xsendfile`: Apache with mod_xsendfile (`X-Sendfile` with the path of the file); the host must allow the data
+    folder (`XSendFilePath`).
+  - `litespeed`: LiteSpeed (`X-LiteSpeed-Location` with the URI of the file), so the data must be below the document
+    root and must not be reachable directly; otherwise the download answers `500` and logs why.
+  - `php`: PHP streams the file itself in blocks of 1 MiB, with single ranges (`206`, `416`; several ranges get the
+    whole file) and no time limit, and stops when the client is gone. For shared hosting without any of the above, and
+    for development with `php -S`. The front controller closes all output buffers first, so the file never ends up in
+    memory.
+
+  The setup of the shared hosting archive finds out which of them works ([SHARED-HOSTING.md](SHARED-HOSTING.md)).
 
 ## Appearance
 
@@ -427,7 +437,7 @@ authentication itself:
 | `orphan_row_timeout` | `1h` | grace period: rows without a data file are removed after it, expired and used-up files are deleted this long after the expiry or the last use, and the last download of a used-up file can still be resumed inside it |
 | `rate_limit_attempts` / `rate_limit_window` | 10 / 15 min | failed-auth limiter; the requests for a code and the wrong codes are counted the same way, with counters of their own |
 | `email` | none | the one address that may get a code to manage the tokens, see [Tokens by mail](#tokens-by-mail); needs `mail.from` in `global-config.php` |
-| `download_mode` | `xaccel` | `xaccel` or `php` (development only) |
+| `download_mode` | `xaccel` | `xaccel` (nginx), `xsendfile` (Apache mod_xsendfile), `litespeed` or `php` (PHP sends the file), see [Download](#download) |
 
 ### Durations
 

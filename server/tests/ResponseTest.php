@@ -56,4 +56,28 @@ final class ResponseTest extends TestCase
             unlink($path);
         }
     }
+
+    public function testSendStreamsAPartOfAFile(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'linkrot-response-') ?: self::fail('tempnam');
+        file_put_contents($path, '0123456789');
+        try {
+            self::assertSame('345', $this->sent(new Response(206, [], '', $path, 3, 3)));
+            self::assertSame('789', $this->sent(new Response(206, [], '', $path, 7)));
+            self::assertSame('89', $this->sent(new Response(206, [], '', $path, 8, 50)), 'never more than the file has');
+        } finally {
+            unlink($path);
+            http_response_code(200);
+        }
+    }
+
+    public function testAFileThatIsGoneSendsNothing(): void
+    {
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            self::assertSame('', $this->sent(new Response(200, [], 'ignored', '/nonexistent/linkrot-file')));
+        } finally {
+            ini_set('error_log', (string) $log);
+        }
+    }
 }

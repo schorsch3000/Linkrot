@@ -12,6 +12,8 @@ final readonly class Response
         public array $headers = [],
         public string $body = '',
         public ?string $streamPath = null,
+        public int $streamOffset = 0,
+        public ?int $streamLength = null,
     ) {}
 
     /** @param array<array-key, mixed> $data */
@@ -44,10 +46,53 @@ final readonly class Response
             header("$name: $value");
         }
         if ($this->streamPath !== null) {
-            readfile($this->streamPath);
+            $this->stream($this->streamPath);
 
             return;
         }
         echo $this->body;
+    }
+
+    /** Block size of a streamed file: big enough to be cheap, small enough that an aborted client is noticed soon. */
+    private const int STREAM_BLOCK = 1 << 20;
+
+    /**
+     * Sends $streamLength bytes (all if null) of the file from $streamOffset. A download may take longer than
+     * max_execution_time allows, and is stopped as soon as the client is gone. Output buffers are the caller's business
+     * (index.php closes them before a streamed response, so that a file never ends up in memory).
+     */
+    private function stream(string $path): void
+    {
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            error_log('linkrot: cannot open ' . $path);
+
+            return;
+        }
+        try {
+            if ($this->streamOffset > 0 && fseek($handle, $this->streamOffset) !== 0) {
+                error_log('linkrot: cannot seek in ' . $path);
+
+                return;
+            }
+            @set_time_limit(0);
+            $left = $this->streamLength;
+            while (!feof($handle) && ($left === null || $left > 0)) {
+                $block = fread($handle, $left === null ? self::STREAM_BLOCK : min(self::STREAM_BLOCK, $left));
+                if ($block === false || $block === '') {
+                    break;
+                }
+                echo $block;
+                flush();
+                if ($left !== null) {
+                    $left -= strlen($block);
+                }
+                if (connection_aborted() === 1) {
+                    break;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
     }
 }
