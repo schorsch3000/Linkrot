@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -76,21 +77,26 @@ func newContainerStack(t *testing.T, image string) (*stack, string) {
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	deadline := time.Now().Add(60 * time.Second)
+	var last string
 	for {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/health", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/api/v1/health", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
+		if err != nil {
+			last = err.Error()
+		} else {
+			body, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				break
 			}
+			last = fmt.Sprintf("%d %s", resp.StatusCode, body)
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the container does not answer /health: %v", err)
+			t.Fatalf("the container does not answer /api/v1/health with 200: %s", last)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
