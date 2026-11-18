@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs the maintenance menu (or one tool, see linkrot-admin --help) inside the container of the compose.yaml next to
+# this script. Needs the stack to be up: docker compose up -d
+cd "$(dirname "$0")" || exit 1
+if [ -t 0 ] && [ -t 1 ]; then
+	exec docker compose exec linkrot linkrot-admin "$@"
+fi
+exec docker compose exec -T linkrot linkrot-admin "$@"

@@ -124,7 +124,19 @@ lr config --server https://files.example.com --token <token>
 lr up report.pdf
 ```
 
-The server, shortened (the whole story, nginx included, is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
+The server with docker compose (Let's Encrypt included; your own certificate or your own proxy work too, see
+[docs/DOCKER.md](docs/DOCKER.md)):
+
+```
+curl -fsSLO https://raw.githubusercontent.com/schorsch3000/Linkrot/main/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/schorsch3000/Linkrot/main/linkrot-admin && chmod +x linkrot-admin
+mkdir app_data && sudo chown 1000:1000 app_data
+$EDITOR compose.yaml           # LINKROT_ACME_EMAIL
+docker compose up -d
+./linkrot-admin                # add a host, create a token
+```
+
+Or from the tarball, shortened (the whole story, nginx included, is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)):
 
 ```
 tar -xzf linkrot-server-<version>.tar.gz -C /srv/linkrot
@@ -165,6 +177,7 @@ sudo -u www-data LINKROT_HOST=files.example.com /srv/linkrot/app/bin/lr-auth get
 | [docs/API.md](docs/API.md) | HTTP API: upload protocol, file management, settings, custom files, static pages, public URLs, errors |
 | [docs/CLI.md](docs/CLI.md) | CLI commands (`up`, `ls`, `config`, `custom`, `page`, ...), flags, config file, exit codes, completion |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | installing a release: server tarball, nginx, tokens, CLI binaries, upgrading |
+| [docs/DOCKER.md](docs/DOCKER.md) | the server as a docker compose stack: image, TLS modes, mail, `linkrot-admin` |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | repository layout, tooling, Makefiles, pre-commit hook, conventions, the README images |
 | [docs/nginx.conf.example](docs/nginx.conf.example) | nginx server block snippet |
 
@@ -174,6 +187,7 @@ sudo -u www-data LINKROT_HOST=files.example.com /srv/linkrot/app/bin/lr-auth get
 server/            PHP application (see docs/SERVER.md)
 cli/               Go client (see docs/CLI.md)
 docs/              documentation; docs/img the images of this README, docs/showcase what makes them
+docker/            what the container image runs (Dockerfile and compose.yaml are at the top)
 .githooks/         versioned git hooks (activated by `make install-hooks`)
 Makefile           delegates to server/ and cli/
 ```

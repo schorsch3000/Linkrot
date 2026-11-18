@@ -5,6 +5,8 @@ has the server tarball, CLI archives for all usual platforms and a `SHA256SUMS` 
 
 ## Server
 
+With docker: [DOCKER.md](DOCKER.md), the rest of this section is not needed. Without:
+
 Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the PHP extensions `apcu`, `pdo_sqlite`,
 `mbstring`, `ctype` (`composer install` checks this).
 
@@ -23,7 +25,8 @@ Requirements: nginx, php-fpm 8.4, [composer](https://getcomposer.org), and the P
    ```
 
    It runs `composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
-   --classmap-authoritative` in `app/`. Because the class map is authoritative, run it again after every upgrade.
+   --classmap-authoritative` in `app/` (not with `--no-composer`, for a tree that has its dependencies already, like the
+   container image). Because the class map is authoritative, run it again after every upgrade.
    Then, for every host of `app_data/global-config.php`, it
 
    - checks `app_data/<host>/config.php`: if the file is missing it prints a prominent notice with what to create (until

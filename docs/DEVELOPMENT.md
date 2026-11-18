@@ -21,6 +21,10 @@ cli/
   Makefile
   go.mod                 module github.com/schorsch3000/Linkrot
   cmd/ internal/
+Dockerfile, compose.yaml  the container image and the stack for users (docs/DOCKER.md)
+linkrot-admin            runs the admin menu in the container of compose.yaml
+docker/                  what the image runs: linkrot-start (entry point), linkrot-tls (certificates), linkrot-admin
+                         (menu), lib.sh (paths, the generated nginx.conf), php.ini, php-fpm.conf
 docs/
   img/                   the images of the README (made by `make showcase`, committed)
   showcase/              what makes them: build.sh, screenshots.mjs, record.py (development only, not shipped)
@@ -88,18 +92,27 @@ Run it again when the look of the pages changes, and commit the images. It is no
 `cli/e2e` runs the real CLI code against the real server: once on `php -S` directly and once behind nginx, which
 covers the `X-Accel-Redirect` path (ranges, security headers, the internal location). They are part of `make -C cli test`
 and are skipped if php, the server dependencies (`make -C server install`), APCu or nginx are missing.
+`TestEndToEndContainer` runs the same against the container image, the way `compose.yaml` starts it (`LINKROT_TLS=off`,
+the data folder bind-mounted, the host enrolled with `linkrot-admin`); it needs docker and the image:
+
+```
+docker build -t linkrot-e2e . && LINKROT_E2E_IMAGE=linkrot-e2e go -C cli test ./e2e/ -run Container -v
+```
 
 ## Continuous integration and releases
 
 `.github/workflows/ci.yml` runs on pushes to `main` and on pull requests: the server's `precommit` (PHP 8.4 with
 APCu), the CLI's `precommit` plus a cross-compile of every release platform, and the end-to-end job (php + nginx,
-`LINKROT_E2E_REQUIRED=1` so that missing prerequisites fail instead of skip). Tool versions of the Go linters are pinned in
+`LINKROT_E2E_REQUIRED=1` so that missing prerequisites fail instead of skip), and the container job: `compose.yaml`
+must be valid, the image is built, started once in every TLS mode (`off`, `file` with a self-signed certificate, `acme`
+without reaching a CA) until its healthcheck answers, and the end-to-end tests run against it. A push to `main` then
+publishes the image as `ghcr.io/<owner>/linkrot:edge` (job `edge`, `.github/workflows/image.yml`). Tool versions of the Go linters are pinned in
 `cli/Makefile`.
 
 Both jobs also run `make audit` (`composer audit --locked`, `govulncheck`), which **fails on any known vulnerability**; since
 the release requires green CI, a new advisory blocks releases until the dependency is updated. `audit.yml` runs the same
 checks every Monday, so a new advisory shows up even when nobody pushes. `.github/dependabot.yml` opens weekly pull
-requests for Go modules, Composer packages and GitHub Actions. All actions are pinned by commit SHA (the comment names
+requests for Go modules, Composer packages, GitHub Actions and the base images of the Dockerfile. All actions are pinned by commit SHA (the comment names
 the version); Dependabot keeps both up to date. `govulncheck` needs `vuln.go.dev`, which a restricted network may
 block.
 
@@ -116,6 +129,8 @@ is green). The builds run next to it, the CLI platforms in parallel, and the rel
 - `linkrot_<version>_<os>_<arch>.tar.gz` / `.zip`: the CLI for linux (amd64, arm64, armv7, 386), macOS (amd64, arm64),
   windows (amd64, arm64, 386, as zip) and freebsd (amd64, arm64). Static binaries, built with `-trimpath`; the version is
   shown by `--version`.
+- the container image `ghcr.io/<owner>/linkrot:<version>`, for a release that is no pre-release also `MAJOR.MINOR`,
+  `MAJOR` and `latest` (`image.yml`, after the release job; amd64 and arm64, with an attestation in the registry)
 - `SHA256SUMS` for all of them, and a signed build provenance attestation for every file (`actions/attest-build-provenance`,
   needs a public repository; the release job has `id-token: write` and `attestations: write` for it).
 

@@ -59,6 +59,7 @@ coverage:
 
 lint:
 	shellcheck app/install.sh scripts/dist-test.sh scripts/stamp-version.sh scripts/build-assets.sh
+	cd .. && shellcheck -x -s sh docker/lib.sh docker/linkrot-start docker/linkrot-tls docker/linkrot-admin linkrot-admin
 	@if command -v node >/dev/null; then node --check htdocs/assets/page.js; else echo 'node not found, page.js is not syntax checked'; fi
 	$(BIN)/phpstan analyse --memory-limit=512M --no-progress
 	$(BIN)/rector process --dry-run --no-progress-bar
