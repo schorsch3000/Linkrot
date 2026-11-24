@@ -53,6 +53,29 @@ func statusText(f api.File) string {
 
 func sizeText(n int64) string { return progress.FormatBytes(n) }
 
+// alignDecimal pads sizes like "4 B", "1.5 KiB" and "12.3 MiB" so that their decimal points line up;
+// a size without a fraction gets blanks where the fraction would be.
+func alignDecimal(sizes []string) []string {
+	intWidth, fracWidth := 0, 0
+	split := func(s string) (whole, frac, unit string) {
+		num, unit, _ := strings.Cut(s, " ")
+		if i := strings.IndexByte(num, '.'); i >= 0 {
+			return num[:i], num[i:], unit
+		}
+		return num, "", unit
+	}
+	for _, s := range sizes {
+		whole, frac, _ := split(s)
+		intWidth, fracWidth = max(intWidth, len(whole)), max(fracWidth, len(frac))
+	}
+	out := make([]string, len(sizes))
+	for i, s := range sizes {
+		whole, frac, unit := split(s)
+		out[i] = fmt.Sprintf("%*s%-*s %s", intWidth, whole, fracWidth, frac, unit)
+	}
+	return out
+}
+
 // decimalBytes formats like the quota is configured (1 kb = 1000 bytes), so that "100gb" reads as 100 GB.
 func decimalBytes(n int64) string {
 	if n < 1000 {

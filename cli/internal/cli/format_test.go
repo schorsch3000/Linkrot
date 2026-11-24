@@ -27,3 +27,13 @@ func TestWriteTableAlignsIgnoringColor(t *testing.T) {
 		t.Errorf("colored: %q", colored.String())
 	}
 }
+
+func TestAlignDecimalLinesUpThePoints(t *testing.T) {
+	got := alignDecimal([]string{"4 B", "1.5 KiB", "12.3 MiB", "1023.9 GiB"})
+	want := []string{"   4   B", "   1.5 KiB", "  12.3 MiB", "1023.9 GiB"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}

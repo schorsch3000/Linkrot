@@ -67,11 +67,16 @@ func (a *App) lsCommand() *cobra.Command {
 					}
 					rows = append(rows, row)
 				}
-				for _, f := range files {
+				sizes := make([]string, len(files))
+				for i, f := range files {
+					sizes[i] = sizeText(f.Size)
+				}
+				sizes = alignDecimal(sizes)
+				for i, f := range files {
 					rows = append(rows, []cell{
 						{f.ID, color.Yellow},
 						{f.Name, ""},
-						{sizeText(f.Size), ""},
+						{sizes[i], ""},
 						{expiryText(f, now), expiryStyle(f, now)},
 						{usesText(f), ""},
 						{statusText(f), statusStyle(f)},
